@@ -39,6 +39,48 @@ let sha = try s.putFile(name: "a.png", mime: "image/png", data: png)
 check(try Data(contentsOf: s.fileURL(sha)) == png && s.mime(sha) == "image/png", "Anhang nach SHA-256 gespeichert")
 check(try s.putFile(name: "b.png", mime: "image/png", data: png) == sha, "Gleicher Anhang wird nicht doppelt gespeichert")
 
+// M1: Projekte, Art, alte Revisionen
+let p1 = try s.createProject(name: "  Klonierung  ")
+check((try s.projects()).first?["name"] as? String == "Klonierung", "Projekt angelegt, Name getrimmt")
+check((try? s.createProject(name: "  ")) == nil, "Leerer Projektname wird abgelehnt")
+let e2 = try s.create(title: "Gel", project: p1, kind: "protocol")
+check((try s.list(project: p1)).map { $0["id"] as! Int } == [e2], "Liste nach Projekt gefiltert")
+check((try s.list(project: 0)).map { $0["id"] as! Int } == [id], "Liste „ohne Projekt“")
+check((try? s.create(title: "x", project: 999)) == nil, "Unbekanntes Projekt wird abgelehnt")
+check((try? s.create(title: "x", kind: "rezept")) == nil, "Unbekannte Art wird abgelehnt")
+try s.setMeta(id: e2, project: 0, kind: "note")
+let l2 = try s.load(id: e2)
+check(l2["project_id"] is NSNull && l2["kind"] as? String == "note", "Projekt entfernt und Art geändert")
+try s.updateProject(id: p1, name: "Klonierung alt", archived: true)
+check((try s.projects()).first?["archived"] as? Int == 1, "Projekt archiviert")
+check((try s.revision(id: id, no: 2))["title"] as? String == "PCR Test 2", "Alte Revision lesbar")
+
+// Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
+let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")
+defer { try? FileManager.default.removeItem(at: old) }
+try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
+var odb: OpaquePointer?
+sqlite3_open(old.appendingPathComponent("db.sqlite").path, &odb)
+sqlite3_exec(odb, """
+CREATE TABLE entry(id INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL,
+  draft_json TEXT NOT NULL DEFAULT '', draft_text TEXT NOT NULL DEFAULT '');
+INSERT INTO entry(title, created, updated, draft_json) VALUES('Alter Eintrag', '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', '{"type":"doc"}');
+""", nil, nil, nil)
+sqlite3_close(odb)
+let migrated = try Store(root: old)
+let ol = try migrated.list()
+check(ol.count == 1 && ol[0]["kind"] as? String == "experiment" && ol[0]["project_id"] is NSNull, "M0-Buch migriert, Eintrag erhalten")
+let backups = (try? FileManager.default.contentsOfDirectory(atPath: old.appendingPathComponent("backups").path)) ?? []
+check(backups.count == 1 && backups[0].hasPrefix("db-v0-"), "Sicherung vor der Migration angelegt")
+_ = try Store(root: old)
+check(((try? FileManager.default.contentsOfDirectory(atPath: old.appendingPathComponent("backups").path)) ?? []).count == 1, "Keine zweite Sicherung ohne Migration")
+
+// Ein Buch aus einer neueren App-Version wird nicht angefasst
+sqlite3_open(old.appendingPathComponent("db.sqlite").path, &odb)
+sqlite3_exec(odb, "PRAGMA user_version = 99", nil, nil, nil)
+sqlite3_close(odb)
+check((try? Store(root: old)) == nil, "Neueres Buchformat wird abgelehnt")
+
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
 var t = Date()

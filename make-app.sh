@@ -28,6 +28,20 @@ build() {  # $1 = arm64|x86_64
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>UTExportedTypeDeclarations</key><array><dict>
+  <key>UTTypeIdentifier</key><string>de.felix.laborbuch.book</string>
+  <key>UTTypeDescription</key><string>Laborbuch</string>
+  <key>UTTypeConformsTo</key><array><string>com.apple.package</string><string>public.composite-content</string></array>
+  <key>UTTypeIconFile</key><string>AppIcon</string>
+  <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>laborbuch</string></array></dict>
+</dict></array>
+<key>CFBundleDocumentTypes</key><array><dict>
+  <key>CFBundleTypeName</key><string>Laborbuch</string>
+  <key>CFBundleTypeRole</key><string>Editor</string>
+  <key>LSHandlerRank</key><string>Owner</string>
+  <key>LSTypeIsPackage</key><true/>
+  <key>LSItemContentTypes</key><array><string>de.felix.laborbuch.book</string></array>
+</dict></array>
 </dict></plist>
 PL
   codesign --force --deep --sign "${CODESIGN_ID:--}" "$app"

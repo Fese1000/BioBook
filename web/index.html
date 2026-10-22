@@ -4,16 +4,25 @@
 <link rel="stylesheet" href="style.css">
 </head><body>
 <aside>
+  <div id="book" title="Anderes Laborbuch: ⌘O"></div>
   <div class="side-head">
     <input id="search" type="search" placeholder="Suchen (⌘F)" autocomplete="off" spellcheck="false">
     <button id="new" class="btn" title="Neuer Eintrag (⌘N)">+</button>
   </div>
+  <div class="sec"><span>Projekte</span><button id="newProject" class="link" title="Neues Projekt">+ Projekt</button></div>
+  <ul id="projects"></ul>
+  <div class="sec"><span id="listTitle">Einträge</span></div>
   <ul id="list"></ul>
 </aside>
 <main>
   <div id="empty" class="empty">Noch keine Einträge. Lege mit <b>+</b> oder ⌘N den ersten an.</div>
   <div id="doc" hidden>
+    <div id="preview" hidden></div>
     <input id="title" placeholder="Titel" autocomplete="off">
+    <div id="meta">
+      <label>Projekt <select id="metaProject"></select></label>
+      <label>Art <select id="metaKind"></select></label>
+    </div>
     <div id="toolbar"></div>
     <div id="editor"></div>
   </div>

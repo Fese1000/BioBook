@@ -1,14 +1,17 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **M0 (Prototyp)**, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **M1**, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Was schon geht
-- Einträge anlegen, Titel, Liste mit Volltextsuche (⌘F)
+- Mehrere Laborbücher: neu anlegen (⇧⌘N), öffnen (⌘O), im Finder zeigen. Ein Buch ist ein Paket `Name.laborbuch` und öffnet sich per Doppelklick; die App merkt sich das zuletzt geöffnete.
+- Projekte: anlegen, umbenennen, archivieren; Einträge zuordnen oder verschieben, Filter „Alle“ / „Ohne Projekt“ / je Projekt
+- Art je Eintrag: Experiment, Notiz, Protokoll
+- Einträge anlegen, Titel, Liste mit Volltextsuche (⌘F), Suche im gewählten Projekt
 - Block-Editor (TipTap): Überschriften, Listen, Checklisten, Tabellen, Code, Zitate, Bilder per Drag & Drop, Einfügen oder Knopf
-- Automatisches Speichern; unveränderliche Revisionen mit Hash-Kette (⌘S, beim Wechseln, alle 5 Min., beim Beenden), Verlauf mit Kettenprüfung
+- Automatisches Speichern; unveränderliche Revisionen mit Hash-Kette (⌘S, beim Wechseln, alle 5 Min., beim Beenden), Verlauf mit Kettenprüfung; alte Fassungen ansehen (nur lesen) und als neuen Stand wiederherstellen, ohne dass alte Revisionen verloren gehen
 - Bilder als Anhänge nach SHA-256
 
-Daten liegen in `~/Library/Application Support/Laborbuch/Standard.laborbuch/` (SQLite + `files/`).
+Das Standard-Buch liegt in `~/Library/Application Support/Laborbuch/Standard.laborbuch/` (SQLite + `files/`). Ältere Bücher werden beim Öffnen automatisch aktualisiert; vorher legt die App eine Kopie der Datenbank in `backups/` ab. Bücher aus einer neueren App-Version werden nicht angefasst.
 
 ## Bauen
 ```bash

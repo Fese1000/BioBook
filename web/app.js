@@ -6,7 +6,10 @@ const call = (cmd, args = {}) => window.webkit.messageHandlers.lab.postMessage({
 const when = iso => new Date(iso).toLocaleString('de-DE', {dateStyle: 'medium', timeStyle: 'short'});
 
 const SNAPSHOT_MS = 5 * 60 * 1000;  // spätestens alle 5 Minuten eine unveränderliche Revision
+const KINDS = {experiment: 'Experiment', note: 'Notiz', protocol: 'Protokoll'};
 let editor = null, cur = null, saveTimer = null, dirty = false, changedSinceSnap = false, lastSnap = 0;
+let projects = [], project = null;  // project: null = alle, 0 = ohne Projekt, sonst ID
+let preview = null;                 // angezeigte alte Revision (nur lesen) oder null
 
 // ---------- Editor ----------
 function makeEditor() {
@@ -90,26 +93,75 @@ async function upload(blob, name = blob.name || 'bild.png') {
   return (await call('putFile', {name, mime: blob.type || 'application/octet-stream', base64: b64})).sha256;
 }
 
+// ---------- Projekte ----------
+const projectName = id => id == 0 ? 'Ohne Projekt' : projects.find(p => p.id == id)?.name ?? '';
+
+async function loadProjects() {
+  projects = await call('projects');
+  const li = (p, label, extra = '', cls = '') => `<li data-p="${p}" class="${String(project) == String(p) ? 'cur ' : ''}${cls}"><span class="n">${esc(label)}</span>${extra}</li>`;
+  $('#projects').innerHTML = li('', 'Alle Einträge') + li(0, 'Ohne Projekt')
+    + projects.map(p => li(p.id, p.name, `<span class="c">${p.entries}</span><button class="ed" data-rename="${p.id}" title="Umbenennen">✎</button>`
+      + `<button class="ed" data-archive="${p.id}" title="${p.archived ? 'Wiederherstellen' : 'Archivieren'}">${p.archived ? '↺' : '🗄'}</button>`, p.archived ? 'arch' : '')).join('');
+  $('#listTitle').textContent = project == null ? 'Einträge' : projectName(project);
+  fillMetaProject();
+}
+
+function fillMetaProject(sel = $('#metaProject').value) {
+  const opts = [['0', '— ohne —'], ...projects.filter(p => !p.archived || String(p.id) == sel).map(p => [String(p.id), p.name])];
+  $('#metaProject').innerHTML = opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  $('#metaProject').value = sel || '0';
+}
+
+async function selectProject(p) {
+  project = p === '' ? null : +p;
+  await loadProjects();
+  await refreshList();
+}
+
+async function newProject() {
+  const name = prompt('Name des neuen Projekts');
+  if (!name?.trim()) return;
+  try { await selectProject(await call('createProject', {name})); } catch (e) { alert(e.message); }
+}
+
+async function renameProject(id) {
+  const p = projects.find(x => x.id == id);
+  const name = prompt('Neuer Name', p.name);
+  if (!name?.trim() || name == p.name) return;
+  try { await call('updateProject', {id, name}); await loadProjects(); } catch (e) { alert(e.message); }
+}
+
+async function archiveProject(id) {
+  const p = projects.find(x => x.id == id);
+  if (!p.archived && !confirm(`Projekt „${p.name}“ archivieren? Die Einträge bleiben erhalten und sind weiter über „Alle Einträge“ und die Suche erreichbar.`)) return;
+  await call('updateProject', {id, archived: !p.archived});
+  await loadProjects();
+}
+
 // ---------- Einträge ----------
 async function refreshList(selectId) {
   const q = $('#search').value.trim();
-  const rows = q ? await call('search', {q}) : await call('list');
+  let rows = q ? await call('search', {q}) : await call('list', project == null ? {} : {project});
+  if (q && project != null) rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
   $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''}">
     <div class="t">${esc(r.title || 'Ohne Titel')}</div>
-    <div class="m">${when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}</div>
+    <div class="m">${KINDS[r.kind] || ''} · ${when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
-  $('#empty').hidden = !!(rows.length || q || cur);
+  $('#empty').hidden = !!(rows.length || q || cur || project != null);
   if (selectId) await open(selectId);
 }
 
 async function open(id) {
-  if (cur == id) return;
+  if (cur == id && !preview) return;
   await flush();
   if (cur && changedSinceSnap) await snapshot(true);
   const e = await call('load', {id});
+  setPreview(null);
   cur = e.id;
   $('#doc').hidden = false; $('#empty').hidden = true;
   $('#title').value = e.title;
+  fillMetaProject(String(e.project_id ?? 0));
+  $('#metaKind').value = e.kind;
   editor.commands.setContent(e.draft_json ? JSON.parse(e.draft_json) : '', {emitUpdate: false});
   dirty = changedSinceSnap = false; lastSnap = Date.now();
   status('Gespeichert');
@@ -120,9 +172,53 @@ async function open(id) {
 }
 
 async function newEntry() {
-  const id = await call('create', {title: ''});
+  const id = await call('create', {title: '', ...(project > 0 ? {project} : {})});
   $('#search').value = '';
+  await loadProjects();
   await refreshList(id);
+}
+
+async function setMeta(args) {
+  if (!cur) return;
+  try { await call('setMeta', {id: cur, ...args}); } catch (e) { return alert(e.message); }
+  await loadProjects();
+  await refreshList();
+}
+
+// ---------- Alte Revisionen (nur lesen, wiederherstellbar) ----------
+function setPreview(r) {
+  preview = r;
+  editor.setEditable(!r, false);  // false: kein update-Ereignis, sonst würde die alte Fassung als Arbeitsstand gespeichert
+  $('#title').readOnly = !!r;
+  $('#toolbar').hidden = !!r;
+  $('#meta').hidden = !!r;
+  $('#preview').hidden = !r;
+  if (r) $('#preview').innerHTML = `<span class="grow"><b>Revision ${r.no}</b> vom ${when(r.created)} · nur lesen</span>
+    <button class="btn on" data-restore>Diese Fassung wiederherstellen</button><button class="btn" data-back>Zurück zum aktuellen Stand</button>`;
+  document.querySelectorAll('#revlist li').forEach(li => li.classList.toggle('cur', r && li.value == r.no));
+}
+
+async function showRevision(no) {
+  await flush();
+  const r = await call('revision', {id: cur, no});
+  setPreview(r);
+  $('#title').value = r.title;
+  editor.commands.setContent(JSON.parse(r.content_json), {emitUpdate: false});
+  updateCounts();
+}
+
+async function leavePreview(restore) {
+  const r = preview;
+  if (!r) return;
+  if (restore) {
+    setPreview(null);
+    changed();  // die angezeigte Fassung wird zum neuen Arbeitsstand; alte Revisionen bleiben unverändert
+    await snapshot(true);
+    status(`Fassung von Revision ${r.no} wiederhergestellt`);
+  } else {
+    const id = cur; cur = null;
+    await open(id);
+  }
 }
 
 // ---------- Speichern ----------
@@ -173,7 +269,7 @@ async function showHistory() {
   $('#revs').textContent = `${revs.length} Revisionen`;
   $('#chain').innerHTML = !v.count ? '<span class="sub">Noch keine Revision. ⌘S sichert eine.</span>'
     : v.ok ? `<span class="ok">✓ Hash-Kette intakt (${v.count})</span>` : `<span class="bad">✗ Kette bei Revision ${v.broken} verletzt</span>`;
-  $('#revlist').innerHTML = revs.map(r => `<li value="${r.no}">${when(r.created)}<br><code>${r.hash.slice(0, 16)}…</code></li>`).join('');
+  $('#revlist').innerHTML = revs.map(r => `<li value="${r.no}" title="Diese Fassung ansehen" class="${preview?.no == r.no ? 'cur' : ''}">${when(r.created)}<br><code>${r.hash.slice(0, 16)}…</code></li>`).join('');
 }
 
 // ---------- Leistungstest (M0) ----------
@@ -241,11 +337,33 @@ $('#title').addEventListener('input', changed);
 $('#title').addEventListener('keydown', e => { if (e.key == 'Enter') { e.preventDefault(); editor.commands.focus('start'); } });
 $('#filepick').addEventListener('change', e => { insertImages([...e.target.files]); e.target.value = ''; });
 $('#histBtn').onclick = () => { const h = $('#history'); h.hidden = !h.hidden; if (!h.hidden) showHistory(); };
+$('#revlist').addEventListener('click', e => { const li = e.target.closest('li'); if (li && cur) showRevision(li.value); });
+$('#preview').addEventListener('click', e => {
+  if (e.target.dataset.restore !== undefined && confirm(`Fassung von Revision ${preview.no} als aktuellen Stand übernehmen? Alle Revisionen bleiben erhalten.`)) leavePreview(true);
+  if (e.target.dataset.back !== undefined) leavePreview(false);
+});
+$('#projects').addEventListener('click', e => {
+  if (e.target.dataset.rename) return renameProject(+e.target.dataset.rename);
+  if (e.target.dataset.archive) return archiveProject(+e.target.dataset.archive);
+  const li = e.target.closest('li'); if (li) selectProject(li.dataset.p);
+});
+$('#newProject').onclick = newProject;
+$('#metaProject').addEventListener('change', e => setMeta({project: +e.target.value}));
+$('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest};
 
-makeEditor();
-renderToolbar();
-refreshList().then(() => { const first = $('#list li'); if (first) open(+first.dataset.id); });
+async function start() {
+  makeEditor();
+  renderToolbar();
+  const book = await call('book');
+  $('#book').textContent = book.name;
+  $('#book').title = `${book.path}\nAnderes Laborbuch: ⌘O`;
+  $('#metaKind').innerHTML = book.kinds.map(k => `<option value="${k}">${KINDS[k] || k}</option>`).join('');
+  await loadProjects();
+  await refreshList();
+  const first = $('#list li'); if (first) await open(+first.dataset.id);
+}
+start().catch(e => alert('Start fehlgeschlagen: ' + e.message));

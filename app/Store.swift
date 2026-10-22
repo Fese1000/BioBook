@@ -11,12 +11,15 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
+    static let schemaVersion = 1
+    static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
 
     init(root: URL) throws {
         self.root = root
         let fm = FileManager.default
+        let existed = fm.fileExists(atPath: root.appendingPathComponent("db.sqlite").path)
         try fm.createDirectory(at: root.appendingPathComponent("files"), withIntermediateDirectories: true)
         let meta = root.appendingPathComponent("meta.json")
         if !fm.fileExists(atPath: meta.path) {
@@ -40,7 +43,34 @@ final class Store {
         CREATE TABLE IF NOT EXISTS attachment(sha256 TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, created TEXT NOT NULL);
         CREATE VIRTUAL TABLE IF NOT EXISTS search USING fts5(title, body, tokenize='unicode61 remove_diacritics 2');
         """)
+        try migrate(backup: existed)
     }
+
+    /// Bringt ältere Bücher auf den aktuellen Stand. Vorher wird eine Kopie der Datenbank unter backups/ abgelegt.
+    private func migrate(backup: Bool) throws {
+        let v = try query("PRAGMA user_version").first?["user_version"] as? Int ?? 0
+        if v > Store.schemaVersion { throw StoreError.invalid("Dieses Laborbuch stammt von einer neueren App-Version. Bitte die App aktualisieren.") }
+        if v == Store.schemaVersion { return }
+        if backup {
+            let dir = root.appendingPathComponent("backups")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let stamp = Store.now().replacingOccurrences(of: ":", with: "-")
+            try query("VACUUM INTO ?", [dir.appendingPathComponent("db-v\(v)-\(stamp).sqlite").path])
+        }
+        try transaction {
+            if v < 1 {
+                try exec("""
+                CREATE TABLE project(id INTEGER PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL DEFAULT '', archived INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL);
+                ALTER TABLE entry ADD COLUMN project_id INTEGER REFERENCES project(id);
+                ALTER TABLE entry ADD COLUMN kind TEXT NOT NULL DEFAULT 'experiment';
+                CREATE INDEX entry_project ON entry(project_id);
+                """)
+            }
+            try exec("PRAGMA user_version = \(Store.schemaVersion)")
+        }
+    }
+
+    var name: String { root.deletingPathExtension().lastPathComponent }
 
     deinit { sqlite3_close(db) }
 
@@ -102,29 +132,79 @@ final class Store {
         do { let r = try body(); try exec("COMMIT"); return r } catch { try? exec("ROLLBACK"); throw error }
     }
 
-    // MARK: Einträge
-    func list() throws -> [[String: Any]] {
+    // MARK: Projekte
+    func projects() throws -> [[String: Any]] {
         try query("""
-        SELECT e.id, e.title, e.updated, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions
-        FROM entry e ORDER BY e.updated DESC
+        SELECT p.id, p.name, p.color, p.archived, (SELECT COUNT(*) FROM entry e WHERE e.project_id = p.id) AS entries
+        FROM project p ORDER BY p.archived, p.name COLLATE NOCASE
         """)
     }
 
-    func create(title: String) throws -> Int {
+    func createProject(name: String) throws -> Int {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { throw StoreError.invalid("Projektname fehlt") }
+        try query("INSERT INTO project(name, created) VALUES(?, ?)", [n, Store.now()])
+        return Int(sqlite3_last_insert_rowid(db))
+    }
+
+    func updateProject(id: Int, name: String?, archived: Bool?) throws {
+        if let n = name?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            guard !n.isEmpty else { throw StoreError.invalid("Projektname fehlt") }
+            try query("UPDATE project SET name = ? WHERE id = ?", [n, id])
+        }
+        if let a = archived { try query("UPDATE project SET archived = ? WHERE id = ?", [a ? 1 : 0, id]) }
+    }
+
+    private func checkProject(_ p: Int?) throws {
+        if let p = p, try query("SELECT 1 FROM project WHERE id = ?", [p]).isEmpty { throw StoreError.invalid("Projekt \(p) gibt es nicht") }
+    }
+
+    // MARK: Einträge
+    /// project: nil = alle, 0 = ohne Projekt, sonst Projekt-ID
+    func list(project: Int? = nil) throws -> [[String: Any]] {
+        let filter = project == nil ? "" : project == 0 ? "WHERE e.project_id IS NULL" : "WHERE e.project_id = ?"
+        return try query("""
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions
+        FROM entry e \(filter) ORDER BY e.updated DESC
+        """, project.map { $0 == 0 ? [] : [$0] } ?? [])
+    }
+
+    func create(title: String, project: Int? = nil, kind: String = "experiment") throws -> Int {
+        guard Store.kinds.contains(kind) else { throw StoreError.invalid("Unbekannte Art: \(kind)") }
+        try checkProject(project)
         let t = Store.now()
         return try transaction {
-            try query("INSERT INTO entry(title, created, updated) VALUES(?, ?, ?)", [title, t, t])
+            try query("INSERT INTO entry(title, created, updated, project_id, kind) VALUES(?, ?, ?, ?, ?)", [title, t, t, project, kind])
             let id = Int(sqlite3_last_insert_rowid(db))
             try query("INSERT INTO search(rowid, title, body) VALUES(?, ?, '')", [id, title])
             return id
         }
     }
 
+    /// Projekt und Art eines Eintrags ändern (nicht Teil der Revision, nur Ordnung). project 0 = ohne Projekt.
+    func setMeta(id: Int, project: Int?, kind: String?) throws {
+        if let p = project {
+            try checkProject(p == 0 ? nil : p)
+            try query("UPDATE entry SET project_id = ? WHERE id = ?", [p == 0 ? nil : p, id])
+        }
+        if let k = kind {
+            guard Store.kinds.contains(k) else { throw StoreError.invalid("Unbekannte Art: \(k)") }
+            try query("UPDATE entry SET kind = ? WHERE id = ?", [k, id])
+        }
+    }
+
     func load(id: Int) throws -> [String: Any] {
-        guard let e = try query("SELECT id, title, created, updated, draft_json FROM entry WHERE id = ?", [id]).first else {
+        guard let e = try query("SELECT id, title, created, updated, draft_json, kind, project_id FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         return e
+    }
+
+    func revision(id: Int, no: Int) throws -> [String: Any] {
+        guard let r = try query("SELECT no, title, content_json, created, hash FROM revision WHERE entry_id = ? AND no = ?", [id, no]).first else {
+            throw StoreError.invalid("Revision \(no) gibt es nicht")
+        }
+        return r
     }
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
@@ -184,7 +264,7 @@ final class Store {
         let terms = q.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
         if terms.isEmpty { return [] }
         return try query("""
-        SELECT e.id, e.title, e.updated, snippet(search, 1, '[', ']', '…', 12) AS snippet
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, 1, '[', ']', '…', 12) AS snippet
         FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])
     }

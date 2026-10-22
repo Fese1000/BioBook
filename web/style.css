@@ -3,6 +3,7 @@
  --serif:"New York",ui-serif,Georgia,serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
 @media(prefers-color-scheme:dark){:root{--bg:#1b1c1e;--side:#151617;--ink:#e8e6e1;--mut:#9a958d;--line:#33353a;--acc:#6cc2a6;--accfg:#10261f;--sel:#22332d;--code:#25272b}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}  /* sonst überschreiben display:flex-Regeln das hidden-Attribut */
 html,body{height:100%;margin:0}
 body{display:grid;grid-template-columns:270px 1fr auto;background:var(--bg);color:var(--ink);font:14px/1.5 -apple-system,system-ui,sans-serif;overflow:hidden}
 aside{background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
@@ -10,9 +11,24 @@ aside{background:var(--side);border-right:1px solid var(--line);display:flex;fle
 #search{flex:1;min-width:0;padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
 .btn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 10px;font:inherit;cursor:pointer}
 .btn:hover{border-color:var(--acc)}.btn.on{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+#book{padding:14px 14px 0;font:600 15px var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{display:flex;justify-content:space-between;align-items:center;padding:6px 16px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.sec .link{margin:0;text-transform:none;letter-spacing:0;font-size:12px}
+#projects{list-style:none;margin:0;padding:0 6px 6px;max-height:34vh;overflow:auto;flex:none}
+#projects li{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;cursor:pointer}
+#projects li:hover{background:var(--sel)}#projects li.cur{background:var(--acc);color:var(--accfg)}
+#projects li .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#projects li .c{font-size:11.5px;opacity:.7}
+#projects li.arch{opacity:.55;font-style:italic}
+#projects li .ed{visibility:hidden;border:0;background:none;color:inherit;cursor:pointer;padding:0 2px;font-size:12px}
+#projects li:hover .ed{visibility:visible}
 #list{list-style:none;margin:0;padding:0 6px 12px;overflow:auto;flex:1}
 #list li{padding:7px 10px;border-radius:6px;cursor:pointer;margin-bottom:1px}
 #list li:hover{background:var(--sel)}#list li.cur{background:var(--acc);color:var(--accfg)}
+#meta{display:flex;gap:16px;font-size:12.5px;color:var(--mut);margin-bottom:8px}
+#meta select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 4px;margin-left:4px}
+#preview{position:sticky;top:-28px;z-index:3;display:flex;gap:10px;align-items:center;background:var(--sel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+#preview .grow{flex:1}
+#revlist li{cursor:pointer;border-radius:4px;padding:2px 4px}#revlist li:hover,#revlist li.cur{background:var(--sel)}
 #list .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #list .m{font-size:11.5px;opacity:.7}#list .s{font-size:12px;opacity:.85;margin-top:2px}
 main{display:flex;flex-direction:column;min-width:0;min-height:0}
@@ -28,7 +44,9 @@ footer{display:flex;gap:18px;align-items:center;padding:6px 16px;border-top:1px 
 .link{border:0;background:none;color:var(--acc);cursor:pointer;font:inherit;padding:0;margin-left:auto}
 #history{width:300px;border-left:1px solid var(--line);background:var(--side);padding:12px 14px;overflow:auto}
 #history h3{margin:0 0 8px;font:600 15px var(--serif)}
-#revlist{padding-left:22px;margin:8px 0;font-size:12.5px}#revlist li{margin-bottom:6px}
+@media(max-width:1100px){#history{position:fixed;right:0;top:0;bottom:0;z-index:5;box-shadow:-8px 0 24px rgba(0,0,0,.18)}}
+@media(max-width:900px){body{grid-template-columns:220px 1fr auto}#doc>*{padding:0 20px}}
+#revlist{padding-left:22px;margin:8px 0;font-size:12.5px}#revlist li{margin-bottom:4px}
 #revlist code,#chain code{font:11px var(--mono);color:var(--mut)}
 .ok{color:var(--acc)}.bad{color:#c0392b;font-weight:600}
 /* Editor */
