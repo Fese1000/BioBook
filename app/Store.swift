@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 5
+    static let schemaVersion = 6
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -123,6 +123,26 @@ final class Store {
                   COALESCE((SELECT group_concat(a.name, ' ') FROM entry_file f JOIN attachment a ON a.sha256 = f.sha256 WHERE f.entry_id = e.id), '')
                 FROM entry e;
                 """)
+            }
+            if v < 6 {
+                // Registry: Typen mit Feldern, Objekte mit fortlaufender Nummer je Typ, Verlauf, Verweise aus Einträgen
+                try exec("""
+                CREATE TABLE rtype(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, prefix TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                  icon TEXT NOT NULL DEFAULT '', fields_json TEXT NOT NULL, next_no INTEGER NOT NULL DEFAULT 1, archived INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL);
+                CREATE TABLE entity(id INTEGER PRIMARY KEY, type_id INTEGER NOT NULL REFERENCES rtype(id), no INTEGER NOT NULL, name TEXT NOT NULL,
+                  fields_json TEXT NOT NULL DEFAULT '{}', created TEXT NOT NULL, updated TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, UNIQUE(type_id, no));
+                CREATE TABLE entity_history(id INTEGER PRIMARY KEY, entity_id INTEGER NOT NULL REFERENCES entity(id), changed TEXT NOT NULL,
+                  name TEXT NOT NULL, fields_json TEXT NOT NULL, author TEXT NOT NULL DEFAULT '');
+                CREATE TRIGGER entity_history_ro_u BEFORE UPDATE ON entity_history BEGIN SELECT RAISE(ABORT, 'Verlauf ist unveränderlich'); END;
+                CREATE TRIGGER entity_history_ro_d BEFORE DELETE ON entity_history BEGIN SELECT RAISE(ABORT, 'Verlauf ist unveränderlich'); END;
+                CREATE TABLE entry_entity(entry_id INTEGER NOT NULL REFERENCES entry(id), entity_id INTEGER NOT NULL REFERENCES entity(id), PRIMARY KEY(entry_id, entity_id));
+                CREATE INDEX entry_entity_e ON entry_entity(entity_id);
+                CREATE VIRTUAL TABLE entity_search USING fts5(code, name, fields, tokenize='unicode61 remove_diacritics 2');
+                """)
+                for (name, prefix, icon, fields) in Store.defaultTypes {
+                    let json = String(data: try JSONSerialization.data(withJSONObject: fields), encoding: .utf8)!
+                    try query("INSERT INTO rtype(name, prefix, icon, fields_json, created) VALUES(?, ?, ?, ?, ?)", [name, prefix, icon, json, Store.now()])
+                }
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
@@ -412,7 +432,7 @@ final class Store {
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
-    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = []) throws -> [String: Any] {
+    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = []) throws -> [String: Any] {
         if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
         try transaction {
@@ -427,6 +447,7 @@ final class Store {
                 try query("INSERT INTO entry_file(entry_id, sha256) SELECT ?, sha256 FROM attachment WHERE sha256 = ?", [id, sha])
             }
             try refreshFileText(entry: id)
+            try setEntryEntities(entry: id, entities)
         }
         return ["updated": t]
     }
@@ -494,6 +515,12 @@ final class Store {
         return r
     }
 
+    // MARK: Helfer für Erweiterungen in anderen Dateien
+    @discardableResult
+    func queryRows(_ sql: String, _ args: [Any?] = []) throws -> [[String: Any]] { try query(sql, args) }
+    func transactionRun<T>(_ body: () throws -> T) throws -> T { try transaction(body) }
+    func lastID() -> Int { Int(sqlite3_last_insert_rowid(db)) }
+
     // MARK: Spotlight
     func spotlightRows(id: Int? = nil) throws -> [[String: Any]] {
         try query("""
@@ -527,6 +554,10 @@ final class Store {
             "templates": try query("SELECT t.id, t.name, t.archived, v.version, v.title, v.kind, v.created, v.content_json FROM template t JOIN template_version v ON v.template_id = t.id ORDER BY t.id, v.version"),
             "runs": try query("SELECT id, entry_id, started, finished, status, steps_json FROM run ORDER BY id"),
             "run_steps": try query("SELECT run_id, step_no, done_at, note FROM run_step ORDER BY run_id, step_no"),
+            "registry_types": try query("SELECT id, name, prefix, icon, fields_json, archived FROM rtype ORDER BY id"),
+            "registry": try query("SELECT e.id, t.prefix || '-' || substr('0000' || e.no, -4) AS code, e.type_id, e.name, e.fields_json, e.created, e.updated, e.archived FROM entity e JOIN rtype t ON t.id = e.type_id ORDER BY e.id"),
+            "registry_history": try query("SELECT entity_id, changed, name, fields_json, author FROM entity_history ORDER BY id"),
+            "entry_registry": try query("SELECT entry_id, entity_id FROM entry_entity"),
         ]
     }
 

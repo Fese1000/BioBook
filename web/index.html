@@ -12,6 +12,8 @@
   <div class="sec"><span>Projekte</span><button id="newProject" class="link" title="Neues Projekt">+ Projekt</button></div>
   <ul id="projects"></ul>
   <div id="tagsec" hidden><div class="sec"><span>Tags</span></div><div id="tags"></div></div>
+  <div class="sec"><span>Registry</span><button id="newType" class="link" title="Neuer Typ">+ Typ</button></div>
+  <ul id="types"></ul>
   <div id="tplsec" hidden><div class="sec"><span>Vorlagen</span></div><ul id="templates"></ul></div>
   <div class="sec"><span id="listTitle">Einträge</span></div>
   <ul id="list"></ul>
@@ -38,12 +40,14 @@
     <div id="editor"></div>
     <div id="backlinks" hidden></div>
   </div>
+  <section id="reg" hidden></section>
   <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
 <section id="run" hidden></section>
 <section id="annot" hidden></section>
 <section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><div id="sigs"></div><ol id="revlist"></ol></section>
 <dialog id="settings"></dialog>
+<dialog id="typedlg"></dialog>
 <input id="filepick" type="file" multiple hidden>
 <script src="vendor/tiptap.js"></script>
 <script src="calc.js"></script>
@@ -53,5 +57,6 @@
 <script src="annotate.js"></script>
 <script src="markdown.js"></script>
 <script src="io.js"></script>
+<script src="registry.js"></script>
 <script src="app.js"></script>
 </body></html>

@@ -1,6 +1,6 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1 abgeschlossen, M0–M7); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **M8** aus Phase 2 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Installieren
 `Laborbuch-AppleSilicon.dmg` öffnen und die App nach „Programme“ ziehen (macOS 13 oder neuer, Apple Silicon). Die App ist nur ad hoc signiert: Beim ersten Start einer heruntergeladenen Kopie fragt macOS nach. Ab macOS 15 einmal öffnen, dann Systemeinstellungen › Datenschutz & Sicherheit › „Trotzdem öffnen“; unter macOS 13/14 Rechtsklick › Öffnen.
@@ -8,6 +8,7 @@ Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1 abgeschlo
 Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das DMG der neuesten Version von GitHub (`Fese1000/Laborbuch`), prüft SHA-256, Bundle-ID, Version und Signatur, tauscht sich aus und startet neu. Bei einem Fehler bleibt die alte Version.
 
 ## Was schon geht
+- Registry (Seitenleiste „Registry“): Typen wie Plasmid, Primer, Stamm, Zelllinie, Antikörper, Chemikalie – oder eigene mit eigenen Feldern (Text, Zahl, Datum, Auswahl, Sequenz, Ja/Nein, Link). Jedes Objekt bekommt eine fortlaufende ID wie `PL-0042`; jede Änderung landet im Verlauf. Sequenzfelder zeigen Länge, GC-Anteil und Tm. Im Eintrag verweist `@` auf ein Objekt; das Objekt zeigt „Verwendet in“.
 - Mehrere Fenster (⌥⌘N) und Tabs (⌘T); ⌘-Klick auf einen Eintrag öffnet ihn in einem neuen Tab. Speichert ein Fenster, sehen die anderen den neuen Stand.
 - Spotlight findet Einträge (Titel, Text, Tags); ein Klick öffnet Buch und Eintrag. Quick Look (Leertaste im Finder) zeigt bei einem `.laborbuch` die letzten Einträge, der Finder ein Vorschaubild.
 - Mehrere Laborbücher: neu anlegen (⇧⌘N), öffnen (⌘O), im Finder zeigen. Ein Buch ist ein Paket `Name.laborbuch` und öffnet sich per Doppelklick; die App merkt sich das zuletzt geöffnete.
@@ -51,10 +52,10 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 
 ## Tests
 ```bash
-swiftc app/Store.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
+swiftc app/Store.swift app/Registry.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
 node --test tests/calc.test.js tests/markdown.test.js                           # Rechner gegen Handrechnung, Markdown hin und zurück
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 41 Prüfungen
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 47 Prüfungen
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
@@ -80,6 +81,8 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `app/Spotlight.swift` | Einträge in der Spotlight-Suche |
 | `app/QuickLook.swift` | Vorschau und Vorschaubild für .laborbuch |
 | `app/Updater.swift` | Selbst-Update über GitHub-Releases |
+| `app/Registry.swift` | Registry: Typen, Objekte, Verlauf |
+| `web/registry.js` | Registry-Oberfläche, Typ-Editor |
 | `web/` | Oberfläche und Logik (JavaScript), Editor-Bündel |
 | `tools/` | Bündeln des Editors, Icon-Erzeugung |
 | `tests/` | Speicher-Tests, Browser-Testumgebung |

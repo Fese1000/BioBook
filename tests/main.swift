@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -207,6 +207,40 @@ sqlite3_open(old.appendingPathComponent("db.sqlite").path, &odb)
 sqlite3_exec(odb, "PRAGMA user_version = 99", nil, nil, nil)
 sqlite3_close(odb)
 check((try? Store(root: old)) == nil, "Neueres Buchformat wird abgelehnt")
+
+// M8: Registry
+let rtypes = try s.types()
+check(rtypes.count == 6 && rtypes.contains { $0["prefix"] as? String == "PL" }, "Sechs Standardtypen angelegt")
+let plType = rtypes.first { $0["prefix"] as? String == "PL" }!["id"] as! Int
+let pl1 = try s.createEntity(typeId: plType, name: "pUC19", values: ["backbone": "pUC", "resistance": "Ampicillin", "size": "2686", "sequence": "acgt ACGT-tt", "unbekannt": "x"], author: "Felix")
+check(pl1["code"] as? String == "PL-0001", "Erstes Plasmid bekommt PL-0001")
+let pl1v = (try JSONSerialization.jsonObject(with: Data((pl1["fields_json"] as! String).utf8)) as! [String: String])
+check(pl1v["sequence"] == "ACGTACGTTT" && pl1v["unbekannt"] == nil, "Sequenz bereinigt, unbekannte Felder verworfen")
+check((try s.createEntity(typeId: plType, name: "pET28a", values: [:], author: "Felix"))["code"] as? String == "PL-0002", "Fortlaufende Nummer")
+check((try? s.createEntity(typeId: plType, name: "x", values: ["resistance": "Penicillin"], author: "")) == nil, "Unerlaubte Auswahl abgelehnt")
+check((try? s.createEntity(typeId: plType, name: "x", values: ["size": "groß"], author: "")) == nil, "Zahl wird geprüft")
+check((try? s.createEntity(typeId: plType, name: "x", values: ["sequence": "ACGTXZ"], author: "")) == nil, "Sequenz wird geprüft")
+check((try? s.createEntity(typeId: plType, name: " ", values: [:], author: "")) == nil, "Name ist Pflicht")
+let pl1id = pl1["id"] as! Int
+_ = try s.updateEntity(id: pl1id, name: "pUC19", values: ["backbone": "pUC", "resistance": "Ampicillin", "size": "2686", "sequence": "ACGTACGTTT", "source": "Addgene"], author: "Felix")
+_ = try s.updateEntity(id: pl1id, name: "pUC19", values: ["backbone": "pUC", "resistance": "Ampicillin", "size": "2686", "sequence": "ACGTACGTTT", "source": "Addgene"], author: "Felix")
+let pl1hist = (try s.entity(id: pl1id))["history"] as? [[String: Any]] ?? []
+check(pl1hist.count == 2, "Änderung im Verlauf, unveränderter Stand nicht doppelt")
+var rdb: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &rdb)
+check(sqlite3_exec(rdb, "DELETE FROM entity_history", nil, nil, nil) != SQLITE_OK, "Verlauf lässt sich nicht löschen")
+sqlite3_close(rdb)
+check((try s.entities(typeId: plType, q: "addgene")).map { $0["code"] as! String } == ["PL-0001"], "Suche in Feldern")
+check((try s.entities(typeId: nil, q: "PL0002")).first?["name"] as? String == "pET28a", "Suche über die ID (auch ohne Bindestrich)")
+let usingEntry = try s.create(title: "Klonierung")
+_ = try s.saveDraft(id: usingEntry, title: "Klonierung", json: "{}", text: "", entities: [pl1id, pl1id, 9999])
+check(((try s.entity(id: pl1id))["used_in"] as! [[String: Any]]).map { $0["id"] as! Int } == [usingEntry], "Verwendet in: Eintrag, Doppelte und Unbekannte ignoriert")
+let myType = try s.saveType(id: nil, name: "Gewebeprobe", prefix: "gp", icon: "🧊", fields: [["key": "organ", "label": "Organ", "type": "text"], ["key": "fixed", "label": "Fixiert", "type": "bool"]])
+check((try s.createEntity(typeId: myType, name: "Leber Maus 3", values: ["organ": "Leber", "fixed": "true"], author: ""))["code"] as? String == "GP-0001", "Eigener Typ mit Kürzel in Großbuchstaben")
+check((try? s.saveType(id: nil, name: "Doppelt", prefix: "PL", icon: "", fields: [])) == nil, "Kürzel muss eindeutig sein")
+check((try? s.saveType(id: plType, name: "Plasmid", prefix: "PX", icon: "", fields: [])) == nil, "Kürzel nicht änderbar, wenn es Objekte gibt")
+check((try? s.saveType(id: nil, name: "X", prefix: "XY", icon: "", fields: [["key": "a", "type": "select"]])) == nil, "Auswahlfeld ohne Optionen abgelehnt")
+check((try? s.saveType(id: nil, name: "X", prefix: "XZ", icon: "", fields: [["key": "a"], ["key": "a"]])) == nil, "Doppelte Feldschlüssel abgelehnt")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

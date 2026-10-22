@@ -92,40 +92,48 @@ async function linkRawFiles(testPaths) {
   } catch (e) { status(''); alert('Verlinken fehlgeschlagen: ' + e.message); }
 }
 
-// Verweis auf einen anderen Eintrag: „[[“ tippen, Eintrag wählen
+/// Vorschlagsliste unter der Schreibmarke (für [[ und @)
+function suggestionRender() {
+  let el, sel = 0, items = [], cmd;
+  const draw = () => {
+    el.innerHTML = items.length ? items.map((it, i) => `<div class="opt ${i == sel ? 'on' : ''}" data-i="${i}">${esc(it.label)}<small>${esc(it.sub || '')}</small></div>`).join('')
+      : '<div class="none">Nichts gefunden</div>';
+  };
+  // an der Schreibmarke, aber nie über den Fensterrand hinaus
+  const place = rect => { const r = rect?.(); if (!r) return;
+    el.style.left = `${Math.max(8, Math.min(r.left, innerWidth - el.offsetWidth - 8))}px`;
+    el.style.top = `${r.bottom + 4 + el.offsetHeight > innerHeight ? r.top - el.offsetHeight - 4 : r.bottom + 4}px`; };
+  const take = p => { items = p.items; cmd = p.command; sel = 0; draw(); place(p.clientRect); };
+  return {
+    onStart: p => {
+      el = document.createElement('div'); el.className = 'suggest'; document.body.appendChild(el);
+      el.addEventListener('mousedown', e => { const o = e.target.closest('[data-i]'); if (o) { e.preventDefault(); cmd(items[+o.dataset.i]); } });
+      take(p);
+    },
+    onUpdate: take,
+    onKeyDown: ({event: e}) => {
+      if (e.key == 'ArrowDown' || e.key == 'ArrowUp') { sel = (sel + (e.key == 'ArrowDown' ? 1 : items.length - 1)) % Math.max(items.length, 1); draw(); return true; }
+      if ((e.key == 'Enter' || e.key == 'Tab') && items[sel]) { cmd(items[sel]); return true; }
+      return false;
+    },
+    onExit: () => el?.remove(),
+  };
+}
+
+// Verweise: „[[“ auf einen Eintrag, „@“ auf ein Registry-Objekt (ID „ent:<nummer>“)
+const isEnt = n => String(n.attrs.id).startsWith('ent:');
 const EntryLink = TT.Mention.configure({
-  renderText: ({node}) => `[[${node.attrs.label}]]`,
-  renderHTML: ({node}) => ['a', {class: 'elink', href: '#', 'data-entry': node.attrs.id, title: 'Eintrag öffnen'}, `↗ ${node.attrs.label}`],
-  suggestion: {
-    char: '[[', allowSpaces: true,
-    items: async ({query}) => {
-      const rows = query ? await call('search', {q: query}) : await call('list');
-      return rows.filter(r => r.id != cur).slice(0, 8).map(r => ({id: String(r.id), label: r.title || 'Ohne Titel', kind: r.kind}));
-    },
-    render: () => {
-      let el, sel = 0, items = [], cmd;
-      const draw = () => {
-        el.innerHTML = items.length ? items.map((it, i) => `<div class="opt ${i == sel ? 'on' : ''}" data-i="${i}">${esc(it.label)}<small>${KINDS[it.kind] || ''}</small></div>`).join('')
-          : '<div class="none">Kein Eintrag gefunden</div>';
-      };
-      const place = rect => { const r = rect?.(); if (r) { el.style.left = `${r.left}px`; el.style.top = `${r.bottom + 4}px`; } };
-      const take = p => { items = p.items; cmd = p.command; sel = 0; draw(); place(p.clientRect); };
-      return {
-        onStart: p => {
-          el = document.createElement('div'); el.className = 'suggest'; document.body.appendChild(el);
-          el.addEventListener('mousedown', e => { const o = e.target.closest('[data-i]'); if (o) { e.preventDefault(); cmd(items[+o.dataset.i]); } });
-          take(p);
-        },
-        onUpdate: take,
-        onKeyDown: ({event: e}) => {
-          if (e.key == 'ArrowDown' || e.key == 'ArrowUp') { sel = (sel + (e.key == 'ArrowDown' ? 1 : items.length - 1)) % Math.max(items.length, 1); draw(); return true; }
-          if ((e.key == 'Enter' || e.key == 'Tab') && items[sel]) { cmd(items[sel]); return true; }
-          return false;
-        },
-        onExit: () => el?.remove(),
-      };
-    },
-  },
+  renderText: ({node}) => isEnt(node) ? `@${node.attrs.label}` : `[[${node.attrs.label}]]`,
+  renderHTML: ({node}) => isEnt(node)
+    ? ['a', {class: 'eref', href: '#', 'data-ent': String(node.attrs.id).slice(4), title: 'Objekt öffnen'}, node.attrs.label]
+    : ['a', {class: 'elink', href: '#', 'data-entry': node.attrs.id, title: 'Eintrag öffnen'}, `↗ ${node.attrs.label}`],
+  suggestions: [
+    {char: '[[', allowSpaces: true, render: suggestionRender,
+      items: async ({query}) => (query ? await call('search', {q: query}) : await call('list')).filter(r => r.id != cur).slice(0, 8)
+        .map(r => ({id: String(r.id), label: r.title || 'Ohne Titel', sub: KINDS[r.kind] || ''}))},
+    {char: '@', render: suggestionRender,
+      items: async ({query}) => (await call('entities', {q: query})).slice(0, 8).map(e => ({id: `ent:${e.id}`, label: `${e.code} ${e.name}`, sub: e.type_name}))},
+  ],
 });
 
 /// Erweiterungen des Editors; ohne Oberfläche (forUI = false) auch für Export und Import
@@ -161,22 +169,25 @@ function makeEditor() {
 
 /// Verweise und Dateien im Dokument einsammeln (für Rückverweise und Dateiliste im Speicher)
 function collectRefs(doc) {
-  const links = new Set(), files = new Set();
+  const links = new Set(), files = new Set(), entities = new Set();
   const walk = n => {
-    if (n.type == 'mention' && n.attrs?.id) links.add(+n.attrs.id);
+    if (n.type == 'mention' && n.attrs?.id) (String(n.attrs.id).startsWith('ent:') ? entities : links).add(+String(n.attrs.id).replace('ent:', ''));
     if (n.type == 'file' && n.attrs?.sha) files.add(n.attrs.sha);
     if (n.type == 'image') { const m = /^lab:\/\/files\/([0-9a-f]{64})$/.exec(n.attrs?.src || ''); if (m) files.add(m[1]); }
     (n.content || []).forEach(walk);
   };
   walk(doc);
-  return {links: [...links], files: [...files]};
+  return {links: [...links], files: [...files], entities: [...entities]};
 }
 
 /// Verweis-Beschriftungen auf die aktuellen Titel bringen (Titel können sich geändert haben)
 async function refreshLinkLabels(doc) {
   const titles = new Map((await call('titles')).map(t => [String(t.id), t.title || 'Ohne Titel']));
+  let ents = null;
+  const hasEnt = JSON.stringify(doc).includes('"ent:');
+  if (hasEnt) ents = new Map((await call('entities', {})).map(e => [`ent:${e.id}`, `${e.code} ${e.name}`]));
   const walk = n => {
-    if (n.type == 'mention' && n.attrs) n.attrs.label = titles.get(String(n.attrs.id)) ?? `${n.attrs.label} (gelöscht)`;
+    if (n.type == 'mention' && n.attrs) n.attrs.label = (String(n.attrs.id).startsWith('ent:') ? ents?.get(String(n.attrs.id)) : titles.get(String(n.attrs.id))) ?? `${n.attrs.label} (gelöscht)`;
     (n.content || []).forEach(walk);
   };
   walk(doc);
@@ -395,6 +406,7 @@ async function open(id) {
   if (cur && changedSinceSnap) await snapshot(true);
   const e = await call('load', {id});
   setPreview(null);
+  if (!$('#reg').hidden) showView('doc');
   cur = e.id;
   $('#doc').hidden = false; $('#empty').hidden = true;
   $('#title').value = e.title;
@@ -749,6 +761,26 @@ async function selfTest() {
   // M7: Quick Look
   const ql = await call('testQuickLook').catch(e => ({error: e.message}));
   ok(/QuickLook\/Preview\.html/.test(ql.previewURL || '') && ql.thumbnail && ql.html.includes(needle), `Quick Look: Vorschau und Vorschaubild${ql.error ? ' – ' + ql.error : ''}`);
+
+  // M8: Registry
+  const types = await call('types');
+  ok(types.length >= 6 && types.some(t => t.prefix == 'PL'), `Registry mit ${types.length} Typen`);
+  const pl = types.find(t => t.prefix == 'PL');
+  const plasmid = await call('createEntity', {type: pl.id, name: 'pUC19', values: {backbone: 'pUC', resistance: 'Ampicillin', sequence: 'atgc gtac'}});
+  ok(plasmid.code == 'PL-0001' && JSON.parse(plasmid.fields_json).sequence == 'ATGCGTAC', 'Plasmid PL-0001 angelegt, Sequenz bereinigt');
+  const useId = await call('create', {title: 'Klonierung mit pUC19'}); await refreshList(useId);
+  editor.commands.setContent({type: 'doc', content: [{type: 'paragraph', content: [{type: 'text', text: 'Vektor '}, {type: 'mention', attrs: {id: `ent:${plasmid.id}`, label: 'x', mentionSuggestionChar: '@'}}]}]});
+  changed(); await flush();
+  cur = null; await open(useId); await sleep(100);
+  ok(document.querySelector('.ProseMirror a.eref')?.textContent == 'PL-0001 pUC19', '@-Verweis zeigt ID und Namen');
+  document.querySelector('.ProseMirror a.eref').click(); await sleep(250);
+  ok(!$('#reg').hidden && /PL-0001/.test($('.reghead h2').textContent) && $('.regside').textContent.includes('Klonierung mit pUC19'), 'Klick öffnet Plasmid, „Verwendet in“ zeigt den Eintrag');
+  const gp = await call('saveType', {name: 'Gewebeprobe', prefix: 'gp', icon: '🧊', fields: [{key: 'organ', label: 'Organ', type: 'text'}]});
+  const probe = await call('createEntity', {type: gp, name: 'Leber Maus 3', values: {organ: 'Leber'}});
+  ok(probe.code == 'GP-0001', 'Eigener Typ mit eigenen Feldern');
+  await showType(gp); await sleep(100);
+  ok(document.querySelectorAll('.regtable tr[data-ent]').length == 1, 'Tabelle des eigenen Typs');
+  showView('doc');
   return out;
 }
 
@@ -760,6 +792,7 @@ $('#toolbar').addEventListener('mousedown', e => {
 });
 $('#list').addEventListener('click', e => {
   const li = e.target.closest('li'); if (!li) return;
+  if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; }
   if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id);  // ⌘-Klick: in neuem Tab
 });
 $('#new').onclick = newEntry;
@@ -801,7 +834,10 @@ $('#tagInput').addEventListener('keydown', e => { if (e.key == 'Enter' || e.key 
 $('#tagInput').addEventListener('change', addTagFromInput);  // Auswahl aus der Vorschlagsliste
 // Verweise im Text und Rückverweise öffnen den verlinkten Eintrag
 for (const sel of ['#editor', '#backlinks']) {
-  $(sel).addEventListener('click', e => { const a = e.target.closest('a.elink'); if (a) { e.preventDefault(); open(+a.dataset.entry); } });
+  $(sel).addEventListener('click', e => {
+    const a = e.target.closest('a.elink'); if (a) { e.preventDefault(); open(+a.dataset.entry); }
+    const r = e.target.closest('a.eref'); if (r) { e.preventDefault(); showEntity(+r.dataset.ent); }
+  });
 }
 $('#metaProject').addEventListener('change', e => setMeta({project: +e.target.value}));
 $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
@@ -836,6 +872,8 @@ async function start() {
   await loadProjects();
   await loadTags();
   await loadTemplates();
+  initRegistry();
+  await loadTypes();
   await refreshList();
   const wanted = +new URLSearchParams(location.search).get('entry');  // neuer Tab für einen bestimmten Eintrag
   const first = $('#list li'); if (wanted) await open(wanted); else if (first) await open(+first.dataset.id);

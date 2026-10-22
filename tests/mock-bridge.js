@@ -41,11 +41,23 @@
     linkFiles: () => [],
     ocrText: () => null,
     settings: () => ({author: 'Test', lockEnabled: false, lockMinutes: 15, fingerprint: null}),
+    types: () => (db.rtypes ||= [{id: 1, name: 'Plasmid', prefix: 'PL', icon: '🧬', archived: 0, fields_json: JSON.stringify([{key: 'backbone', label: 'Backbone', type: 'text'}, {key: 'resistance', label: 'Resistenz', type: 'select', options: ['Ampicillin', 'Kanamycin']}, {key: 'sequence', label: 'Sequenz', type: 'sequence'}]), next: 1}])
+      .map(t => ({...t, count: (db.ents || []).filter(e => e.type_id == t.id).length})),
+    saveType: a => { H.types(); const t = a.id ? db.rtypes.find(x => x.id == a.id) : (db.rtypes.push({id: db.rtypes.length + 1, archived: 0, next: 1}), db.rtypes.at(-1));
+      Object.assign(t, {name: a.name, prefix: a.prefix.toUpperCase(), icon: a.icon, fields_json: JSON.stringify(a.fields)}); return t.id; },
+    entities: a => (db.ents || []).filter(e => (a.type == null || e.type_id == a.type) && (!a.q || (e.code + ' ' + e.name + ' ' + e.fields_json).toLowerCase().includes(a.q.toLowerCase())))
+      .map(e => ({...e, type_name: db.rtypes.find(t => t.id == e.type_id).name, uses: (db.entUse || []).filter(u => u.ent == e.id).length})),
+    entity: a => { const e = db.ents.find(x => x.id == a.id), t = db.rtypes.find(x => x.id == e.type_id);
+      return {...e, type_fields: t.fields_json, type_name: t.name, icon: t.icon, history: e.history.slice().reverse(), used_in: (db.entUse || []).filter(u => u.ent == e.id).map(u => ({id: u.entry, title: entry(u.entry).title}))}; },
+    createEntity: a => { H.types(); db.ents ||= []; const t = db.rtypes.find(x => x.id == a.type); if (!a.name.trim()) fail('Name fehlt');
+      const e = {id: db.ents.length + 1, type_id: t.id, no: t.next, code: `${t.prefix}-${String(t.next++).padStart(4, '0')}`, name: a.name, fields_json: JSON.stringify(a.values), updated: now(), archived: 0, history: [{changed: now(), name: a.name, fields_json: JSON.stringify(a.values), author: 'Test'}]};
+      db.ents.push(e); return H.entity({id: e.id}); },
+    updateEntity: a => { const e = db.ents.find(x => x.id == a.id); Object.assign(e, {name: a.name, fields_json: JSON.stringify(a.values), updated: now()}); e.history.push({changed: now(), name: a.name, fields_json: e.fields_json, author: 'Test'}); return H.entity({id: e.id}); },
     notify: () => { db.notified = (db.notified || 0) + 1; return true; },
     create: a => { const e = {id: db.next++, title: a.title || '', created: now(), updated: now(), draft_json: '', text: '', kind: a.kind || 'experiment', project_id: a.project ?? null}; db.entries.push(e); return e.id; },
     setMeta: a => { const e = entry(a.id); if (a.project != null) e.project_id = a.project || null; if (a.kind) e.kind = a.kind; return true; },
     load: a => ({...entry(a.id), tags: tagsOf(a.id)}),
-    save: a => { Object.assign(entry(a.id), {title: a.title, draft_json: a.json, text: a.text, updated: now()}); db.links[a.id] = (a.links || []).filter(l => l != a.id); db.lastFiles = a.files; return {updated: now()}; },
+    save: a => { Object.assign(entry(a.id), {title: a.title, draft_json: a.json, text: a.text, updated: now()}); db.links[a.id] = (a.links || []).filter(l => l != a.id); db.entUse = (db.entUse || []).filter(u => u.entry != a.id).concat((a.entities || []).map(ent => ({entry: a.id, ent}))); db.lastFiles = a.files; return {updated: now()}; },
     snapshot: a => { const e = entry(a.id); const rs = db.revs.filter(r => r.entry_id == a.id); const last = rs[rs.length - 1];
       if (!e.draft_json || (last && last.content_json == e.draft_json && last.title == e.title)) return null;
       const r = {entry_id: a.id, no: rs.length + 1, title: e.title, content_json: e.draft_json, created: now(), hash: Math.random().toString(16).slice(2).padEnd(64, '0')}; db.revs.push(r); return r; },

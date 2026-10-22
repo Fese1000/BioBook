@@ -110,6 +110,16 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 | M6 ✅ | Import (.eln, Word/Markdown, Scan) und Export (PDF, PDF/A, Markdown, JSON, .eln), Backup | Buch exportieren und ohne die App lesen; eLabFTW-Export importieren. **Erledigt 2026-10-23:** Export ohne App lesbar, .eln-Export und Re-Import, Import Markdown/RTF/Scan; PDF/A nur mit Ghostscript; Import einer echten eLabFTW-Datei ungetestet |
 | M7 ✅ | Mac-Einbindung (Spotlight, Quick Look, Fenster/Tabs), Verpacken: Icon, DMG je Chip, Selbst-Update, README | Frische Installation und Update von 1.0 auf 1.1 getestet. **Erledigt 2026-10-23:** Fenster/Tabs, Spotlight, Quick Look, Selbst-Update (Test 1.0 → 1.1 bestanden, falsche Prüfsumme und fremder Download abgelehnt), DMG nur Apple Silicon, frische Installation getestet |
 
+## 10b. Meilensteine Phase 2 (Registry und Bestand)
+| M | Inhalt | Fertig, wenn … |
+| --- | --- | --- |
+| M8 ✅ | Registry: eigene Typen mit Feldern, Objekte mit fortlaufender ID (z. B. `PL-0042`), Änderungsverlauf, Standardtypen (Plasmid, Primer, Stamm, Zelllinie, Antikörper, Chemikalie), Verweis im Eintrag mit `@` | Plasmid anlegen, im Eintrag mit `@PL-0001` verweisen, im Plasmid „Verwendet in“ sehen; eigener Typ mit eigenen Feldern. **Erledigt 2026-10-23:** 18 Speicher-Tests, 6 Selbsttests in der App; Verlauf unveränderlich |
+| M9 | Bestand: Standorte (Gefrierschrank › Regal › Box › Position), Chargen mit Menge, Einheit, Ablaufdatum, Mindestbestand, GHS-Gefahren, Sicherheitsdatenblatt; Verbrauch im Eintrag verbuchen; Warnungen | Charge anlegen, in Box A3 einlagern, im Eintrag 2 µl verbrauchen, Bestand sinkt; abgelaufene/knappe Chargen werden gemeldet |
+| M10 | QR-Etiketten drucken, Etikett per Kamera scannen öffnet das Objekt; Plattenlayout-Block (96/384) | Etikett für eine Charge gedruckt (PDF), Scan öffnet sie; 96er-Platte mit Proben belegt |
+| M11 | Strukturierte Ergebnisse: Ergebnistabellen mit festen Feldern und Einheiten; Auswertung über viele Einträge mit Diagramm | „Ausbeute aller Plasmid-Präps“ als Tabelle und Diagramm über Einträge hinweg |
+| M12 | Zellkultur (Passagen, Mycoplasma-Tests, Einfrierlisten) und Gerätebuch (Wartung, Kalibrierung, fällige Termine) | Passage 12 → 13 verbucht; fällige Kalibrierung wird gemeldet |
+| M13 | Bestellliste aus knappen Chargen, Bestellstatus, Wareneingang legt Charge an | Knappes Reagenz auf Bestellliste, Eingang verbucht neue Charge |
+
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
 

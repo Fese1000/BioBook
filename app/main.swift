@@ -466,6 +466,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 NSSound(named: "Glass")?.play()
                 NSApp.requestUserAttention(.criticalRequest)
                 replyHandler(true, nil)
+            case "types": replyHandler(try s.types(), nil)
+            case "saveType":
+                replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",
+                                            fields: a["fields"] as? [[String: Any]] ?? []), nil)
+            case "archiveType": try s.archiveType(id: try int("id"), archived: a["archived"] as? Bool ?? true); replyHandler(true, nil)
+            case "entities": replyHandler(try s.entities(typeId: a["type"] as? Int, q: (a["q"] as? String) ?? "", archived: a["archived"] as? Bool ?? false), nil)
+            case "entity": replyHandler(try s.entity(id: try int("id")), nil)
+            case "createEntity": replyHandler(try s.createEntity(typeId: try int("type"), name: try str("name"), values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "updateEntity": replyHandler(try s.updateEntity(id: try int("id"), name: try str("name"), values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "archiveEntity": try s.archiveEntity(id: try int("id"), archived: a["archived"] as? Bool ?? true); replyHandler(true, nil)
             case "tags": replyHandler(try s.tags(), nil)
             case "setTags": replyHandler(try s.setTags(id: try int("id"), names: a["names"] as? [String] ?? []), nil)
             case "backlinks": replyHandler(try s.backlinks(id: try int("id")), nil)
@@ -501,7 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "save":
                 let id = try int("id")
                 replyHandler(try s.saveDraft(id: id, title: try str("title"), json: try str("json"), text: try str("text"),
-                                             links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? []), nil)
+                                             links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? [], entities: a["entities"] as? [Int] ?? []), nil)
                 broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
                 if !testMode { Spotlight.update(s, id: id) }
                 scheduleQuickLook()
