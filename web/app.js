@@ -11,6 +11,7 @@ let editor = null, cur = null, saveTimer = null, dirty = false, changedSinceSnap
 let projects = [], project = null;  // project: null = alle, 0 = ohne Projekt, sonst ID
 let tags = [], tag = null;          // tag: gewählter Tag-Filter (ID) oder null
 let preview = null;                 // angezeigte alte Revision (nur lesen) oder null
+let curSigned = null;               // Revisionsnummer, mit der der offene Eintrag abgeschlossen wurde
 
 // ---------- Editor ----------
 const fmtSize = n => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
@@ -25,7 +26,7 @@ const FileNode = TT.Node.create({
     return {sha: a('sha'), name: a('name'), mime: a('mime'), size: {...a('size'), parseHTML: el => +el.getAttribute('data-size')}};
   },
   parseHTML: () => [{tag: 'div[data-file]'}],
-  renderHTML: ({HTMLAttributes}) => ['div', TT.mergeAttributes({'data-file': ''}, HTMLAttributes)],
+  renderHTML: ({node, HTMLAttributes}) => ['div', TT.mergeAttributes({'data-file': ''}, HTMLAttributes), `📎 ${node.attrs.name} (${fmtSize(node.attrs.size || 0)})`],
   addNodeView: () => ({node}) => {
     const {sha, name, mime, size} = node.attrs;
     const kind = Object.keys(PREVIEW).find(k => PREVIEW[k].test(mime || ''));
@@ -358,6 +359,7 @@ async function open(id) {
   $('#metaKind').value = e.kind;
   renderEntryTags(e.tags || []);
   curTemplate = e.template_id ? {id: e.template_id, version: e.template_version} : null;
+  curSigned = e.signed_no ?? null;
   renderTemplateInfo();
   if (RUN && RUN.entry != e.id) hideRun();
   editor.commands.setContent(e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '', {emitUpdate: false});
@@ -366,6 +368,8 @@ async function open(id) {
   status('Gespeichert');
   updateCounts();
   document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == cur));
+  applyLock();
+  renderSignInfo();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
@@ -388,9 +392,7 @@ async function setMeta(args) {
 // ---------- Alte Revisionen (nur lesen, wiederherstellbar) ----------
 function setPreview(r) {
   preview = r;
-  editor.setEditable(!r, false);  // false: kein update-Ereignis, sonst würde die alte Fassung als Arbeitsstand gespeichert
-  $('#title').readOnly = !!r;
-  $('#toolbar').hidden = !!r;
+  applyLock();
   $('#meta').hidden = !!r;
   $('#preview').hidden = !r;
   if (r) $('#preview').innerHTML = `<span class="grow"><b>Revision ${r.no}</b> vom ${when(r.created)} · nur lesen</span>
@@ -423,6 +425,7 @@ async function leavePreview(restore) {
 
 // ---------- Speichern ----------
 function changed() {
+  if (curSigned) return;  // abgeschlossene Einträge werden nicht mehr gespeichert
   dirty = changedSinceSnap = true;
   status('Nicht gespeichert');
   updateCounts();
@@ -471,7 +474,12 @@ async function showHistory() {
   $('#revs').textContent = `${revs.length} Revisionen`;
   $('#chain').innerHTML = !v.count ? '<span class="sub">Noch keine Revision. ⌘S sichert eine.</span>'
     : v.ok ? `<span class="ok">✓ Hash-Kette intakt (${v.count})</span>` : `<span class="bad">✗ Kette bei Revision ${v.broken} verletzt</span>`;
-  $('#revlist').innerHTML = revs.map(r => `<li value="${r.no}" title="Diese Fassung ansehen" class="${preview?.no == r.no ? 'cur' : ''}">${when(r.created)}<br><code>${r.hash.slice(0, 16)}…</code></li>`).join('');
+  $('#revlist').innerHTML = revs.map(r => `<li value="${r.no}" title="Diese Fassung ansehen" class="${preview?.no == r.no ? 'cur' : ''}">${when(r.created)}`
+    + `${r.no == curSigned ? ' · 🔏' : ''}<br><code>${r.hash.slice(0, 16)}…</code></li>`).join('');
+  $('#sigs').innerHTML = (v.signatures || []).map(g => g.kind == 'author'
+    ? `<div class="${g.valid ? 'ok' : 'bad'}">${g.valid ? '✓' : '✗'} ${g.valid ? 'Signatur gültig' : 'Signatur ungültig'}: ${esc(g.name)}, Rev. ${g.rev_no}<br><span class="sub">${when(g.signed_at)} · Schlüssel ${esc(g.fingerprint)}</span></div>`
+    : `<div class="${g.hash_found ? 'ok' : 'warn'}">${g.hash_found ? '✓' : '⚠'} Zeuge: ${esc(g.name)} (${when(g.signed_at)})<br><span class="sub">${g.hash_found ? 'Hash im PDF gefunden' : 'Hash nicht im PDF gefunden (Scan?) – bitte Ausdruck prüfen'}</span>`
+      + ` <a href="#" data-openpdf="${g.file_sha256}">PDF öffnen</a></div>`).join('');
 }
 
 // ---------- Leistungstest (M0) ----------
@@ -569,6 +577,33 @@ async function selfTest() {
   window.confirm = () => true;
   await finishRun(false); await sleep(200);
   ok(editor.getJSON().content.some(n => n.type == 'table') && !(await call('activeRun', {entry: cur})), 'Lauf beendet, Ablaufprotokoll angehängt');
+
+  // Abschließen, signieren, Zeugen-PDF
+  const signId = cur;
+  await signEntry(); await sleep(200);
+  const v = await call('verify', {id: signId});
+  ok(curSigned && v.ok && v.signatures[0]?.valid, 'Eintrag signiert, Signatur gültig');
+  ok(!editor.isEditable && $('#toolbar').hidden && !$('#signinfo').hidden, 'Signierter Eintrag ist schreibgeschützt');
+  let rejected = false;
+  try { await call('save', {id: signId, title: 'x', json: '{}', text: ''}); } catch { rejected = true; }
+  ok(rejected, 'Speicher lehnt Änderung am signierten Eintrag ab');
+  const pdf = await makeWitnessPDF();
+  ok(pdf && pdf.bytes > 1000, `Zeugen-PDF erzeugt (${pdf?.bytes} Bytes)`);
+  window.prompt = () => 'Dr. Test Zeuge';
+  const w = await attachWitness(pdf?.path);
+  ok(w && w.hash_found, 'Zeugen-PDF wieder angehängt, Hash darin gefunden');
+  const v2 = await call('verify', {id: signId});
+  ok(v2.signatures.length == 2 && v2.signatures[1].kind == 'witness', 'Verlauf zeigt Autor und Zeuge');
+  await addendum(); await sleep(150);
+  ok(cur != signId && (await call('backlinks', {id: signId})).some(r => r.id == cur), 'Nachtrag verweist auf den signierten Eintrag');
+  // Langer Eintrag: das Zeugen-PDF muss auf mehrere Seiten umbrechen
+  const longId = await call('create', {title: 'Langer Eintrag'});
+  await refreshList(longId);
+  editor.commands.setContent({type: 'doc', content: Array.from({length: 120}, (_, i) => ({type: 'paragraph', content: [{type: 'text', text: `Absatz ${i + 1}: Probe zentrifugiert, Überstand verworfen, Pellet in Puffer aufgenommen und auf Eis gestellt.`}]}))});
+  changed(); await flush();
+  await signEntry(); await sleep(200);
+  const longPdf = await makeWitnessPDF();
+  ok(longPdf && longPdf.pages > 1, `Langer Eintrag: Zeugen-PDF mit ${longPdf?.pages} Seiten`);
   return out;
 }
 
@@ -599,6 +634,7 @@ $('#projects').addEventListener('click', e => {
 $('#newProject').onclick = newProject;
 $('#saveTpl').onclick = saveAsTemplate;
 $('#runBtn').onclick = startRun;
+$('#signBtn').onclick = signEntry;
 $('#templates').addEventListener('click', async e => {
   if (e.target.dataset.tplver) return pickTemplateVersion(+e.target.dataset.tplver);
   if (e.target.dataset.tplarch) { const t = templates.find(x => x.id == e.target.dataset.tplarch); await call('archiveTemplate', {id: t.id, archived: !t.archived}); return loadTemplates(); }
@@ -624,7 +660,7 @@ $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun};
+window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings};
 
 async function start() {
   makeEditor();

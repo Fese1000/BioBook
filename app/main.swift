@@ -1,5 +1,6 @@
 // Dünne Swift-Schicht: Fenster, WebView, Schema lab:// für Oberfläche und Anhänge, Brücke JS ↔ Swift.
 import Cocoa
+import PDFKit
 import UniformTypeIdentifiers
 import WebKit
 
@@ -35,11 +36,14 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ w: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKScriptMessageHandlerWithReply, WKUIDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, WKScriptMessageHandlerWithReply, WKUIDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var store: Store?
-    var pendingOpen: URL?  // per Doppelklick im Finder übergeben, bevor das Fenster steht
+    var scheme: SchemeHandler!
+    var locker: Locker!
+    var pendingOpen: URL?
+    let testMode = CommandLine.arguments.contains("--selftest") || CommandLine.arguments.contains("--perftest")  // per Doppelklick im Finder übergeben, bevor das Fenster steht
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let start = pendingOpen ?? Self.lastBook() ?? Self.defaultBook()
@@ -52,7 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         buildMenu()
         let cfg = WKWebViewConfiguration()
         let res = Bundle.main.resourceURL!.appendingPathComponent("web")
-        cfg.setURLSchemeHandler(SchemeHandler(web: res, store: { [weak self] in self?.store }), forURLScheme: "lab")
+        scheme = SchemeHandler(web: res, store: { [weak self] in self?.store })
+        cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
         cfg.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "lab")
         web = WKWebView(frame: .zero, configuration: cfg)
         web.uiDelegate = self
@@ -68,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         if !window.setFrameUsingName("LaborbuchMain") { window.center() }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        locker = Locker(window: window, disabled: testMode)
+        locker.lockIfEnabled()
         web.load(URLRequest(url: URL(string: "lab://app/index.html")!))
     }
 
@@ -184,6 +191,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
             case "activeRun": replyHandler(try s.activeRun(entry: try int("entry")) ?? NSNull(), nil)
             case "completeStep": replyHandler(try s.completeStep(run: try int("run"), step: try int("step"), note: (a["note"] as? String) ?? ""), nil)
             case "finishRun": replyHandler(try s.finishRun(run: try int("run"), aborted: a["aborted"] as? Bool ?? false), nil)
+            case "settings":
+                replyHandler(["author": Settings.author, "lockEnabled": Settings.lockEnabled, "lockMinutes": Settings.lockMinutes,
+                              "fingerprint": Keys.fingerprint() ?? NSNull()], nil)
+            case "setSettings":
+                if let n = a["author"] as? String { Settings.author = n }
+                if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
+                if let m = a["lockMinutes"] as? Int { Settings.lockMinutes = m }
+                replyHandler(true, nil)
+            case "lockNow": locker.lock(); replyHandler(true, nil)
+            case "signEntry":
+                if testMode && ProcessInfo.processInfo.environment["LABORBUCH_KEYFILE"] == nil { throw StoreError.invalid("Tests brauchen LABORBUCH_KEYFILE (nie den echten Schlüsselbund)") }
+                let key = try Keys.signingKey()
+                replyHandler(try s.signEntry(id: try int("id"), key: key, name: Settings.author), nil)
+            case "signedRevision": replyHandler(try s.signedRevision(id: try int("id")), nil)
+            case "witnessPDF":
+                let id = try int("id"), html = try str("html")
+                let hash = try s.signedRevision(id: id)["hash"] as! String
+                guard html.contains(hash) else { throw StoreError.invalid("Das PDF muss den Hash der signierten Revision enthalten") }
+                WitnessPDF.make(html: html, hash: hash, scheme: scheme) { [weak self] r in
+                    switch r {
+                    case .failure(let e): replyHandler(nil, "\(e)")
+                    case .success(let data): self?.savePDF(data, name: (a["name"] as? String) ?? "Zeugen-PDF", reply: replyHandler)
+                    }
+                }
+            case "attachWitness":
+                let id = try int("id"), name = try str("name")
+                let hash = try s.signedRevision(id: id)["hash"] as! String
+                guard let url = pickPDF(testPath: a["testPath"] as? String) else { return replyHandler(NSNull(), nil) }
+                let data = try Data(contentsOf: url)
+                guard data.count <= 50_000_000 else { throw StoreError.invalid("PDF ist größer als 50 MB") }
+                let found = WitnessPDF.containsHash(data, hash: hash)
+                let sha = try s.putFile(name: url.lastPathComponent, mime: "application/pdf", data: data)
+                var w = try s.addWitness(id: id, name: name, file: sha, hashFound: found)
+                w["sha256"] = sha
+                replyHandler(w, nil)
             case "notify":
                 // Timer abgelaufen: Ton und Dock-Symbol hüpfen lassen, auch wenn die App im Hintergrund ist
                 NSSound(named: "Glass")?.play()
@@ -234,6 +276,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         } catch { replyHandler(nil, "\(error)") }
     }
 
+    // MARK: Zeugen-PDF speichern und wieder einlesen
+    /// In Tests (LABORBUCH_TESTOUT) ohne Dialog in einen Ordner schreiben
+    func savePDF(_ data: Data, name: String, reply: @escaping (Any?, String?) -> Void) {
+        let safe = URL(fileURLWithPath: name).lastPathComponent.replacingOccurrences(of: ":", with: "-")
+        if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] {
+            let url = URL(fileURLWithPath: dir).appendingPathComponent(safe)
+            do { try data.write(to: url); reply(["path": url.path, "bytes": data.count, "pages": PDFDocument(data: data)?.pageCount ?? 0], nil) } catch { reply(nil, "\(error)") }
+            return
+        }
+        let p = NSSavePanel()
+        p.nameFieldStringValue = safe
+        p.allowedContentTypes = [.pdf]
+        p.beginSheetModal(for: window) { r in
+            guard r == .OK, let url = p.url else { return reply(NSNull(), nil) }
+            do { try data.write(to: url); reply(["path": url.path, "bytes": data.count], nil) } catch { reply(nil, "\(error)") }
+        }
+    }
+
+    func pickPDF(testPath: String?) -> URL? {
+        if let t = testPath, ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] != nil { return URL(fileURLWithPath: t) }
+        let p = NSOpenPanel()
+        p.title = "Unterschriebenes Zeugen-PDF wählen"
+        p.allowedContentTypes = [.pdf]
+        return p.runModal() == .OK ? p.url : nil
+    }
+
     // MARK: Menü
     func buildMenu() {
         let main = NSMenu()
@@ -247,7 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
                 m.addItem(i)
             }
         }
-        add("Laborbuch", [("Laborbuch beenden", #selector(NSApplication.terminate(_:)), "q")])
+        add("Laborbuch", [("Einstellungen …", #selector(showSettings), ","), ("Jetzt sperren", #selector(lockNow), "l"), ("-", nil, ""),
+                          ("Laborbuch beenden", #selector(NSApplication.terminate(_:)), "q")])
         add("Ablage", [("Neuer Eintrag", #selector(newEntry), "n"), ("Revision sichern", #selector(snapshotNow), "s"), ("-", nil, ""),
                        ("Neues Laborbuch …", #selector(newBook), "N"), ("Laborbuch öffnen …", #selector(openBook), "o"),
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
@@ -260,6 +329,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         add("Fenster", [("Minimieren", #selector(NSWindow.performMiniaturize(_:)), "m")])
         NSApp.mainMenu = main
     }
+    // Gesperrt: nur Beenden und Sperren bleiben im Menü aktiv
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        !(locker?.locked ?? false) || item.action == #selector(NSApplication.terminate(_:)) || item.action == #selector(lockNow)
+    }
+    @objc func showSettings() { if !locker.locked { web.evaluateJavaScript("app.settings()") } }
+    @objc func lockNow() { locker.lock() }
     @objc func newEntry() { web.evaluateJavaScript("app.newEntry()") }
     @objc func snapshotNow() { web.evaluateJavaScript("app.snapshot()") }
     @objc func focusSearch() { web.evaluateJavaScript("app.focusSearch()") }

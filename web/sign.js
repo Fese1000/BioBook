@@ -1,0 +1,125 @@
+// Abschließen und Signieren, Nachtrag, Zeugen-PDF, Einstellungen.
+// Signiert wird in Swift mit dem Schlüssel aus dem Schlüsselbund; hier nur Oberfläche und Ablauf.
+'use strict';
+
+/// Bearbeitbar nur, wenn weder eine alte Revision angezeigt wird noch der Eintrag abgeschlossen ist
+function applyLock() {
+  const ro = !!preview || !!curSigned;
+  editor.setEditable(!ro, false);  // false: kein update-Ereignis, sonst würde gespeichert
+  $('#title').readOnly = ro;
+  $('#toolbar').hidden = ro;
+  $('#runBtn').hidden = !!curSigned;
+  $('#signBtn').hidden = !!curSigned;
+}
+
+async function renderSignInfo() {
+  const box = $('#signinfo');
+  if (!curSigned) { box.hidden = true; return; }
+  const r = await call('signedRevision', {id: cur});
+  box.hidden = false;
+  box.innerHTML = `<span class="grow">🔏 <b>Abgeschlossen</b> und signiert von ${esc(r.name)} am ${when(r.signed_at)} · Revision ${r.no}
+      <br><span class="sub">SHA-256 <code>${r.hash}</code> · Schlüssel ${esc(r.fingerprint)}</span></span>
+    <button class="btn" data-witnesspdf>Zeugen-PDF erstellen</button>
+    <button class="btn" data-witnessadd>Unterschriebenes PDF anhängen</button>
+    <button class="btn on" data-addendum>Nachtrag</button>`;
+}
+
+async function signEntry() {
+  if (!cur || curSigned) return;
+  const s = await call('settings');
+  if (!s.author?.trim()) { alert('Bitte zuerst in den Einstellungen deinen Namen für Signaturen eintragen.'); return showSettings(); }
+  if (!confirm(`Eintrag abschließen und als „${s.author}“ signieren?\n\nDanach lässt er sich nicht mehr ändern; Ergänzungen kommen in einen Nachtrag. Signiert wird mit deinem persönlichen Schlüssel aus dem Schlüsselbund.`)) return;
+  await flush();
+  try {
+    const r = await call('signEntry', {id: cur});
+    curSigned = r.no;
+    applyLock();
+    await renderSignInfo();
+    status(`Signiert (Revision ${r.no})`);
+    if (!$('#history').hidden) showHistory();
+    await refreshList();
+  } catch (e) { alert('Signieren fehlgeschlagen: ' + e.message); }
+}
+
+/// Nachtrag: neuer Eintrag mit Verweis auf den abgeschlossenen, gleiche Art und gleiches Projekt
+async function addendum() {
+  const src = await call('load', {id: cur});
+  const id = await call('create', {title: `Nachtrag zu ${src.title || 'Eintrag'}`, kind: src.kind, ...(src.project_id ? {project: src.project_id} : {})});
+  await refreshList(id);
+  editor.commands.setContent({type: 'doc', content: [
+    {type: 'paragraph', content: [{type: 'text', text: 'Nachtrag zu '}, {type: 'mention', attrs: {id: String(src.id), label: src.title || 'Ohne Titel'}}, {type: 'text', text: ': '}]},
+    {type: 'paragraph'}]});
+  changed(); await flush();
+  editor.commands.focus('end');
+}
+
+/// HTML für das Zeugen-PDF: Kopf mit Hash und Signatur, Inhalt, Felder für Unterschriften
+function witnessHTML(r, book) {
+  const css = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;color:#111;margin:0}
+    h1{font:600 18pt/1.25 "New York",Georgia,serif;margin:0 0 4pt} h2,h3{font-family:"New York",Georgia,serif;margin:14pt 0 4pt}
+    .head{border:1px solid #999;border-radius:4pt;padding:8pt 10pt;margin-bottom:14pt;font-size:9pt}
+    code,.hash{font:8.5pt/1.4 Menlo,monospace;word-break:break-all}
+    img{max-width:100%;height:auto} table{border-collapse:collapse;width:100%;margin:6pt 0} td,th{border:1px solid #999;padding:3pt 5pt;vertical-align:top;font-size:10pt}
+    ul[data-type=taskList]{list-style:none;padding-left:0} a{color:#111;text-decoration:none}
+    div[data-calc],div[data-file]{border:1px solid #bbb;border-radius:4pt;padding:5pt 8pt;margin:6pt 0;font-size:10pt}
+    .sign{margin-top:22pt;page-break-inside:avoid;border-top:1px solid #999;padding-top:10pt;font-size:10pt}
+    .line{display:flex;gap:24pt;margin-top:28pt}.line div{flex:1;border-top:1px solid #333;padding-top:3pt;font-size:9pt;color:#444}`;
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${css}</style></head><body>
+    <div class="head"><b>Laborbuch „${esc(book)}“</b> · Eintrag Nr. ${cur} · Revision ${r.no}<br>
+      Abgeschlossen und signiert von <b>${esc(r.name)}</b> am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})<br>
+      Revisions-Hash (SHA-256): <span class="hash">${r.hash}</span></div>
+    <h1>${esc($('#title').value)}</h1>
+    ${editor.getHTML()}
+    <div class="sign"><b>Gegenzeichnung</b><br>Ich habe den oben stehenden Eintrag gelesen und verstanden.<br>
+      Er gehört zur Revision mit dem SHA-256-Hash <span class="hash">${r.hash}</span>.
+      <div class="line"><div>Name des Zeugen</div><div>Datum</div><div>Unterschrift</div></div></div>
+  </body></html>`;
+}
+
+async function makeWitnessPDF() {
+  const [r, book] = await Promise.all([call('signedRevision', {id: cur}), call('book')]);
+  status('Zeugen-PDF wird erstellt …');
+  try {
+    const out = await call('witnessPDF', {id: cur, html: witnessHTML(r, book.name), name: `Zeuge – ${$('#title').value || 'Eintrag'} (Rev ${r.no}).pdf`});
+    status(out ? `Zeugen-PDF gespeichert: ${out.path}` : 'Zeugen-PDF nicht gespeichert');
+    return out;
+  } catch (e) { status(''); alert('Zeugen-PDF fehlgeschlagen: ' + e.message); }
+}
+
+async function attachWitness(testPath) {
+  const name = prompt('Name des Zeugen');
+  if (!name?.trim()) return;
+  try {
+    const w = await call('attachWitness', {id: cur, name, ...(testPath ? {testPath} : {})});
+    if (!w) return;
+    status(w.hash_found ? `Zeuge ${w.name} vermerkt – Hash im PDF gefunden` : `Zeuge ${w.name} vermerkt – Hash nicht im PDF gefunden, bitte Ausdruck prüfen`);
+    if (!$('#history').hidden) showHistory(); else { $('#history').hidden = false; showHistory(); }
+    return w;
+  } catch (e) { alert('Anhängen fehlgeschlagen: ' + e.message); }
+}
+
+// ---------- Einstellungen ----------
+async function showSettings() {
+  const s = await call('settings');
+  const dlg = $('#settings');
+  dlg.innerHTML = `<form method="dialog"><h3>Einstellungen</h3>
+    <label class="row">Name für Signaturen <input id="setAuthor" value="${esc(s.author)}" autocomplete="off"></label>
+    <p class="sub">Persönlicher Signaturschlüssel: ${s.fingerprint ? `<code>${esc(s.fingerprint)}</code> (im Schlüsselbund)` : 'wird beim ersten Signieren angelegt und im Schlüsselbund gespeichert'}</p>
+    <label class="row"><input type="checkbox" id="setLock" ${s.lockEnabled ? 'checked' : ''}> Mit Touch ID sperren (beim Start und wenn der Mac schläft)</label>
+    <label class="row">… und nach <input id="setLockMin" type="number" min="0" max="240" value="${s.lockMinutes}" style="width:70px"> Minuten ohne Eingabe (0 = nie)</label>
+    <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on" id="setSave">Sichern</button></div></form>`;
+  dlg.showModal();
+  dlg.onclose = async () => {
+    if (dlg.returnValue != 'ok') return;
+    await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0)});
+    status('Einstellungen gesichert');
+  };
+}
+
+document.addEventListener('click', e => {
+  const d = e.target.dataset;
+  if (d.witnesspdf !== undefined) makeWitnessPDF();
+  else if (d.witnessadd !== undefined) attachWitness();
+  else if (d.addendum !== undefined) addendum();
+  else if (d.openpdf) { e.preventDefault(); call('openFile', {sha256: d.openpdf, name: 'Zeugen-PDF.pdf'}).catch(err => alert(err.message)); }
+});

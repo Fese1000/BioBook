@@ -21,6 +21,7 @@
   <div id="doc" hidden>
     <div id="preview" hidden></div>
     <div id="runbar" class="bar" hidden></div>
+    <div id="signinfo" class="bar" hidden></div>
     <input id="title" placeholder="Titel" autocomplete="off">
     <div id="meta">
       <label>Projekt <select id="metaProject"></select></label>
@@ -30,6 +31,7 @@
       <span id="tplinfo"></span>
       <span class="grow"></span>
       <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
+      <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
       <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
     </div>
     <div id="toolbar"></div>
@@ -39,11 +41,13 @@
   <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
 <section id="run" hidden></section>
-<section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><ol id="revlist"></ol></section>
+<section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><div id="sigs"></div><ol id="revlist"></ol></section>
+<dialog id="settings"></dialog>
 <input id="filepick" type="file" multiple hidden>
 <script src="vendor/tiptap.js"></script>
 <script src="calc.js"></script>
 <script src="calcblock.js"></script>
 <script src="run.js"></script>
+<script src="sign.js"></script>
 <script src="app.js"></script>
 </body></html>

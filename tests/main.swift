@@ -1,5 +1,6 @@
 // Tests für Store.swift (ohne Xcode): swiftc app/Store.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
+import CryptoKit
 import SQLite3
 
 var failures = 0
@@ -107,6 +108,51 @@ check(fin["status"] as? String == "done" && fin["finished"] is String, "Lauf bee
 check(try s.activeRun(entry: fromT) == nil, "Kein laufender Lauf mehr")
 check((try? s.completeStep(run: run, step: 1, note: "")) == nil, "Beendeter Lauf nimmt keine Schritte mehr an")
 check((try? s.startRun(entry: fromT, steps: [])) == nil, "Lauf ohne Schritte abgelehnt")
+
+// M4: Signieren, Abschluss, Zeugen
+
+let key = Curve25519.Signing.PrivateKey(), otherKey = Curve25519.Signing.PrivateKey()
+let se = try s.create(title: "Western Blot")
+check((try? s.signEntry(id: se, key: key, name: "Felix")) == nil, "Leerer Eintrag lässt sich nicht signieren")
+_ = try s.saveDraft(id: se, title: "Western Blot", json: #"{"blot":1}"#, text: "Bande bei 55 kDa")
+check((try? s.signEntry(id: se, key: key, name: " ")) == nil, "Signatur ohne Namen abgelehnt")
+let sg = try s.signEntry(id: se, key: key, name: "Felix Cuntz")
+check(sg["no"] as? Int == 1 && (sg["fingerprint"] as? String)?.count == 19, "Signiert: Revision 1, Fingerabdruck")
+let vs = try s.verify(id: se)
+check(vs["ok"] as? Bool == true && (vs["signatures"] as! [[String: Any]])[0]["valid"] as? Bool == true, "Signatur gültig")
+check((try? s.saveDraft(id: se, title: "Western Blot", json: #"{"blot":2}"#, text: "x")) == nil, "Signierter Eintrag ist gesperrt")
+check((try? s.signEntry(id: se, key: key, name: "Felix Cuntz")) == nil, "Kein zweites Signieren")
+try s.setMeta(id: se, project: 0, kind: "note")
+check(true, "Ordnung (Art/Projekt) bleibt änderbar")
+check((try s.signedRevision(id: se))["hash"] as? String == sg["hash"] as? String, "Signierte Revision abrufbar")
+
+// Zeugen-PDF als Anhang
+let pdfSha = try s.putFile(name: "zeuge.pdf", mime: "application/pdf", data: Data("%PDF-1.4 \(sg["hash"]!)".utf8))
+let w = try s.addWitness(id: se, name: "Dr. Zeuge", file: pdfSha, hashFound: true)
+check(w["hash_found"] as? Bool == true, "Zeuge vermerkt")
+check((try? s.addWitness(id: se, name: "X", file: String(repeating: "b", count: 64), hashFound: false)) == nil, "Zeuge ohne gespeichertes PDF abgelehnt")
+check((try? s.addWitness(id: e2, name: "X", file: pdfSha, hashFound: false)) == nil, "Zeuge nur bei signierten Einträgen")
+check(((try s.verify(id: se))["signatures"] as! [[String: Any]]).count == 2, "Verlauf zeigt Autor und Zeuge")
+
+// Fälschungen: Signatur mit fremdem Schlüssel, geänderter Name, geänderter Inhalt
+var sdb: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &sdb)
+check(sqlite3_exec(sdb, "UPDATE signature SET name = 'Jemand' WHERE entry_id = \(se)", nil, nil, nil) != SQLITE_OK, "Signaturen sind unveränderlich")
+sqlite3_exec(sdb, "DROP TRIGGER signature_ro_u; UPDATE signature SET name = 'Jemand anderes' WHERE entry_id = \(se) AND kind = 'author'", nil, nil, nil)
+sqlite3_close(sdb)
+let vf = try s.verify(id: se)
+check(vf["ok"] as? Bool == false && vf["chain_ok"] as? Bool == true, "Geänderter Name macht Signatur ungültig")
+let se2 = try s.create(title: "Gel")
+_ = try s.saveDraft(id: se2, title: "Gel", json: #"{"g":1}"#, text: "")
+_ = try s.signEntry(id: se2, key: otherKey, name: "Felix")
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &sdb)
+sqlite3_exec(sdb, "DROP TRIGGER IF EXISTS revision_readonly_u; UPDATE revision SET content_json = '{\"g\":2}' WHERE entry_id = \(se2)", nil, nil, nil)
+sqlite3_close(sdb)
+let vc = try s.verify(id: se2)
+check(vc["ok"] as? Bool == false && vc["chain_ok"] as? Bool == false && (vc["signatures"] as! [[String: Any]])[0]["valid"] as? Bool == false, "Geänderter Inhalt: Kette und Signatur ungültig")
+let fake = Curve25519.Signing.PrivateKey()
+let forged = try fake.signature(for: Store.signaturePayload(entry: se, no: 1, hash: sg["hash"] as! String, name: "Felix Cuntz", at: sg["signed_at"] as! String))
+check(!key.publicKey.isValidSignature(forged, for: Store.signaturePayload(entry: se, no: 1, hash: sg["hash"] as! String, name: "Felix Cuntz", at: sg["signed_at"] as! String)), "Fremder Schlüssel erzeugt keine gültige Signatur")
 
 // Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
 let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")

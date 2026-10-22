@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 3
+    static let schemaVersion = 4
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -94,6 +94,19 @@ final class Store {
                 CREATE INDEX run_entry ON run(entry_id);
                 CREATE TABLE run_step(run_id INTEGER NOT NULL REFERENCES run(id), step_no INTEGER NOT NULL, done_at TEXT NOT NULL,
                   note TEXT NOT NULL DEFAULT '', PRIMARY KEY(run_id, step_no));
+                """)
+            }
+            if v < 4 {
+                // Signaturen (Autor: Ed25519 über den Revisions-Hash; Zeuge: unterschriebenes PDF mit dem Hash) und Abschluss von Einträgen
+                try exec("""
+                ALTER TABLE entry ADD COLUMN signed_no INTEGER;
+                CREATE TABLE signer(pubkey TEXT PRIMARY KEY, name TEXT NOT NULL, created TEXT NOT NULL);
+                CREATE TABLE signature(id INTEGER PRIMARY KEY, entry_id INTEGER NOT NULL REFERENCES entry(id), rev_no INTEGER NOT NULL,
+                  kind TEXT NOT NULL CHECK(kind IN ('author', 'witness')), name TEXT NOT NULL, signed_at TEXT NOT NULL,
+                  pubkey TEXT, sig TEXT, file_sha256 TEXT, hash_found INTEGER);
+                CREATE INDEX signature_entry ON signature(entry_id);
+                CREATE TRIGGER signature_ro_u BEFORE UPDATE ON signature BEGIN SELECT RAISE(ABORT, 'Signaturen sind unveränderlich'); END;
+                CREATE TRIGGER signature_ro_d BEFORE DELETE ON signature BEGIN SELECT RAISE(ABORT, 'Signaturen sind unveränderlich'); END;
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -360,7 +373,7 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         e["tags"] = try entryTags(id)
@@ -377,6 +390,7 @@ final class Store {
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
     func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = []) throws -> [String: Any] {
+        if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
         try transaction {
             try query("UPDATE entry SET title = ?, draft_json = ?, draft_text = ?, updated = ? WHERE id = ?", [title, json, text, t, id])
@@ -421,18 +435,105 @@ final class Store {
         try query("SELECT no, title, created, hash FROM revision WHERE entry_id = ? ORDER BY no DESC", [id])
     }
 
-    /// Prüft die Hash-Kette aller Revisionen eines Eintrags; gibt die erste fehlerhafte Revision zurück.
+    /// Prüft die Hash-Kette aller Revisionen und alle Signaturen eines Eintrags.
+    /// ok = Kette intakt und jede Autor-Signatur gültig; broken = erste fehlerhafte Revision.
     func verify(id: Int) throws -> [String: Any] {
-        var prev = String(repeating: "0", count: 64)
+        var prev = String(repeating: "0", count: 64), hashes: [Int: String] = [:], broken: Int?
         let revs = try query("SELECT no, title, content_json, created, prev_hash, hash FROM revision WHERE entry_id = ? ORDER BY no", [id])
         for r in revs {
             let no = r["no"] as! Int
             let h = Store.revisionHash(prev: prev, entry: id, no: no, created: r["created"] as! String,
                                        title: r["title"] as! String, json: r["content_json"] as! String)
-            if r["prev_hash"] as? String != prev || r["hash"] as? String != h { return ["ok": false, "broken": no, "count": revs.count] }
+            if r["prev_hash"] as? String != prev || r["hash"] as? String != h { broken = no; break }
+            hashes[no] = h
             prev = h
         }
-        return ["ok": true, "count": revs.count]
+        var sigs: [[String: Any]] = [], allValid = true
+        for s in try query("SELECT rev_no, kind, name, signed_at, pubkey, sig, file_sha256, hash_found FROM signature WHERE entry_id = ? ORDER BY id", [id]) {
+            var out = s
+            let no = s["rev_no"] as! Int
+            if s["kind"] as? String == "author" {
+                var valid = false
+                if let h = hashes[no], let pk = Store.unhex(s["pubkey"] as? String ?? ""), let sig = Store.unhex(s["sig"] as? String ?? ""),
+                   let key = try? Curve25519.Signing.PublicKey(rawRepresentation: pk) {
+                    valid = key.isValidSignature(sig, for: Store.signaturePayload(entry: id, no: no, hash: h, name: s["name"] as! String, at: s["signed_at"] as! String))
+                }
+                out["valid"] = valid
+                out["fingerprint"] = Store.fingerprint(s["pubkey"] as? String ?? "")
+                allValid = allValid && valid
+            }
+            out["sig"] = nil
+            sigs.append(out)
+        }
+        var r: [String: Any] = ["ok": broken == nil && allValid, "chain_ok": broken == nil, "count": revs.count, "signatures": sigs]
+        if let b = broken { r["broken"] = b }
+        return r
+    }
+
+    // MARK: Signaturen
+    static func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }
+    static func unhex(_ s: String) -> Data? {
+        guard s.count % 2 == 0, s.allSatisfy(\.isHexDigit) else { return nil }
+        var d = Data(), i = s.startIndex
+        while i < s.endIndex { let j = s.index(i, offsetBy: 2); d.append(UInt8(s[i..<j], radix: 16)!); i = j }
+        return d
+    }
+    /// Kurzer, gut vergleichbarer Fingerabdruck eines öffentlichen Schlüssels
+    static func fingerprint(_ pubkeyHex: String) -> String {
+        let h = sha256(Data(pubkeyHex.utf8)).prefix(16).uppercased()
+        return stride(from: 0, to: 16, by: 4).map { String(h.dropFirst($0).prefix(4)) }.joined(separator: "-")
+    }
+    /// Was signiert wird: Eintrag, Revision, ihr Hash, Name und Zeitpunkt – nichts davon lässt sich nachträglich ändern
+    static func signaturePayload(entry: Int, no: Int, hash: String, name: String, at: String) -> Data {
+        Data(["laborbuch-signatur-v1", String(entry), String(no), hash, name, at].joined(separator: "\n").utf8)
+    }
+
+    func isSigned(_ id: Int) throws -> Bool {
+        try !(query("SELECT 1 FROM entry WHERE id = ? AND signed_no IS NOT NULL", [id]).isEmpty)
+    }
+
+    /// Eintrag abschließen: aktuellen Stand als Revision sichern, mit dem Schlüssel signieren, danach keine Änderungen mehr.
+    func signEntry(id: Int, key: Curve25519.Signing.PrivateKey, name: String) throws -> [String: Any] {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { throw StoreError.invalid("Name für die Signatur fehlt (Einstellungen)") }
+        if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist schon signiert") }
+        try snapshot(id: id)
+        guard (try verify(id: id))["chain_ok"] as? Bool == true else { throw StoreError.invalid("Die Hash-Kette ist verletzt – nicht signierbar") }
+        return try transaction {
+            guard let last = try query("SELECT no, hash FROM revision WHERE entry_id = ? ORDER BY no DESC LIMIT 1", [id]).first,
+                  let no = last["no"] as? Int, let hash = last["hash"] as? String else { throw StoreError.invalid("Der Eintrag ist leer") }
+            let at = Store.now()
+            let pub = Store.hex(key.publicKey.rawRepresentation)
+            let sig = try key.signature(for: Store.signaturePayload(entry: id, no: no, hash: hash, name: n, at: at))
+            try query("INSERT OR IGNORE INTO signer(pubkey, name, created) VALUES(?, ?, ?)", [pub, n, at])
+            try query("INSERT INTO signature(entry_id, rev_no, kind, name, signed_at, pubkey, sig) VALUES(?, ?, 'author', ?, ?, ?, ?)",
+                      [id, no, n, at, pub, Store.hex(sig)])
+            try query("UPDATE entry SET signed_no = ? WHERE id = ?", [no, id])
+            return ["no": no, "hash": hash, "signed_at": at, "fingerprint": Store.fingerprint(pub)]
+        }
+    }
+
+    /// Hash der signierten Revision (für das Zeugen-PDF)
+    func signedRevision(id: Int) throws -> [String: Any] {
+        guard let r = try query("""
+        SELECT r.no, r.hash, r.created, s.name, s.signed_at, s.pubkey FROM entry e JOIN revision r ON r.entry_id = e.id AND r.no = e.signed_no
+        JOIN signature s ON s.entry_id = e.id AND s.rev_no = r.no AND s.kind = 'author' WHERE e.id = ?
+        """, [id]).first else { throw StoreError.invalid("Der Eintrag ist nicht signiert") }
+        var out = r
+        out["fingerprint"] = Store.fingerprint(r["pubkey"] as? String ?? "")
+        return out
+    }
+
+    /// Zeugen-Gegenzeichnung festhalten: unterschriebenes PDF liegt als Anhang vor; hash_found = Hash im PDF gefunden
+    func addWitness(id: Int, name: String, file: String, hashFound: Bool) throws -> [String: Any] {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { throw StoreError.invalid("Name des Zeugen fehlt") }
+        let rev = try signedRevision(id: id)
+        guard try !query("SELECT 1 FROM attachment WHERE sha256 = ?", [file]).isEmpty else { throw StoreError.invalid("PDF fehlt im Laborbuch") }
+        let at = Store.now()
+        try query("INSERT INTO signature(entry_id, rev_no, kind, name, signed_at, file_sha256, hash_found) VALUES(?, ?, 'witness', ?, ?, ?, ?)",
+                  [id, rev["no"], n, at, file, hashFound ? 1 : 0])
+        return ["name": n, "signed_at": at, "hash_found": hashFound]
     }
 
     func search(_ q: String) throws -> [[String: Any]] {
