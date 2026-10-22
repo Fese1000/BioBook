@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 4
+    static let schemaVersion = 5
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -107,6 +107,21 @@ final class Store {
                 CREATE INDEX signature_entry ON signature(entry_id);
                 CREATE TRIGGER signature_ro_u BEFORE UPDATE ON signature BEGIN SELECT RAISE(ABORT, 'Signaturen sind unveränderlich'); END;
                 CREATE TRIGGER signature_ro_d BEFORE DELETE ON signature BEGIN SELECT RAISE(ABORT, 'Signaturen sind unveränderlich'); END;
+                """)
+            }
+            if v < 5 {
+                // Texterkennung in Anhängen (durchsuchbar) und verlinkte Rohdaten (bleiben am Ort, nur Prüfsumme im Buch)
+                try exec("""
+                ALTER TABLE attachment ADD COLUMN ocr_text TEXT;
+                ALTER TABLE attachment ADD COLUMN stored TEXT NOT NULL DEFAULT 'copy';
+                ALTER TABLE attachment ADD COLUMN path TEXT;
+                ALTER TABLE attachment ADD COLUMN mtime REAL;
+                DROP TABLE search;
+                CREATE VIRTUAL TABLE search USING fts5(title, body, tags, files, tokenize='unicode61 remove_diacritics 2');
+                INSERT INTO search(rowid, title, body, tags, files) SELECT e.id, e.title, e.draft_text,
+                  COALESCE((SELECT group_concat(t.name, ' ') FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id), ''),
+                  COALESCE((SELECT group_concat(a.name, ' ') FROM entry_file f JOIN attachment a ON a.sha256 = f.sha256 WHERE f.entry_id = e.id), '')
+                FROM entry e;
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -355,7 +370,7 @@ final class Store {
         return try transaction {
             try query("INSERT INTO entry(title, created, updated, project_id, kind) VALUES(?, ?, ?, ?, ?)", [title, t, t, project, kind])
             let id = Int(sqlite3_last_insert_rowid(db))
-            try query("INSERT INTO search(rowid, title, body, tags) VALUES(?, ?, '', '')", [id, title])
+            try query("INSERT INTO search(rowid, title, body, tags, files) VALUES(?, ?, '', '', '')", [id, title])
             return id
         }
     }
@@ -403,6 +418,7 @@ final class Store {
             for sha in Set(files) {
                 try query("INSERT INTO entry_file(entry_id, sha256) SELECT ?, sha256 FROM attachment WHERE sha256 = ?", [id, sha])
             }
+            try refreshFileText(entry: id)
         }
         return ["updated": t]
     }
@@ -541,7 +557,7 @@ final class Store {
         let terms = q.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
         if terms.isEmpty { return [] }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, 1, '[', ']', '…', 12) AS snippet,
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, -1, '[', ']', '…', 12) AS snippet,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])
@@ -558,6 +574,95 @@ final class Store {
         try query("INSERT OR IGNORE INTO attachment(sha256, name, mime, size, created) VALUES(?,?,?,?,?)",
                   [sha, name, mime, data.count, Store.now()])
         return sha
+    }
+
+    /// Suchtext der Dateien eines Eintrags: Dateinamen und erkannter Text
+    private func refreshFileText(entry id: Int) throws {
+        try query("""
+        UPDATE search SET files = COALESCE((SELECT group_concat(a.name || ' ' || COALESCE(a.ocr_text, ''), ' ')
+          FROM entry_file f JOIN attachment a ON a.sha256 = f.sha256 WHERE f.entry_id = ?), '') WHERE rowid = ?
+        """, [id, id])
+    }
+
+    /// Anhänge, deren Text noch nicht erkannt wurde (Bilder und PDFs im Buch)
+    func pendingOCR() throws -> [[String: Any]] {
+        try query("SELECT sha256, mime FROM attachment WHERE ocr_text IS NULL AND stored = 'copy' AND (mime LIKE 'image/%' OR mime = 'application/pdf')")
+    }
+
+    /// Erkannten Text speichern und die Suche aller Einträge mit dieser Datei aktualisieren
+    func setOCR(sha: String, text: String) throws {
+        try transaction {
+            try query("UPDATE attachment SET ocr_text = ? WHERE sha256 = ?", [text, sha])
+            for e in try query("SELECT entry_id FROM entry_file WHERE sha256 = ?", [sha]) { try refreshFileText(entry: e["entry_id"] as! Int) }
+        }
+    }
+
+    func ocrText(_ sha: String) throws -> String? { try query("SELECT ocr_text FROM attachment WHERE sha256 = ?", [sha]).first?["ocr_text"] as? String }
+
+    // MARK: Verlinkte Rohdaten
+    /// Prüfsumme einer großen Datei in Blöcken berechnen (ohne sie ganz in den Speicher zu laden)
+    static func sha256(fileAt url: URL) throws -> String {
+        let h = try FileHandle(forReadingFrom: url)
+        defer { try? h.close() }
+        var hasher = SHA256()
+        while let chunk = try h.read(upToCount: 8 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func fileStat(_ url: URL) -> (size: Int, mtime: Double)? {
+        guard let a = try? FileManager.default.attributesOfItem(atPath: url.path), let size = a[.size] as? Int,
+              let m = a[.modificationDate] as? Date else { return nil }
+        return (size, m.timeIntervalSince1970)
+    }
+
+    /// Datei am Ort lassen und nur verlinken (Pfad, Größe, Änderungszeit, Prüfsumme). sha: vorher berechnet (dauert bei großen Dateien)
+    func linkFile(url: URL, sha: String, mime: String) throws -> [String: Any] {
+        guard let st = Store.fileStat(url) else { throw StoreError.invalid("Datei nicht lesbar: \(url.path)") }
+        try query("INSERT OR IGNORE INTO attachment(sha256, name, mime, size, created, stored, path, mtime) VALUES(?,?,?,?,?, 'link', ?, ?)",
+                  [sha, url.lastPathComponent, mime, st.size, Store.now(), url.path, st.mtime])
+        let a = try query("SELECT sha256, name, mime, size, stored, path FROM attachment WHERE sha256 = ?", [sha]).first!
+        return a
+    }
+
+    /// Ort der Datei: im Buch oder (bei verlinkten Rohdaten) der ursprüngliche Pfad
+    func localURL(_ sha: String) -> URL {
+        if let a = try? query("SELECT stored, path FROM attachment WHERE sha256 = ?", [sha]).first, a["stored"] as? String == "link", let p = a["path"] as? String {
+            return URL(fileURLWithPath: p)
+        }
+        return fileURL(sha)
+    }
+
+    /// Gespeicherte Angaben einer verlinkten Datei (nil, wenn im Buch gespeichert)
+    func linkInfo(_ sha: String) throws -> (path: String, size: Int, mtime: Double)? {
+        guard let a = try query("SELECT stored, path, size, mtime FROM attachment WHERE sha256 = ?", [sha]).first,
+              a["stored"] as? String == "link", let p = a["path"] as? String else { return nil }
+        return (p, a["size"] as? Int ?? -1, a["mtime"] as? Double ?? 0)
+    }
+
+    func touchLink(sha: String, mtime: Double) throws { try query("UPDATE attachment SET mtime = ? WHERE sha256 = ?", [mtime, sha]) }
+
+    /// Status aus Pfad und gespeicherten Angaben bestimmen (ohne Datenbank, darf im Hintergrund laufen)
+    static func linkStatus(sha: String, path: String, size: Int, mtime: Double) -> (status: String, mtime: Double?) {
+        let url = URL(fileURLWithPath: path)
+        guard let st = fileStat(url) else { return ("missing", nil) }
+        if st.size == size, abs(st.mtime - mtime) < 0.001 { return ("ok", nil) }
+        return (try? sha256(fileAt: url)) == sha ? ("ok", st.mtime) : ("changed", nil)
+    }
+
+    /// Verlinkte Datei prüfen: ok, changed (Inhalt anders als beim Verlinken) oder missing.
+    /// Schnell über Größe und Änderungszeit; nur wenn die sich geändert haben, wird die Prüfsumme neu berechnet.
+    func checkLink(sha: String) throws -> [String: Any] {
+        guard let a = try query("SELECT stored, path, size, mtime FROM attachment WHERE sha256 = ?", [sha]).first else { throw StoreError.invalid("Datei unbekannt") }
+        guard a["stored"] as? String == "link", let p = a["path"] as? String else { return ["status": "ok"] }
+        let url = URL(fileURLWithPath: p)
+        guard let st = Store.fileStat(url) else { return ["status": "missing", "path": p] }
+        if st.size == a["size"] as? Int, abs(st.mtime - (a["mtime"] as? Double ?? 0)) < 0.001 { return ["status": "ok", "path": p] }
+        let now = try Store.sha256(fileAt: url)
+        if now == sha {
+            try query("UPDATE attachment SET mtime = ? WHERE sha256 = ?", [st.mtime, sha])  // nur berührt, Inhalt gleich
+            return ["status": "ok", "path": p]
+        }
+        return ["status": "changed", "path": p, "now": now]
     }
 
     func fileURL(_ sha: String) -> URL {

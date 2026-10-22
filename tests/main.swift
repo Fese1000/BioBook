@@ -154,6 +154,34 @@ let fake = Curve25519.Signing.PrivateKey()
 let forged = try fake.signature(for: Store.signaturePayload(entry: se, no: 1, hash: sg["hash"] as! String, name: "Felix Cuntz", at: sg["signed_at"] as! String))
 check(!key.publicKey.isValidSignature(forged, for: Store.signaturePayload(entry: se, no: 1, hash: sg["hash"] as! String, name: "Felix Cuntz", at: sg["signed_at"] as! String)), "Fremder Schlüssel erzeugt keine gültige Signatur")
 
+// M5: Texterkennung durchsuchbar, verlinkte Rohdaten
+let scan = try s.putFile(name: "protokoll-scan.png", mime: "image/png", data: Data([1, 2, 3, 4]))
+check((try s.pendingOCR()).contains { $0["sha256"] as? String == scan }, "Neues Bild wartet auf Texterkennung")
+let oe = try s.create(title: "Gescanntes Protokoll")
+_ = try s.saveDraft(id: oe, title: "Gescanntes Protokoll", json: "{}", text: "", files: [scan])
+check((try s.search("protokoll-scan")).contains { $0["id"] as? Int == oe }, "Suche findet Dateinamen")
+try s.setOCR(sha: scan, text: "Lysepuffer RIPA 4 Grad Zentrifuge 13000 rpm")
+check((try s.search("lysepuff")).contains { $0["id"] as? Int == oe }, "Suche findet erkannten Text im Bild")
+check(!(try s.pendingOCR()).contains { $0["sha256"] as? String == scan }, "Erkanntes Bild wartet nicht mehr")
+_ = try s.saveDraft(id: oe, title: "Gescanntes Protokoll", json: "{}", text: "", files: [])
+check(!(try s.search("lysepuff")).contains { $0["id"] as? Int == oe }, "Datei entfernt: Text nicht mehr gefunden")
+
+let raw = FileManager.default.temporaryDirectory.appendingPathComponent("lb-raw-\(UUID().uuidString).fcs")
+defer { try? FileManager.default.removeItem(at: raw) }
+try Data(repeating: 7, count: 3_000_000).write(to: raw)
+let rawSha = try Store.sha256(fileAt: raw)
+check(rawSha == Store.sha256(try Data(contentsOf: raw)), "Prüfsumme in Blöcken = Prüfsumme am Stück")
+let ln = try s.linkFile(url: raw, sha: rawSha, mime: "application/octet-stream")
+check(ln["stored"] as? String == "link" && ln["path"] as? String == raw.path, "Rohdatei verlinkt, nicht kopiert")
+check(!FileManager.default.fileExists(atPath: s.fileURL(rawSha).path) && s.localURL(rawSha) == raw, "Keine Kopie im Buch, Ort ist der Originalpfad")
+check((try s.checkLink(sha: rawSha))["status"] as? String == "ok", "Unveränderte Rohdatei: ok")
+try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: raw.path)
+check((try s.checkLink(sha: rawSha))["status"] as? String == "ok", "Nur berührt (Zeit geändert, Inhalt gleich): ok")
+var bytes = try Data(contentsOf: raw); bytes[1000] = 9; try bytes.write(to: raw)
+check((try s.checkLink(sha: rawSha))["status"] as? String == "changed", "Geänderte Rohdatei wird gemeldet")
+try FileManager.default.removeItem(at: raw)
+check((try s.checkLink(sha: rawSha))["status"] as? String == "missing", "Fehlende Rohdatei wird gemeldet")
+
 // Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
 let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")
 defer { try? FileManager.default.removeItem(at: old) }

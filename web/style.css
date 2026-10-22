@@ -153,3 +153,20 @@ footer{display:flex;gap:18px;align-items:center;padding:6px 16px;border-top:1px 
 .ProseMirror ul[data-type=taskList] li>label{margin-top:3px}
 .ProseMirror ul[data-type=taskList] li[data-checked=true]>div{color:var(--mut);text-decoration:line-through}
 .ProseMirror p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--mut);float:left;height:0;pointer-events:none}
+/* Verlinkte Rohdaten */
+.filecard.linked{border-style:dashed}
+.fname small{display:block;font-weight:400;color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis}
+.lstat{font-size:12px;color:var(--mut);white-space:nowrap}.lstat.ok{color:var(--acc)}.lstat.changed,.lstat.missing{color:#c0392b;font-weight:600}
+/* Bild-Beschriftung */
+figure.annot{position:relative;display:inline-block;margin:10px 0;max-width:100%}
+figure.annot img{display:block;max-width:100%;margin:0;border-radius:4px}
+figure.annot .annot-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+figure.annotview.ProseMirror-selectednode{outline:3px solid var(--acc)}
+#annot{position:fixed;inset:0;z-index:35;background:var(--bg);display:flex;flex-direction:column;padding:14px 20px;gap:10px}
+.ahead{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.swatch{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;margin:0 2px}.swatch.on{outline:2px solid var(--acc);outline-offset:2px}
+.alanes{font-size:13px;color:var(--mut);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.alanes input{font:13px -apple-system,system-ui;width:280px;padding:4px 7px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink)}
+.astage{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;user-select:none;-webkit-user-select:none}
+.astage figure.annot{margin:0}.astage figure.annot img{max-height:calc(100vh - 140px);width:auto}
+.astage figure.annot .annot-svg{pointer-events:auto;cursor:crosshair}  /* spezifischer als die Regel für den Editor */

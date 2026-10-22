@@ -23,16 +23,21 @@ const FileNode = TT.Node.create({
   name: 'file', group: 'block', atom: true, draggable: true,
   addAttributes() {
     const a = k => ({default: null, parseHTML: el => el.getAttribute('data-' + k), renderHTML: v => ({['data-' + k]: v[k]})});
-    return {sha: a('sha'), name: a('name'), mime: a('mime'), size: {...a('size'), parseHTML: el => +el.getAttribute('data-size')}};
+    return {sha: a('sha'), name: a('name'), mime: a('mime'), size: {...a('size'), parseHTML: el => +el.getAttribute('data-size')},
+      link: {default: false, parseHTML: el => el.getAttribute('data-link') == '1', renderHTML: v => v.link ? {'data-link': '1'} : {}}, path: a('path')};
   },
   parseHTML: () => [{tag: 'div[data-file]'}],
-  renderHTML: ({node, HTMLAttributes}) => ['div', TT.mergeAttributes({'data-file': ''}, HTMLAttributes), `📎 ${node.attrs.name} (${fmtSize(node.attrs.size || 0)})`],
+  renderHTML: ({node, HTMLAttributes}) => ['div', TT.mergeAttributes({'data-file': ''}, HTMLAttributes),
+    `${node.attrs.link ? '🔗 verlinkt' : '📎'} ${node.attrs.name} (${fmtSize(node.attrs.size || 0)})${node.attrs.link ? ` · ${node.attrs.path} · SHA-256 ${node.attrs.sha}` : ''}`],
   addNodeView: () => ({node}) => {
-    const {sha, name, mime, size} = node.attrs;
-    const kind = Object.keys(PREVIEW).find(k => PREVIEW[k].test(mime || ''));
+    const {sha, name, mime, size, link, path} = node.attrs;
+    // Vorschau für verlinkte Rohdaten nur bei kleinen Dateien (die App lädt sie dafür ganz)
+    const kind = link && size > 20 * 1048576 ? null : Object.keys(PREVIEW).find(k => PREVIEW[k].test(mime || ''));
     const dom = document.createElement('div');
-    dom.className = 'filecard'; dom.contentEditable = 'false';
-    dom.innerHTML = `<div class="fhead"><span class="ficon">${fileIcon(mime || '')}</span><span class="fname">${esc(name)}</span>
+    dom.className = 'filecard' + (link ? ' linked' : ''); dom.contentEditable = 'false'; dom.dataset.sha = sha;
+    dom.innerHTML = `<div class="fhead"><span class="ficon">${link ? '🔗' : fileIcon(mime || '')}</span>
+      <span class="fname" title="${esc(link ? path : name)}">${esc(name)}${link ? `<small>${esc(path)}</small>` : ''}</span>
+      ${link ? `<span class="lstat" title="SHA-256 ${sha}">${LINK_STATUS[sha] ? linkBadge(LINK_STATUS[sha]) : 'verlinkt'}</span>` : ''}
       <span class="fsize">${fmtSize(size || 0)}</span>${kind ? '<button class="btn" data-fprev>Vorschau</button>' : ''}<button class="btn" data-fopen>Öffnen</button></div><div class="fprev" hidden></div>`;
     dom.addEventListener('click', async e => {
       if (e.target.dataset.fopen !== undefined) return call('openFile', {sha256: sha, name}).catch(err => alert(err.message));
@@ -55,6 +60,37 @@ const FileNode = TT.Node.create({
     return {dom};
   },
 });
+
+// Status verlinkter Rohdaten (vom Swift-Teil geprüft): ok | changed | missing
+const LINK_STATUS = {};
+const linkBadge = st => st == 'ok' ? '✓ unverändert' : st == 'changed' ? '⚠ verändert seit dem Verlinken' : '⚠ Datei fehlt';
+
+async function checkLinks() {
+  const shas = [];
+  editor.state.doc.descendants(n => { if (n.type.name == 'file' && n.attrs.link) shas.push(n.attrs.sha); });
+  if (!shas.length) return;
+  const res = await call('checkLinks', {shas});
+  for (const [sha, r] of Object.entries(res)) {
+    LINK_STATUS[sha] = r.status;
+    document.querySelectorAll(`.filecard[data-sha="${sha}"] .lstat`).forEach(el => { el.textContent = linkBadge(r.status); el.className = `lstat ${r.status}`; });
+  }
+  const bad = Object.values(res).filter(r => r.status != 'ok').length;
+  if (bad) status(`${bad} verlinkte Rohdatei(en) verändert oder nicht gefunden`);
+}
+
+async function linkRawFiles(testPaths) {
+  if (!cur || preview || curSigned) return;
+  status('Prüfsumme wird berechnet …');
+  try {
+    const list = await call('linkFiles', testPaths ? {testPaths} : {});
+    for (const a of list) {
+      LINK_STATUS[a.sha256] = 'ok';
+      editor.chain().focus().insertContent({type: 'file', attrs: {sha: a.sha256, name: a.name, mime: a.mime, size: a.size, link: true, path: a.path}}).run();
+    }
+    status(list.length ? `${list.length} Rohdatei(en) verlinkt` : '');
+    return list;
+  } catch (e) { status(''); alert('Verlinken fehlgeschlagen: ' + e.message); }
+}
 
 // Verweis auf einen anderen Eintrag: „[[“ tippen, Eintrag wählen
 const EntryLink = TT.Mention.configure({
@@ -97,7 +133,7 @@ function makeEditor() {
     element: $('#editor'),
     extensions: [
       TT.StarterKit.configure({link: {openOnClick: false}}),
-      TT.Image,
+      AnnotImage,
       TT.TableKit.configure({table: {resizable: true}}),
       TT.TaskList, TT.TaskItem.configure({nested: true}),
       TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'}),
@@ -162,6 +198,8 @@ const TOOLS = [
   ['|'],
   ['Datei', 'Bild oder Datei einfügen', () => $('#filepick').click()],
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
+  ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
+  ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
   ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
@@ -183,7 +221,7 @@ function insertFiles(files, pos) {
   if (!files.length || preview) return false;  // keine Datei: Editor macht das Übliche
   (async () => {
     for (const f of files) {
-      if (f.size > MAX_FILE) { alert(`„${f.name}“ ist größer als 50 MB und wurde nicht übernommen.`); continue; }
+      if (f.size > MAX_FILE) { alert(`„${f.name}“ ist größer als 50 MB und wurde nicht übernommen.\n\nGroße Rohdaten bitte mit „🔗 Rohdaten“ verlinken: Sie bleiben am Ort, das Laborbuch merkt sich die Prüfsumme und meldet Änderungen.`); continue; }
       status(`Speichert „${f.name}“ …`);
       const sha = await upload(f);
       const node = f.type.startsWith('image/') ? {type: 'image', attrs: {src: `lab://files/${sha}`, alt: f.name}}
@@ -370,6 +408,7 @@ async function open(id) {
   document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == cur));
   applyLock();
   renderSignInfo();
+  checkLinks();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
@@ -604,6 +643,41 @@ async function selfTest() {
   await signEntry(); await sleep(200);
   const longPdf = await makeWitnessPDF();
   ok(longPdf && longPdf.pages > 1, `Langer Eintrag: Zeugen-PDF mit ${longPdf?.pages} Seiten`);
+
+  // M5: Texterkennung, Rohdaten, Beschriftung, Übernahme vom iPhone
+  const ocrId = await call('create', {title: 'Gescanntes Protokoll'});
+  await refreshList(ocrId);
+  const cv = document.createElement('canvas'); cv.width = 1400; cv.height = 500;
+  const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 1400, 500); g.fillStyle = '#000'; g.font = 'bold 72px Helvetica';
+  g.fillText('Lysepuffer RIPA', 60, 160); g.fillText('Zentrifuge 13000 rpm', 60, 320);
+  const scanSha = await upload(await new Promise(r => cv.toBlob(r, 'image/png')), 'scan.png');
+  editor.commands.setContent({type: 'doc', content: [{type: 'image', attrs: {src: `lab://files/${scanSha}`, alt: 'scan.png'}}]});
+  changed(); await flush();
+  let txt = null;
+  for (let i = 0; i < 60 && txt == null; i++) { await sleep(250); txt = await call('ocrText', {sha256: scanSha}); }
+  ok(/lysepuffer/i.test(txt || ''), `Text im Bild erkannt: „${(txt || '').replace(/\n/g, ' / ')}“`);
+  ok((await call('search', {q: 'lysepuff'})).some(r => r.id == ocrId), 'Suche findet Text aus dem Bild');
+
+  const rawPath = await call('testWriteFile', {name: 'messung.fcs', bytes: 5000000});
+  const linked = await linkRawFiles([rawPath]);
+  ok(linked?.[0]?.stored == 'link' && document.querySelector('.filecard.linked'), 'Rohdatei verlinkt (nicht kopiert)');
+  changed(); await flush();
+  await checkLinks();
+  ok(LINK_STATUS[linked[0].sha256] == 'ok', 'Verlinkte Rohdatei unverändert');
+  await call('testModifyFile', {name: 'messung.fcs'});
+  await checkLinks(); await sleep(50);
+  ok(LINK_STATUS[linked[0].sha256] == 'changed' && /verändert/.test(document.querySelector('.filecard.linked .lstat').textContent), 'Geänderte Rohdatei wird gemeldet');
+
+  editor.commands.setContent({type: 'doc', content: [{type: 'image', attrs: {src: `lab://files/${scanSha}`, alt: 'gel',
+    notes: {aspect: 2.8, shapes: [{t: 'lanes', y: 60, xs: [100, 300, 500], labels: ['M', 'P1', 'NK'], c: '#e53935'}, {t: 'arrow', x1: 600, y1: 300, x2: 500, y2: 200, c: '#fdd835'}]}}}]});
+  await sleep(100);
+  const labels = [...document.querySelectorAll('.ProseMirror .annot-svg text')].map(t => t.textContent);
+  ok(labels.join(',') == 'M,P1,NK' && editor.getHTML().includes('figure class="annot"'), 'Gelbild mit Spurenbelegung angezeigt und im HTML/PDF enthalten');
+
+  editor.commands.setContent(''); editor.commands.focus();
+  const got = await call('testReceive');
+  await sleep(150);
+  ok(got && editor.getJSON().content.some(n => n.type == 'image' && /^Foto /.test(n.attrs.alt)), 'Übernahme (wie vom iPhone) fügt Foto ein');
   return out;
 }
 
@@ -660,7 +734,14 @@ $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings};
+window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
+  // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
+  insertReceived: it => {
+    if (!cur || preview || curSigned) return alert('Bitte zuerst einen bearbeitbaren Eintrag öffnen.');
+    editor.chain().focus().insertContent(it.kind == 'image' ? {type: 'image', attrs: {src: `lab://files/${it.sha256}`, alt: it.name}}
+      : {type: 'file', attrs: {sha: it.sha256, name: it.name, mime: it.mime, size: it.size}}).run();
+  },
+  ocrDone: () => { if ($('#search').value.trim()) refreshList(); }};
 
 async function start() {
   makeEditor();

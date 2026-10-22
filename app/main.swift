@@ -22,7 +22,12 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
             mime = ["html": "text/html", "js": "text/javascript", "css": "text/css", "svg": "image/svg+xml", "png": "image/png"][f.pathExtension] ?? mime
         } else if url.host == "files" || filesPath, let s = store() {
             let sha = url.lastPathComponent
-            if sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil { file = s.fileURL(sha); mime = s.mime(sha) }
+            if sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil { file = s.localURL(sha); mime = s.mime(sha) }
+        }
+        // verlinkte Rohdaten können riesig sein: nicht über die Oberfläche ausliefern (Öffnen geht direkt)
+        if let f = file, let sz = (try? FileManager.default.attributesOfItem(atPath: f.path))?[.size] as? Int, sz > 60_000_000 {
+            task.didReceive(HTTPURLResponse(url: url, statusCode: 413, httpVersion: nil, headerFields: nil)!)
+            task.didFinish(); return
         }
         guard let f = file, let data = try? Data(contentsOf: f) else {
             task.didReceive(HTTPURLResponse(url: url, statusCode: 404, httpVersion: nil, headerFields: nil)!)
@@ -43,6 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var scheme: SchemeHandler!
     var locker: Locker!
     var pendingOpen: URL?
+    let ocrQueue = DispatchQueue(label: "de.felix.laborbuch.ocr", qos: .utility)
+    var ocrRunning = false
     let testMode = CommandLine.arguments.contains("--selftest") || CommandLine.arguments.contains("--perftest")  // per Doppelklick im Finder übergeben, bevor das Fenster steht
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -73,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if !window.setFrameUsingName("LaborbuchMain") { window.center() }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        scheduleOCR()
         locker = Locker(window: window, disabled: testMode)
         locker.lockIfEnabled()
         web.load(URLRequest(url: URL(string: "lab://app/index.html")!))
@@ -110,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 store = s
                 remember(); updateTitle()
                 web.reload()
+                scheduleOCR()
             } catch { alert("„\(url.lastPathComponent)“ lässt sich nicht öffnen", "\(error)") }
         }
         if web == nil { pendingOpen = url; return }
@@ -224,8 +233,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let found = WitnessPDF.containsHash(data, hash: hash)
                 let sha = try s.putFile(name: url.lastPathComponent, mime: "application/pdf", data: data)
                 var w = try s.addWitness(id: id, name: name, file: sha, hashFound: found)
+                scheduleOCR()
                 w["sha256"] = sha
                 replyHandler(w, nil)
+            case "linkFiles":
+                // Rohdaten am Ort lassen: Prüfsumme im Hintergrund berechnen (große Dateien), dann verlinken
+                let urls: [URL]
+                if let t = a["testPaths"] as? [String], ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] != nil { urls = t.map { URL(fileURLWithPath: $0) } }
+                else {
+                    let p = NSOpenPanel()
+                    p.title = "Rohdaten verlinken (bleiben am Ort, nur die Prüfsumme kommt ins Laborbuch)"
+                    p.allowsMultipleSelection = true; p.canChooseDirectories = false
+                    guard p.runModal() == .OK else { return replyHandler([], nil) }
+                    urls = p.urls
+                }
+                let root = s.root
+                ocrQueue.async {
+                    let hashed = urls.map { u in (u, try? Store.sha256(fileAt: u)) }
+                    DispatchQueue.main.async {
+                        guard let s = self.store, s.root == root else { return replyHandler(nil, "Laborbuch gewechselt") }
+                        do {
+                            replyHandler(try hashed.map { u, sha in
+                                guard let sha else { throw StoreError.invalid("Nicht lesbar: \(u.path)") }
+                                let mime = UTType(filenameExtension: u.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                                return try s.linkFile(url: u, sha: sha, mime: mime)
+                            }, nil)
+                        } catch { replyHandler(nil, "\(error)") }
+                    }
+                }
+            case "checkLinks":
+                // Status je verlinkter Datei; Prüfsummen nur neu, wenn Größe oder Zeit abweichen (im Hintergrund)
+                let infos = try (a["shas"] as? [String] ?? []).compactMap { sha in try s.linkInfo(sha).map { (sha, $0) } }
+                let root = s.root
+                ocrQueue.async {
+                    let res = infos.map { sha, i in (sha, Store.linkStatus(sha: sha, path: i.path, size: i.size, mtime: i.mtime), i.path) }
+                    DispatchQueue.main.async {
+                        guard let s = self.store, s.root == root else { return replyHandler([:], nil) }
+                        var out: [String: Any] = [:]
+                        for (sha, st, path) in res {
+                            if let m = st.mtime { try? s.touchLink(sha: sha, mtime: m) }
+                            out[sha] = ["status": st.status, "path": path]
+                        }
+                        replyHandler(out, nil)
+                    }
+                }
+            case "ocrText": replyHandler(try s.ocrText(try str("sha256")) ?? NSNull(), nil)
+            // Nur im Testmodus mit LABORBUCH_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
+            case "testWriteFile", "testModifyFile", "testReceive":
+                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
+                if cmd == "testReceive" {
+                    let pb = NSPasteboard(name: NSPasteboard.Name("laborbuch-test-\(UUID().uuidString)"))
+                    let img = NSImage(size: NSSize(width: 64, height: 48)); img.lockFocus(); NSColor.systemTeal.setFill(); NSRect(x: 0, y: 0, width: 64, height: 48).fill(); img.unlockFocus()
+                    pb.clearContents(); pb.writeObjects([img])
+                    replyHandler(readSelection(from: pb), nil)
+                } else {
+                    let url = URL(fileURLWithPath: dir).appendingPathComponent(URL(fileURLWithPath: try str("name")).lastPathComponent)
+                    if cmd == "testWriteFile" { try Data(repeating: 42, count: try int("bytes")).write(to: url) }
+                    else { var d = try Data(contentsOf: url); d[0] = d[0] &+ 1; try d.write(to: url) }
+                    replyHandler(url.path, nil)
+                }
             case "notify":
                 // Timer abgelaufen: Ton und Dock-Symbol hüpfen lassen, auch wenn die App im Hintergrund ist
                 NSSound(named: "Glass")?.play()
@@ -239,6 +305,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 // Anhänge liegen nach Prüfsumme ohne Endung; zum Öffnen eine Kopie mit Originalnamen anlegen
                 let sha = try str("sha256")
                 guard sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { throw StoreError.invalid("Ungültige Datei") }
+                if try s.linkInfo(sha) != nil {  // verlinkte Rohdaten: Original öffnen, nicht kopieren
+                    let u = s.localURL(sha)
+                    guard FileManager.default.fileExists(atPath: u.path) else { throw StoreError.invalid("Die verlinkte Datei fehlt: \(u.path)") }
+                    NSWorkspace.shared.open(u); return replyHandler(true, nil)
+                }
                 let src = s.fileURL(sha)
                 guard FileManager.default.fileExists(atPath: src.path) else { throw StoreError.invalid("Datei fehlt im Laborbuch") }
                 var name = URL(fileURLWithPath: (a["name"] as? String) ?? "Anhang").lastPathComponent
@@ -271,9 +342,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let mime = try str("mime")
                 guard mime.range(of: "^[a-z]+/[a-z0-9.+-]+$", options: .regularExpression) != nil else { throw StoreError.invalid("Dateityp ungültig") }
                 replyHandler(["sha256": try s.putFile(name: try str("name"), mime: mime, data: data)], nil)
+                scheduleOCR()
             default: replyHandler(nil, "Unbekannter Befehl: \(cmd)")
             }
         } catch { replyHandler(nil, "\(error)") }
+    }
+
+    // MARK: Fotos und Scans vom iPhone (Kamera-Übernahme)
+    @objc func validRequestor(forSendType sendType: NSPasteboard.PasteboardType?, returnType: NSPasteboard.PasteboardType?) -> Any? {
+        guard sendType == nil, let r = returnType, !(locker?.locked ?? true), store != nil else { return nil }
+        return NSImage.imageTypes.contains(r.rawValue) || r == .pdf ? self : nil
+    }
+
+    /// Bild oder gescanntes PDF übernehmen: als Anhang speichern und an der Schreibmarke einfügen
+    @objc func readSelection(from pboard: NSPasteboard) -> Bool {
+        guard let s = store else { return false }
+        let stamp = Store.now().prefix(19).replacingOccurrences(of: ":", with: "-")
+        var item: [String: Any]?
+        do {
+            if let pdf = pboard.data(forType: .pdf) {
+                let sha = try s.putFile(name: "Scan \(stamp).pdf", mime: "application/pdf", data: pdf)
+                item = ["kind": "file", "sha256": sha, "name": "Scan \(stamp).pdf", "mime": "application/pdf", "size": pdf.count]
+            } else if let img = NSImage(pasteboard: pboard), let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+                      let jpg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.85]) {
+                let sha = try s.putFile(name: "Foto \(stamp).jpg", mime: "image/jpeg", data: jpg)
+                item = ["kind": "image", "sha256": sha, "name": "Foto \(stamp).jpg"]
+            }
+        } catch { alert("Übernahme fehlgeschlagen", "\(error)"); return false }
+        guard let item, let json = try? JSONSerialization.data(withJSONObject: item), let js = String(data: json, encoding: .utf8) else { return false }
+        web.evaluateJavaScript("app.insertReceived(\(js))")
+        scheduleOCR()
+        return true
+    }
+
+    // MARK: Texterkennung im Hintergrund
+    /// Arbeitet alle Bilder und PDFs ohne erkannten Text nacheinander ab. Die Datenbank wird nur im Hauptthread angefasst.
+    func scheduleOCR() {
+        guard !ocrRunning, let s = store, let next = (try? s.pendingOCR())?.first,
+              let sha = next["sha256"] as? String, let mime = next["mime"] as? String else { return }
+        ocrRunning = true
+        let url = s.localURL(sha), root = s.root
+        ocrQueue.async {
+            let text = OCR.recognize(url: url, mime: mime)
+            DispatchQueue.main.async {
+                self.ocrRunning = false
+                guard let s = self.store, s.root == root else { return }  // Buch inzwischen gewechselt
+                try? s.setOCR(sha: sha, text: text)
+                self.web.evaluateJavaScript("app.ocrDone && app.ocrDone('\(sha)')")
+                self.scheduleOCR()
+            }
+        }
     }
 
     // MARK: Zeugen-PDF speichern und wieder einlesen
@@ -310,6 +428,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             let m = NSMenu(title: title); item.submenu = m
             for (t, sel, key) in items {
                 if t == "-" { m.addItem(.separator()); continue }
+                if key == "IMPORT" {  // macOS füllt das Untermenü (Foto aufnehmen, Dokumente scannen, Skizze)
+                    let i = NSMenuItem(title: t, action: nil, keyEquivalent: "")
+                    i.identifier = NSMenuItem.importFromDeviceIdentifier
+                    m.addItem(i); continue
+                }
                 let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
                 if key == "Z" || key == "N" { i.keyEquivalentModifierMask = [.command, .shift] }
                 m.addItem(i)
@@ -320,6 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         add("Ablage", [("Neuer Eintrag", #selector(newEntry), "n"), ("Revision sichern", #selector(snapshotNow), "s"), ("-", nil, ""),
                        ("Neues Laborbuch …", #selector(newBook), "N"), ("Laborbuch öffnen …", #selector(openBook), "o"),
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
+                       ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("-", nil, ""),
                        ("Schließen", #selector(NSWindow.performClose(_:)), "w")])
         add("Bearbeiten", [("Widerrufen", Selector(("undo:")), "z"), ("Wiederholen", Selector(("redo:")), "Z"), ("-", nil, ""),
                            ("Ausschneiden", #selector(NSText.cut(_:)), "x"), ("Kopieren", #selector(NSText.copy(_:)), "c"),
