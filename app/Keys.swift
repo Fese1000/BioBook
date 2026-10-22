@@ -35,7 +35,7 @@ enum Keys {
         var out: CFTypeRef?
         let st = SecItemCopyMatching(q as CFDictionary, &out)
         if st == errSecItemNotFound { return nil }
-        guard st == errSecSuccess, let d = out as? Data else { throw StoreError.invalid("Schlüsselbund nicht lesbar (\(st))") }
+        guard st == errSecSuccess, let d = out as? Data else { throw keychainError(st) }
         return d
     }
 
@@ -44,7 +44,19 @@ enum Keys {
                                 kSecAttrAccount as String: "default", kSecAttrLabel as String: "Laborbuch Signaturschlüssel",
                                 kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly, kSecValueData as String: d]
         let st = SecItemAdd(q as CFDictionary, nil)
-        guard st == errSecSuccess else { throw StoreError.invalid("Schlüssel ließ sich nicht im Schlüsselbund speichern (\(st))") }
+        guard st == errSecSuccess else { throw keychainError(st) }
+    }
+
+    /// Verständliche Meldung statt Fehlercode. Häufigster Fall: Die App wurde neu gebaut oder aktualisiert und macOS fragt
+    /// nach dem Anmeldepasswort, bevor sie den Schlüssel wieder benutzen darf.
+    private static func keychainError(_ st: OSStatus) -> StoreError {
+        let sys = SecCopyErrorMessageString(st, nil) as String? ?? ""
+        switch st {
+        case errSecUserCanceled, errSecAuthFailed, errSecInteractionNotAllowed:
+            return .invalid("macOS hat den Zugriff auf deinen Signaturschlüssel nicht erlaubt. Bitte noch einmal abschließen und im Dialog das Anmeldepasswort eingeben, am besten mit „Immer erlauben“. (Nach einem Update der App fragt macOS einmal nach.) [\(st)]")
+        default:
+            return .invalid("Schlüsselbund-Fehler \(st): \(sys)")
+        }
     }
 }
 

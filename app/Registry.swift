@@ -165,7 +165,7 @@ extension Store {
         """, [id]).first else { throw StoreError.invalid("Objekt gibt es nicht") }
         e["code"] = Store.code(prefix: e["prefix"] as! String, no: e["no"] as! Int)
         e["history"] = try queryRows("SELECT changed, name, fields_json, author FROM entity_history WHERE entity_id = ? ORDER BY id DESC", [id])
-        e["used_in"] = try queryRows("SELECT en.id, en.title, en.kind, en.updated FROM entry_entity x JOIN entry en ON en.id = x.entry_id WHERE x.entity_id = ? ORDER BY en.updated DESC", [id])
+        e["used_in"] = try queryRows("SELECT en.id, en.title, en.kind, en.updated FROM entry_entity x JOIN entry en ON en.id = x.entry_id WHERE x.entity_id = ? AND en.deleted IS NULL ORDER BY en.updated DESC", [id])
         return e
     }
 
@@ -177,7 +177,7 @@ extension Store {
         if !terms.isEmpty { conds.append("e.id IN (SELECT rowid FROM entity_search WHERE entity_search MATCH ?)"); args.append(terms.joined(separator: " ")) }
         return try queryRows("""
         SELECT e.id, e.type_id, e.no, e.name, e.fields_json, e.updated, t.prefix, t.icon, t.name AS type_name,
-          (SELECT COUNT(*) FROM entry_entity x WHERE x.entity_id = e.id) AS uses
+          (SELECT COUNT(*) FROM entry_entity x JOIN entry en ON en.id = x.entry_id AND en.deleted IS NULL WHERE x.entity_id = e.id) AS uses
         FROM entity e JOIN rtype t ON t.id = e.type_id WHERE \(conds.joined(separator: " AND ")) ORDER BY t.name, e.no DESC LIMIT 2000
         """, args).map { r in var r = r; r["code"] = Store.code(prefix: r["prefix"] as! String, no: r["no"] as! Int); return r }
     }

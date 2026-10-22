@@ -242,6 +242,37 @@ check((try? s.saveType(id: plType, name: "Plasmid", prefix: "PX", icon: "", fiel
 check((try? s.saveType(id: nil, name: "X", prefix: "XY", icon: "", fields: [["key": "a", "type": "select"]])) == nil, "Auswahlfeld ohne Optionen abgelehnt")
 check((try? s.saveType(id: nil, name: "X", prefix: "XZ", icon: "", fields: [["key": "a"], ["key": "a"]])) == nil, "Doppelte Feldschlüssel abgelehnt")
 
+// Papierkorb
+let tr = try s.create(title: "Fehlversuch Zentrifuge")
+_ = try s.saveDraft(id: tr, title: "Fehlversuch Zentrifuge", json: #"{"x":1}"#, text: "Rotor falsch gewählt", links: [usingEntry], entities: [pl1id])
+_ = try s.setTags(id: tr, names: ["einmaltag"])
+try s.snapshot(id: tr)
+check((try? s.purgeEntry(id: tr)) == nil, "Endgültig löschen nur aus dem Papierkorb")
+try s.trashEntry(id: tr)
+check(!(try s.list()).contains { $0["id"] as? Int == tr }, "Gelöschter Eintrag fehlt in der Liste")
+check(!(try s.search("rotor")).contains { $0["id"] as? Int == tr }, "… und in der Suche")
+check(!(try s.backlinks(id: usingEntry)).contains { $0["id"] as? Int == tr }, "… und bei den Rückverweisen")
+check(((try s.entity(id: pl1id))["used_in"] as! [[String: Any]]).allSatisfy { $0["id"] as? Int != tr }, "… und bei „Verwendet in“")
+check((try s.trash()).map { $0["id"] as! Int } == [tr], "Steht im Papierkorb")
+check((try? s.saveDraft(id: tr, title: "x", json: "{}", text: "")) == nil, "Im Papierkorb nicht bearbeitbar")
+try s.restoreEntry(id: tr)
+check((try s.search("rotor")).contains { $0["id"] as? Int == tr }, "Wiederhergestellt und wieder auffindbar")
+check((try? s.trashEntry(id: se)) == nil, "Signierter Eintrag lässt sich nicht löschen")
+try s.trashEntry(id: tr)
+check(try s.emptyTrash() == 1, "Papierkorb geleert")
+let trashLeft = try s.trash()
+check((try? s.load(id: tr)) == nil && trashLeft.isEmpty, "Eintrag endgültig weg")
+check(!(try s.tags()).contains { $0["name"] as? String == "einmaltag" }, "Ungenutzter Tag mit gelöscht")
+var pdb: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &pdb)
+var stmt: OpaquePointer?
+sqlite3_prepare_v2(pdb, "SELECT COUNT(*) FROM revision WHERE entry_id = \(tr)", -1, &stmt, nil); sqlite3_step(stmt)
+check(sqlite3_column_int(stmt, 0) == 0, "Revisionen des gelöschten Eintrags entfernt")
+sqlite3_finalize(stmt)
+check(sqlite3_exec(pdb, "DELETE FROM revision WHERE entry_id = \(id)", nil, nil, nil) != SQLITE_OK, "Revisionen nicht gelöschter Einträge bleiben geschützt")
+sqlite3_close(pdb)
+check(((try s.verify(id: id))["count"] as? Int ?? 0) > 0, "Andere Einträge behalten ihre Revisionen")
+
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
 var t = Date()

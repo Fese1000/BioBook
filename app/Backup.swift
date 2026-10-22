@@ -37,7 +37,8 @@ enum Backup {
                 switch r {
                 case .failure(let e): done(.failure(e))
                 case .success(let (copied, kept)):
-                    UserDefaults.standard.set(Date(), forKey: "lastBackup:\(bookID)")
+                    // in Tests nichts in die Einstellungen der App schreiben
+                    if ProcessInfo.processInfo.environment["LABORBUCH_BACKUPDIR"] == nil { UserDefaults.standard.set(Date(), forKey: "lastBackup:\(bookID)") }
                     done(.success(["dir": dir.path, "db": db.lastPathComponent, "copied": copied, "kept": kept]))
                 }
             }

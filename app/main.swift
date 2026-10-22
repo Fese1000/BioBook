@@ -466,6 +466,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 NSSound(named: "Glass")?.play()
                 NSApp.requestUserAttention(.criticalRequest)
                 replyHandler(true, nil)
+            case "trash": replyHandler(try s.trash(), nil)
+            case "trashEntry":
+                let id = try int("id")
+                try s.trashEntry(id: id)
+                if !testMode { CSSearchableIndex.default().deleteSearchableItems(withIdentifiers: ["\(s.bookID)/\(id)"]) }
+                broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
+                replyHandler(true, nil)
+            case "restoreEntry":
+                let id = try int("id")
+                try s.restoreEntry(id: id)
+                if !testMode { Spotlight.update(s, id: id) }
+                replyHandler(true, nil)
+            case "purgeEntry": try s.purgeEntry(id: try int("id")); replyHandler(true, nil)
+            case "emptyTrash": replyHandler(try s.emptyTrash(), nil)
             case "types": replyHandler(try s.types(), nil)
             case "saveType":
                 replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",
@@ -530,7 +544,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 scheduleOCR()
             default: replyHandler(nil, "Unbekannter Befehl: \(cmd)")
             }
-        } catch { replyHandler(nil, "\(error)") }
+        } catch {
+            Log.error("\(cmd): \(error)")
+            replyHandler(nil, "\(error)")
+        }
     }
 
     // MARK: Fotos und Scans vom iPhone (Kamera-Übernahme)
@@ -792,7 +809,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
                        ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("Importieren …", #selector(importFiles), "I"),
                        ("Laborbuch exportieren …", #selector(exportBook), "E"), ("Eintrag als PDF …", #selector(entryPDF), "p"),
-                       ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
+                       ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("In den Papierkorb", #selector(trashEntry), ""), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
                        ("Schließen", #selector(NSWindow.performClose(_:)), "w")])
         add("Bearbeiten", [("Widerrufen", Selector(("undo:")), "z"), ("Wiederholen", Selector(("redo:")), "Z"), ("-", nil, ""),
                            ("Ausschneiden", #selector(NSText.cut(_:)), "x"), ("Kopieren", #selector(NSText.copy(_:)), "c"),
@@ -807,6 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         !(locker?.locked ?? false) || item.action == #selector(NSApplication.terminate(_:)) || item.action == #selector(lockNow)
     }
+    @objc func trashEntry() { web.evaluateJavaScript("app.trashEntry()") }
     @objc func importFiles() { web.evaluateJavaScript("app.importFiles()") }
     @objc func exportBook() { web.evaluateJavaScript("app.exportBook()") }
     @objc func entryPDF() { web.evaluateJavaScript("app.exportEntryPDF(false)") }
@@ -866,3 +884,14 @@ let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()
+
+/// Fehlerprotokoll unter ~/Library/Logs/Laborbuch/app.log (für die Fehlersuche, ohne Inhalte der Einträge)
+enum Log {
+    static let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/Laborbuch/app.log")
+    static func error(_ msg: String) {
+        let line = "\(Store.now()) [\(Updater.current)] \(msg)\n"
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+        else { try? Data(line.utf8).write(to: url) }
+    }
+}

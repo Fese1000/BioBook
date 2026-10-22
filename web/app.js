@@ -11,6 +11,7 @@ let editor = null, cur = null, saveTimer = null, dirty = false, changedSinceSnap
 let projects = [], project = null;  // project: null = alle, 0 = ohne Projekt, sonst ID
 let tags = [], tag = null;          // tag: gewählter Tag-Filter (ID) oder null
 let preview = null;                 // angezeigte alte Revision (nur lesen) oder null
+let curTrashed = null;              // Zeitpunkt, seit dem der offene Eintrag im Papierkorb liegt
 let curSigned = null;               // Revisionsnummer, mit der der offene Eintrag abgeschlossen wurde
 
 // ---------- Editor ----------
@@ -264,10 +265,12 @@ const projectName = id => id == 0 ? 'Ohne Projekt' : projects.find(p => p.id == 
 async function loadProjects() {
   projects = await call('projects');
   const li = (p, label, extra = '', cls = '') => `<li data-p="${p}" class="${String(project) == String(p) ? 'cur ' : ''}${cls}"><span class="n">${esc(label)}</span>${extra}</li>`;
+  const nTrash = (await call('trash')).length;
   $('#projects').innerHTML = li('', 'Alle Einträge') + li(0, 'Ohne Projekt')
+    + (nTrash || project == 'trash' ? li('trash', '🗑 Papierkorb', `<span class="c">${nTrash}</span>`) : '')
     + projects.map(p => li(p.id, p.name, `<span class="c">${p.entries}</span><button class="ed" data-rename="${p.id}" title="Umbenennen">✎</button>`
       + `<button class="ed" data-archive="${p.id}" title="${p.archived ? 'Wiederherstellen' : 'Archivieren'}">${p.archived ? '↺' : '🗄'}</button>`, p.archived ? 'arch' : '')).join('');
-  $('#listTitle').textContent = project == null ? 'Einträge' : projectName(project);
+  $('#listTitle').textContent = project == null ? 'Einträge' : project == 'trash' ? 'Papierkorb' : projectName(project);
   fillMetaProject();
 }
 
@@ -278,7 +281,7 @@ function fillMetaProject(sel = $('#metaProject').value) {
 }
 
 async function selectProject(p) {
-  project = p === '' ? null : +p;
+  project = p === '' ? null : p == 'trash' ? 'trash' : +p;
   await loadProjects();
   await refreshList();
 }
@@ -381,15 +384,17 @@ async function pickTemplateVersion(id) {
 async function refreshList(selectId) {
   const q = $('#search').value.trim();
   const filter = {...(project == null ? {} : {project}), ...(tag == null ? {} : {tag})};
-  let rows = q ? await call('search', {q}) : await call('list', filter);
-  if (q && project != null) rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
+  let rows = project == 'trash' ? (await call('trash')).map(r => ({...r, updated: r.deleted}))
+    : q ? await call('search', {q}) : await call('list', filter);
+  if (q && project != null && project != 'trash') rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
   if (q && tag != null) { const n = tags.find(t => t.id == tag)?.name.toLowerCase(); rows = rows.filter(r => (r.tags || '').toLowerCase().split(', ').includes(n)); }
   $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''}">
     <div class="t">${esc(r.title || 'Ohne Titel')}</div>
     <div class="m">${KINDS[r.kind] || ''} · ${when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
     ${r.tags ? `<div class="m">${r.tags.split(', ').map(t => '#' + esc(t)).join(' ')}</div>` : ''}
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
-  $('#listTitle').textContent = [project == null ? 'Einträge' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
+  $('#listTitle').textContent = [project == null ? 'Einträge' : project == 'trash' ? 'Papierkorb' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
+  if (project == 'trash' && rows.length) $('#list').insertAdjacentHTML('afterbegin', '<li class="trashhead"><button class="btn danger" data-emptytrash>Papierkorb leeren</button></li>');
   $('#empty').hidden = !!(rows.length || q || cur || project != null || tag != null);
   if (selectId) await open(selectId);
 }
@@ -415,6 +420,7 @@ async function open(id) {
   renderEntryTags(e.tags || []);
   curTemplate = e.template_id ? {id: e.template_id, version: e.template_version} : null;
   curSigned = e.signed_no ?? null;
+  curTrashed = e.deleted ?? null;
   renderTemplateInfo();
   if (RUN && RUN.entry != e.id) hideRun();
   editor.commands.setContent(e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '', {emitUpdate: false});
@@ -425,13 +431,66 @@ async function open(id) {
   document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == cur));
   applyLock();
   renderSignInfo();
+  renderTrashInfo();
   checkLinks();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
 }
 
+// ---------- Papierkorb ----------
+function renderTrashInfo() {
+  $('#trashinfo').hidden = !curTrashed;
+  if (curTrashed) $('#trashinfo').innerHTML = `<span class="grow">🗑 <b>Im Papierkorb</b> seit ${when(curTrashed)} · nur lesen</span>
+    <button class="btn on" data-trestore>Wiederherstellen</button><button class="btn danger" data-tpurge>Endgültig löschen</button>`;
+}
+
+async function trashEntry() {
+  if (!cur || curTrashed) return;
+  if (curSigned) return alert('Signierte Einträge lassen sich nicht löschen. Änderungen bitte als Nachtrag.');
+  await flush();
+  if (changedSinceSnap) await snapshot(true);
+  const title = $('#title').value || 'Ohne Titel';
+  try { await call('trashEntry', {id: cur}); } catch (e) { return alert(e.message); }
+  const gone = cur; cur = null;
+  status(`„${title}“ liegt im Papierkorb`);
+  await loadProjects(); await loadTags();
+  await refreshList();
+  const next = [...document.querySelectorAll('#list li')].find(li => li.dataset.id != gone);
+  if (next) await open(+next.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
+}
+
+async function restoreEntry() {
+  const id = cur;
+  await call('restoreEntry', {id});
+  cur = null;
+  project = null; await loadProjects();
+  await refreshList(id);
+  status('Wiederhergestellt');
+}
+
+async function purgeEntry() {
+  if (!confirm(`„${$('#title').value || 'Ohne Titel'}“ endgültig löschen? Alle Revisionen dieses Eintrags gehen verloren. Das lässt sich nicht rückgängig machen.`)) return;
+  try { await call('purgeEntry', {id: cur}); } catch (e) { return alert(e.message); }
+  cur = null;
+  await loadProjects(); await loadTags();
+  await refreshList();
+  const next = $('#list li'); if (next) await open(+next.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
+  status('Endgültig gelöscht');
+}
+
+async function emptyTrash() {
+  const n = (await call('trash')).length;
+  if (!n || !confirm(`${n} Eintrag/Einträge im Papierkorb endgültig löschen? Das lässt sich nicht rückgängig machen.`)) return;
+  await call('emptyTrash');
+  cur = null; project = null;
+  await loadProjects(); await loadTags(); await refreshList();
+  const first = $('#list li'); if (first) await open(+first.dataset.id);
+  status('Papierkorb geleert');
+}
+
 async function newEntry() {
+  if (project == 'trash') project = null;
   const id = await call('create', {title: '', ...(project > 0 ? {project} : {})});
   $('#search').value = '';
   await loadProjects();
@@ -781,6 +840,27 @@ async function selfTest() {
   await showType(gp); await sleep(100);
   ok(document.querySelectorAll('.regtable tr[data-ent]').length == 1, 'Tabelle des eigenen Typs');
   showView('doc');
+
+  // Papierkorb
+  window.confirm = () => true;
+  const tId = await call('create', {title: 'Fehlversuch Löschtest'}); await refreshList(tId);
+  editor.commands.setContent({type: 'doc', content: [{type: 'paragraph', content: [{type: 'text', text: 'Rotor falsch gewählt'}]}]}); changed(); await flush();
+  await trashEntry();
+  ok(cur != tId && !(await call('list')).some(r => r.id == tId) && !(await call('search', {q: 'rotor'})).some(r => r.id == tId), 'Eintrag im Papierkorb: weg aus Liste und Suche');
+  await selectProject('trash');
+  ok($('#listTitle').textContent == 'Papierkorb' && document.querySelector(`#list li[data-id="${tId}"]`), 'Papierkorb zeigt den Eintrag');
+  await open(tId);
+  ok(!editor.isEditable && !$('#trashinfo').hidden && $('#trashBtn').hidden, 'Eintrag im Papierkorb ist schreibgeschützt');
+  await restoreEntry();
+  ok(cur == tId && editor.isEditable && (await call('search', {q: 'rotor'})).some(r => r.id == tId), 'Wiederhergestellt, wieder bearbeitbar und auffindbar');
+  await trashEntry(); await selectProject('trash'); await open(tId);
+  await purgeEntry();
+  ok(!(await call('trash')).some(r => r.id == tId) && !(await call('load', {id: tId}).catch(() => null)), 'Endgültig gelöscht');
+  let signedOne = null;
+  for (const r of await call('list')) { const e = await call('load', {id: r.id}); if (e.signed_no) { signedOne = e; break; } }
+  let refused = false; try { await call('trashEntry', {id: signedOne.id}); } catch { refused = true; }
+  ok(signedOne && refused && (await call('list')).some(r => r.id == signedOne.id), 'Signierter Eintrag lässt sich nicht löschen');
+  await selectProject('');
   return out;
 }
 
@@ -791,7 +871,8 @@ $('#toolbar').addEventListener('mousedown', e => {
   TOOLS[+b.dataset.tool][2](editor, b);
 });
 $('#list').addEventListener('click', e => {
-  const li = e.target.closest('li'); if (!li) return;
+  if (e.target.dataset.emptytrash !== undefined) return emptyTrash();
+  const li = e.target.closest('li'); if (!li || !li.dataset.id) return;
   if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; }
   if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id);  // ⌘-Klick: in neuem Tab
 });
@@ -816,6 +897,8 @@ $('#newProject').onclick = newProject;
 $('#saveTpl').onclick = saveAsTemplate;
 $('#runBtn').onclick = startRun;
 $('#signBtn').onclick = signEntry;
+$('#trashBtn').onclick = trashEntry;
+$('#trashinfo').addEventListener('click', e => { if (e.target.dataset.trestore !== undefined) restoreEntry(); if (e.target.dataset.tpurge !== undefined) purgeEntry(); });
 $('#templates').addEventListener('click', async e => {
   if (e.target.dataset.tplver) return pickTemplateVersion(+e.target.dataset.tplver);
   if (e.target.dataset.tplarch) { const t = templates.find(x => x.id == e.target.dataset.tplarch); await call('archiveTemplate', {id: t.id, archived: !t.archived}); return loadTemplates(); }
@@ -845,7 +928,7 @@ setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS)
 
 // Von Swift aufgerufen (Menü, Beenden)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
-  exportBook, exportEntryPDF, importFiles, backupNow, updateProgress,
+  exportBook, exportEntryPDF, importFiles, backupNow, updateProgress, trashEntry,
   openEntry: id => { $('#search').value = ''; return refreshList(id); },
   // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
   insertReceived: it => {

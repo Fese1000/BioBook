@@ -9,6 +9,7 @@ Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das D
 
 ## Was schon geht
 - Registry (Seitenleiste „Registry“): Typen wie Plasmid, Primer, Stamm, Zelllinie, Antikörper, Chemikalie – oder eigene mit eigenen Feldern (Text, Zahl, Datum, Auswahl, Sequenz, Ja/Nein, Link). Jedes Objekt bekommt eine fortlaufende ID wie `PL-0042`; jede Änderung landet im Verlauf. Sequenzfelder zeigen Länge, GC-Anteil und Tm. Im Eintrag verweist `@` auf ein Objekt; das Objekt zeigt „Verwendet in“.
+- Löschen mit Papierkorb (🗑 im Eintrag oder Ablage › „In den Papierkorb“): Gelöschte Einträge verschwinden aus Listen, Suche, Spotlight und „Verwendet in“, lassen sich wiederherstellen und erst im Papierkorb endgültig löschen (mit Rückfrage, samt Revisionen). Signierte Einträge lassen sich nicht löschen.
 - Mehrere Fenster (⌥⌘N) und Tabs (⌘T); ⌘-Klick auf einen Eintrag öffnet ihn in einem neuen Tab. Speichert ein Fenster, sehen die anderen den neuen Stand.
 - Spotlight findet Einträge (Titel, Text, Tags); ein Klick öffnet Buch und Eintrag. Quick Look (Leertaste im Finder) zeigt bei einem `.laborbuch` die letzten Einträge, der Finder ein Vorschaubild.
 - Mehrere Laborbücher: neu anlegen (⇧⌘N), öffnen (⌘O), im Finder zeigen. Ein Buch ist ein Paket `Name.laborbuch` und öffnet sich per Doppelklick; die App merkt sich das zuletzt geöffnete.
@@ -36,7 +37,7 @@ Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das D
 - Automatisches Speichern; unveränderliche Revisionen mit Hash-Kette (⌘S, beim Wechseln, alle 5 Min., beim Beenden), Verlauf mit Kettenprüfung; alte Fassungen ansehen (nur lesen) und als neuen Stand wiederherstellen, ohne dass alte Revisionen verloren gehen
 - Bilder als Anhänge nach SHA-256
 
-Der private Signaturschlüssel liegt im macOS-Schlüsselbund („Laborbuch Signaturschlüssel“), im Laborbuch nur der öffentliche Teil. Weil die App nur ad hoc signiert ist, fragt macOS nach einem Update eventuell einmal, ob sie den Schlüssel weiter verwenden darf („Immer erlauben“). Signatur und Zeitstempel sind Nachweise, keine Zertifizierung nach GLP oder 21 CFR Part 11.
+Der private Signaturschlüssel liegt im macOS-Schlüsselbund („Laborbuch Signaturschlüssel“), im Laborbuch nur der öffentliche Teil. Weil die App nur ad hoc signiert ist, fragt macOS nach einem Update einmal nach dem Anmeldepasswort, bevor die neue Version den Schlüssel benutzen darf („Immer erlauben“). Fehler beim Abschließen stehen mit Grund in `~/Library/Logs/Laborbuch/app.log`. Zum Arbeiten die installierte App aus „Programme“ benutzen, nicht `build/` – die wird beim Entwickeln laufend ersetzt. Signatur und Zeitstempel sind Nachweise, keine Zertifizierung nach GLP oder 21 CFR Part 11.
 
 Wiederherstellen aus einer Sicherung: App beenden, im Sicherungsordner die gewünschte `db-….sqlite` als `db.sqlite` zusammen mit `files/` und `meta.json` in einen Ordner `Name.laborbuch` kopieren und diesen öffnen.
 
@@ -55,7 +56,7 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 swiftc app/Store.swift app/Registry.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
 node --test tests/calc.test.js tests/markdown.test.js                           # Rechner gegen Handrechnung, Markdown hin und zurück
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 47 Prüfungen
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 53 Prüfungen
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```

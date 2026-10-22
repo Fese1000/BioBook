@@ -202,3 +202,7 @@ dialog#typedlg input,dialog#typedlg select{font:13px -apple-system,system-ui;col
 .tfield{display:flex;gap:6px;align-items:center;margin:6px 0}.tfield [data-tl]{flex:1}.tfield [data-to]{flex:1}
 .tfield .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px}
 @media(max-width:1000px){.regdetail{grid-template-columns:1fr}}
+/* Papierkorb */
+.btn.danger{border-color:#c0392b;color:#c0392b}.btn.danger:hover{background:#c0392b;color:#fff}
+#list li.trashhead{cursor:default;padding:4px 10px 8px}#list li.trashhead:hover{background:none}
+#trashBtn{padding:4px 8px}

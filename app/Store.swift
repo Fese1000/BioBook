@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 6
+    static let schemaVersion = 7
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -144,6 +144,17 @@ final class Store {
                     try query("INSERT INTO rtype(name, prefix, icon, fields_json, created) VALUES(?, ?, ?, ?, ?)", [name, prefix, icon, json, Store.now()])
                 }
             }
+            if v < 7 {
+                // Papierkorb: gelöschte Einträge bleiben bis zum endgültigen Löschen erhalten.
+                // Revisionen lassen sich nur löschen, wenn der Eintrag im Papierkorb liegt und nicht signiert ist.
+                try exec("""
+                ALTER TABLE entry ADD COLUMN deleted TEXT;
+                DROP TRIGGER IF EXISTS revision_readonly_d;
+                CREATE TRIGGER revision_readonly_d BEFORE DELETE ON revision
+                  WHEN (SELECT deleted FROM entry WHERE id = OLD.entry_id) IS NULL OR (SELECT signed_no FROM entry WHERE id = OLD.entry_id) IS NOT NULL
+                  BEGIN SELECT RAISE(ABORT, 'Revisionen sind unveränderlich'); END;
+                """)
+            }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
     }
@@ -221,7 +232,7 @@ final class Store {
     // MARK: Projekte
     func projects() throws -> [[String: Any]] {
         try query("""
-        SELECT p.id, p.name, p.color, p.archived, (SELECT COUNT(*) FROM entry e WHERE e.project_id = p.id) AS entries
+        SELECT p.id, p.name, p.color, p.archived, (SELECT COUNT(*) FROM entry e WHERE e.project_id = p.id AND e.deleted IS NULL) AS entries
         FROM project p ORDER BY p.archived, p.name COLLATE NOCASE
         """)
     }
@@ -248,7 +259,7 @@ final class Store {
     // MARK: Einträge
     /// project: nil = alle, 0 = ohne Projekt, sonst Projekt-ID; tag: nur Einträge mit diesem Tag
     func list(project: Int? = nil, tag: Int? = nil) throws -> [[String: Any]] {
-        var conds: [String] = [], args: [Any?] = []
+        var conds: [String] = ["e.deleted IS NULL"], args: [Any?] = []
         if let p = project { if p == 0 { conds.append("e.project_id IS NULL") } else { conds.append("e.project_id = ?"); args.append(p) } }
         if let t = tag { conds.append("e.id IN (SELECT entry_id FROM entry_tag WHERE tag_id = ?)"); args.append(t) }
         return try query("""
@@ -260,7 +271,7 @@ final class Store {
 
     // MARK: Tags
     func tags() throws -> [[String: Any]] {
-        try query("SELECT t.id, t.name, COUNT(et.entry_id) AS entries FROM tag t JOIN entry_tag et ON et.tag_id = t.id GROUP BY t.id ORDER BY t.name COLLATE NOCASE")
+        try query("SELECT t.id, t.name, COUNT(et.entry_id) AS entries FROM tag t JOIN entry_tag et ON et.tag_id = t.id JOIN entry e ON e.id = et.entry_id AND e.deleted IS NULL GROUP BY t.id ORDER BY t.name COLLATE NOCASE")
     }
 
     static func cleanTag(_ s: String) -> String? {
@@ -385,7 +396,7 @@ final class Store {
     // MARK: Verweise
     /// Einträge, die auf diesen Eintrag verweisen
     func backlinks(id: Int) throws -> [[String: Any]] {
-        try query("SELECT e.id, e.title, e.kind FROM link l JOIN entry e ON e.id = l.from_entry WHERE l.to_entry = ? ORDER BY e.updated DESC", [id])
+        try query("SELECT e.id, e.title, e.kind FROM link l JOIN entry e ON e.id = l.from_entry WHERE l.to_entry = ? AND e.deleted IS NULL ORDER BY e.updated DESC", [id])
     }
 
     /// Titel aller Einträge, damit Verweise im Text den aktuellen Titel zeigen
@@ -416,7 +427,7 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no, deleted FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         e["tags"] = try entryTags(id)
@@ -433,6 +444,7 @@ final class Store {
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
     func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = []) throws -> [String: Any] {
+        if try isTrashed(id) { throw StoreError.invalid("Der Eintrag liegt im Papierkorb. Erst wiederherstellen.") }
         if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
         try transaction {
@@ -515,6 +527,45 @@ final class Store {
         return r
     }
 
+    // MARK: Papierkorb
+    func isTrashed(_ id: Int) throws -> Bool { try !query("SELECT 1 FROM entry WHERE id = ? AND deleted IS NOT NULL", [id]).isEmpty }
+
+    /// In den Papierkorb legen. Signierte Einträge bleiben (Nachweis), ebenso solche mit laufendem Lauf.
+    func trashEntry(id: Int) throws {
+        guard try !query("SELECT 1 FROM entry WHERE id = ?", [id]).isEmpty else { throw StoreError.invalid("Eintrag \(id) gibt es nicht") }
+        if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen. Änderungen bitte als Nachtrag.") }
+        if try !query("SELECT 1 FROM run WHERE entry_id = ? AND status = 'running'", [id]).isEmpty { throw StoreError.invalid("Erst den laufenden Lauf beenden.") }
+        try query("UPDATE entry SET deleted = ? WHERE id = ?", [Store.now(), id])
+    }
+
+    func restoreEntry(id: Int) throws { try query("UPDATE entry SET deleted = NULL WHERE id = ?", [id]) }
+
+    func trash() throws -> [[String: Any]] {
+        try query("SELECT id, title, kind, updated, deleted, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = entry.id) AS revisions FROM entry WHERE deleted IS NOT NULL ORDER BY deleted DESC")
+    }
+
+    /// Endgültig löschen: nur aus dem Papierkorb und nur unsignierte Einträge. Anhänge bleiben im Buch (sie können mehrfach genutzt sein).
+    func purgeEntry(id: Int) throws {
+        guard try isTrashed(id) else { throw StoreError.invalid("Nur Einträge aus dem Papierkorb lassen sich endgültig löschen") }
+        if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen") }
+        try transaction {
+            for t in ["revision", "entry_file", "entry_tag", "entry_entity"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
+            try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
+            try query("DELETE FROM run_step WHERE run_id IN (SELECT id FROM run WHERE entry_id = ?)", [id])
+            try query("DELETE FROM run WHERE entry_id = ?", [id])
+            try query("DELETE FROM search WHERE rowid = ?", [id])
+            try query("DELETE FROM entry WHERE id = ?", [id])
+            try query("DELETE FROM tag WHERE id NOT IN (SELECT tag_id FROM entry_tag)")
+        }
+    }
+
+    @discardableResult
+    func emptyTrash() throws -> Int {
+        let ids = try query("SELECT id FROM entry WHERE deleted IS NOT NULL AND signed_no IS NULL").compactMap { $0["id"] as? Int }
+        for i in ids { try purgeEntry(id: i) }
+        return ids.count
+    }
+
     // MARK: Helfer für Erweiterungen in anderen Dateien
     @discardableResult
     func queryRows(_ sql: String, _ args: [Any?] = []) throws -> [[String: Any]] { try query(sql, args) }
@@ -526,7 +577,7 @@ final class Store {
         try query("""
         SELECT e.id, e.title, e.draft_text, e.updated,
           (SELECT group_concat(t.name, ', ') FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id) AS tags
-        FROM entry e \(id == nil ? "" : "WHERE e.id = ?")
+        FROM entry e WHERE e.deleted IS NULL \(id == nil ? "" : "AND e.id = ?")
         """, id.map { [$0] } ?? [])
     }
 
@@ -634,7 +685,7 @@ final class Store {
         return try query("""
         SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, -1, '[', ']', '…', 12) AS snippet,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
-        FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? ORDER BY rank LIMIT 50
+        FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? AND e.deleted IS NULL ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])
     }
 

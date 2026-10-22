@@ -4,12 +4,14 @@
 
 /// Bearbeitbar nur, wenn weder eine alte Revision angezeigt wird noch der Eintrag abgeschlossen ist
 function applyLock() {
-  const ro = !!preview || !!curSigned;
+  const ro = !!preview || !!curSigned || !!curTrashed;
   editor.setEditable(!ro, false);  // false: kein update-Ereignis, sonst würde gespeichert
   $('#title').readOnly = ro;
   $('#toolbar').hidden = ro;
-  $('#runBtn').hidden = !!curSigned;
-  $('#signBtn').hidden = !!curSigned;
+  $('#runBtn').hidden = !!curSigned || !!curTrashed;
+  $('#signBtn').hidden = !!curSigned || !!curTrashed;
+  $('#trashBtn').hidden = !!curSigned || !!curTrashed;
+  $('#saveTpl').hidden = !!curTrashed;
 }
 
 async function renderSignInfo() {
