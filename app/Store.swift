@@ -494,6 +494,15 @@ final class Store {
         return r
     }
 
+    // MARK: Spotlight
+    func spotlightRows(id: Int? = nil) throws -> [[String: Any]] {
+        try query("""
+        SELECT e.id, e.title, e.draft_text, e.updated,
+          (SELECT group_concat(t.name, ', ') FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id) AS tags
+        FROM entry e \(id == nil ? "" : "WHERE e.id = ?")
+        """, id.map { [$0] } ?? [])
+    }
+
     // MARK: Export
     /// Alles außer den Dateiinhalten, als JSON-taugliche Struktur (für data/book.json und den Export der Oberfläche)
     func dump() throws -> [String: Any] {

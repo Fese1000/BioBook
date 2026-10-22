@@ -115,8 +115,24 @@ async function showSettings() {
     <p class="row"><b>Sicherung</b></p>
     <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
     <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
+    <p class="row"><b>Updates</b></p>
+    <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
+    <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
     <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on" id="setSave">Sichern</button></div></form>`;
   dlg.showModal();
+  $('#upCheck').onclick = async () => {
+    $('#upMsg').textContent = 'suche …';
+    try {
+      const r = await call('updateCheck');
+      $('#upMsg').textContent = !r.available ? 'aktuell' : r.canInstall ? `Version ${r.latest} ist verfügbar` : `Version ${r.latest} ist verfügbar – ${r.reason}`;
+      $('#upGo').hidden = !(r.available && r.canInstall);
+    } catch (e) { $('#upMsg').textContent = 'Suche fehlgeschlagen: ' + e.message; }
+  };
+  $('#upGo').onclick = async () => {
+    if (!confirm('Update laden, prüfen und die App neu starten? Dein Stand wird vorher gespeichert.')) return;
+    $('#upGo').disabled = true;
+    try { await call('updateInstall'); } catch (e) { $('#upMsg').textContent = 'Update fehlgeschlagen: ' + e.message; $('#upGo').disabled = false; }
+  };
   $('#bkChoose').onclick = async () => { const p = await call('chooseBackupDir'); if (p) $('#bkDir').textContent = (await call('settings')).backupDir; };
   $('#bkNow').onclick = async () => { const r = await backupNow(); if (r) $('#bkLast').textContent = when(new Date().toISOString()); };
   dlg.onclose = async () => {
@@ -139,4 +155,11 @@ async function backupNow() {
   status('Sicherung läuft …');
   try { const r = await call('backupNow'); status(`Gesichert (${r.copied} neue Datei(en)) nach ${r.dir}`); return r; }
   catch (e) { status(''); alert('Sicherung fehlgeschlagen: ' + e.message); }
+}
+
+/// Fortschritt des Updates (vom Swift-Teil)
+function updateProgress(stage) {
+  const t = {download: 'Update wird geladen …', install: 'Update wird geprüft …', restart: 'Neustart …'}[stage] || stage;
+  status(t);
+  const m = document.querySelector('#upMsg'); if (m) m.textContent = t;
 }

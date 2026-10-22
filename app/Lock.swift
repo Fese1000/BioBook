@@ -13,14 +13,14 @@ final class LockOverlay: NSVisualEffectView {
 
 final class Locker {
     private(set) var locked = false
-    private var overlay: LockOverlay?
+    private var overlays: [LockOverlay] = []
     private var lastActivity = Date()
     private var timer: Timer?
-    private weak var window: NSWindow?
+    private let windows: () -> [NSWindow]
     private let disabled: Bool  // in automatischen Tests nie sperren
 
-    init(window: NSWindow, disabled: Bool) {
-        self.window = window
+    init(windows: @escaping () -> [NSWindow], disabled: Bool) {
+        self.windows = windows
         self.disabled = disabled
         NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .mouseMoved, .scrollWheel]) { [weak self] e in
             self?.lastActivity = Date(); return e
@@ -40,8 +40,14 @@ final class Locker {
     func lockIfEnabled() { if Settings.lockEnabled { lock() } }
 
     func lock() {
-        guard !locked, !disabled, let content = window?.contentView else { return }
+        guard !locked, !disabled else { return }
         locked = true
+        windows().forEach(lockWindow)
+    }
+
+    /// Ein Fenster abdecken (auch Fenster, die während der Sperre neu entstehen)
+    func lockWindow(_ w: NSWindow) {
+        guard locked, let content = w.contentView else { return }
         let o = LockOverlay(frame: content.bounds)
         o.autoresizingMask = [.width, .height]
         o.material = .underWindowBackground
@@ -62,8 +68,8 @@ final class Locker {
         NSLayoutConstraint.activate([stack.centerXAnchor.constraint(equalTo: o.centerXAnchor), stack.centerYAnchor.constraint(equalTo: o.centerYAnchor)])
         o.onUnlock = { [weak self] in self?.unlock() }
         content.addSubview(o)
-        overlay = o
-        window?.makeFirstResponder(o)
+        overlays.append(o)
+        w.makeFirstResponder(o)
     }
 
     @objc func unlock() {
@@ -79,10 +85,10 @@ final class Locker {
     }
 
     private func finishUnlock() {
-        overlay?.removeFromSuperview()
-        overlay = nil
+        overlays.forEach { $0.removeFromSuperview() }
+        overlays = []
         locked = false
         lastActivity = Date()
-        if let w = window { w.makeFirstResponder(w.contentView) }
+        for w in windows() { w.makeFirstResponder(w.contentView) }
     }
 }

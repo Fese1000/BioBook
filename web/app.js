@@ -728,6 +728,27 @@ async function selfTest() {
   ok(bk && bk.copied > 0 && /^db-/.test(bk.db), `Sicherung: Datenbank und ${bk?.copied} Datei(en) kopiert`);
   const bk2 = await backupNow();
   ok(bk2 && bk2.copied == 0, 'Zweite Sicherung kopiert keine Datei doppelt');
+
+  // M7: Tabs/Fenster
+  const tabEntry = imp[0];
+  await refreshList(tabEntry);
+  await call('openInTab', {id: tabEntry});
+  let other = null;
+  for (let i = 0; i < 40 && !(other?.value); i++) { await sleep(150); other = await call('testOther', {js: 'return typeof cur == "number" ? cur : null'}).catch(() => null); }
+  ok(other?.windows == 2 && other.value == tabEntry, `Neuer Tab öffnet den gewünschten Eintrag (${other?.windows} Fenster)`);
+  $('#title').value = 'Western Blot (umbenannt)'; changed(); await flush(); await sleep(500);
+  const otherTitle = (await call('testOther', {js: 'return document.querySelector("#title").value'})).value;
+  ok(otherTitle == 'Western Blot (umbenannt)', 'Änderung erscheint im anderen Fenster');
+
+  // M7: Spotlight (Test-Index wird danach wieder gelöscht)
+  const needle = 'Spotlight Test ' + Math.random().toString(36).slice(2, 8);
+  const spId = await call('create', {title: needle}); await refreshList(spId);
+  const sp = await call('testSpotlight', {title: needle}).catch(e => ({error: e.message}));
+  ok(sp.found > 0, `Spotlight findet den Eintrag (${sp.found ?? 0} Treffer, ${sp.tries ?? '?'} Abfragen${sp.error ? ', ' + sp.error : ''})`);
+
+  // M7: Quick Look
+  const ql = await call('testQuickLook').catch(e => ({error: e.message}));
+  ok(/QuickLook\/Preview\.html/.test(ql.previewURL || '') && ql.thumbnail && ql.html.includes(needle), `Quick Look: Vorschau und Vorschaubild${ql.error ? ' – ' + ql.error : ''}`);
   return out;
 }
 
@@ -737,7 +758,10 @@ $('#toolbar').addEventListener('mousedown', e => {
   e.preventDefault();  // Fokus im Editor behalten
   TOOLS[+b.dataset.tool][2](editor, b);
 });
-$('#list').addEventListener('click', e => { const li = e.target.closest('li'); if (li) open(+li.dataset.id); });
+$('#list').addEventListener('click', e => {
+  const li = e.target.closest('li'); if (!li) return;
+  if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id);  // ⌘-Klick: in neuem Tab
+});
 $('#new').onclick = newEntry;
 let searchTimer;
 $('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => refreshList(), 120); });
@@ -785,14 +809,22 @@ setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS)
 
 // Von Swift aufgerufen (Menü, Beenden)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
-  exportBook, exportEntryPDF, importFiles, backupNow,
+  exportBook, exportEntryPDF, importFiles, backupNow, updateProgress,
+  openEntry: id => { $('#search').value = ''; return refreshList(id); },
   // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
   insertReceived: it => {
     if (!cur || preview || curSigned) return alert('Bitte zuerst einen bearbeitbaren Eintrag öffnen.');
     editor.chain().focus().insertContent(it.kind == 'image' ? {type: 'image', attrs: {src: `lab://files/${it.sha256}`, alt: it.name}}
       : {type: 'file', attrs: {sha: it.sha256, name: it.name, mime: it.mime, size: it.size}}).run();
   },
-  ocrDone: () => { if ($('#search').value.trim()) refreshList(); }};
+  ocrDone: () => { if ($('#search').value.trim()) refreshList(); },
+  // derselbe Eintrag wurde in einem anderen Fenster gespeichert
+  externalChange: async id => {
+    await refreshList();
+    if (id != cur || preview) return;
+    if (dirty) return status('Dieser Eintrag wurde in einem anderen Fenster geändert – zuletzt Gespeichertes gilt');
+    cur = null; await open(id);
+  }};
 
 async function start() {
   makeEditor();
@@ -805,6 +837,7 @@ async function start() {
   await loadTags();
   await loadTemplates();
   await refreshList();
-  const first = $('#list li'); if (first) await open(+first.dataset.id);
+  const wanted = +new URLSearchParams(location.search).get('entry');  // neuer Tab für einen bestimmten Eintrag
+  const first = $('#list li'); if (wanted) await open(wanted); else if (first) await open(+first.dataset.id);
 }
 start().catch(e => alert('Start fehlgeschlagen: ' + e.message));

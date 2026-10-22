@@ -1,5 +1,6 @@
 // Dünne Swift-Schicht: Fenster, WebView, Schema lab:// für Oberfläche und Anhänge, Brücke JS ↔ Swift.
 import Cocoa
+import CoreSpotlight
 import PDFKit
 import UniformTypeIdentifiers
 import WebKit
@@ -41,16 +42,29 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ w: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
+/// Ein Fenster (oder Tab) mit eigener Oberfläche; alle zeigen dasselbe Laborbuch
+final class DocWindow {
+    let window: NSWindow
+    let web: WKWebView
+    var flushed = false  // vor dem Schließen gespeichert
+    init(window: NSWindow, web: WKWebView) { self.window = window; self.web = web }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation, WKScriptMessageHandlerWithReply, WKUIDelegate, WKNavigationDelegate {
-    var window: NSWindow!
-    var web: WKWebView!
+    var docs: [DocWindow] = []
+    /// Fenster, auf das sich Menübefehle beziehen
+    var current: DocWindow? { docs.first { $0.window.isKeyWindow } ?? docs.first { $0.window.isMainWindow } ?? docs.first }
+    var window: NSWindow! { current?.window }
+    var web: WKWebView! { current?.web }
     var store: Store?
     var scheme: SchemeHandler!
     var locker: Locker!
-    var pendingOpen: URL?
+    var pendingOpen: URL?  // per Doppelklick im Finder übergeben, bevor das Fenster steht
     let ocrQueue = DispatchQueue(label: "de.felix.laborbuch.ocr", qos: .utility)
     var ocrRunning = false
-    let testMode = CommandLine.arguments.contains("--selftest") || CommandLine.arguments.contains("--perftest")  // per Doppelklick im Finder übergeben, bevor das Fenster steht
+    var testStarted = false
+    var pendingRelease: Updater.Release?
+    let testMode = ["--selftest", "--perftest", "--updatetest"].contains { CommandLine.arguments.contains($0) }
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let start = pendingOpen ?? Self.lastBook() ?? Self.defaultBook()
@@ -61,33 +75,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         remember()
         buildMenu()
-        let cfg = WKWebViewConfiguration()
-        let res = Bundle.main.resourceURL!.appendingPathComponent("web")
-        scheme = SchemeHandler(web: res, store: { [weak self] in self?.store })
-        cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
-        cfg.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "lab")
-        web = WKWebView(frame: .zero, configuration: cfg)
-        web.uiDelegate = self
-        web.navigationDelegate = self
-        if #available(macOS 13.3, *) { web.isInspectable = true }
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 840),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        updateTitle()
-        window.minSize = NSSize(width: 760, height: 480)
-        window.contentView = web
-        window.delegate = self
-        window.setFrameAutosaveName("LaborbuchMain")
-        if !window.setFrameUsingName("LaborbuchMain") { window.center() }
-        window.makeKeyAndOrderFront(nil)
+        scheme = SchemeHandler(web: Bundle.main.resourceURL!.appendingPathComponent("web"), store: { [weak self] in self?.store })
+        let first = makeDoc(entry: nil)
+        first.window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         scheduleOCR()
         if !testMode {
             autoBackup()
             Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in self?.autoBackup() }
         }
-        locker = Locker(window: window, disabled: testMode)
+        locker = Locker(windows: { [weak self] in self?.docs.map(\.window) ?? [] }, disabled: testMode)
         locker.lockIfEnabled()
-        web.load(URLRequest(url: URL(string: "lab://app/index.html")!))
+    }
+
+    // MARK: Fenster und Tabs
+    /// Neues Fenster; entry: diesen Eintrag statt des neuesten öffnen
+    @discardableResult
+    func makeDoc(entry: Int?) -> DocWindow {
+        let cfg = WKWebViewConfiguration()
+        cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
+        cfg.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "lab")
+        let web = WKWebView(frame: .zero, configuration: cfg)
+        web.uiDelegate = self
+        web.navigationDelegate = self
+        if #available(macOS 13.3, *) { web.isInspectable = true }
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 840),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        w.minSize = NSSize(width: 760, height: 480)
+        w.contentView = web
+        w.delegate = self
+        w.isReleasedWhenClosed = false
+        w.tabbingIdentifier = "laborbuch"
+        if docs.isEmpty {
+            w.setFrameAutosaveName("LaborbuchMain")
+            if !w.setFrameUsingName("LaborbuchMain") { w.center() }
+        } else if let last = current?.window {
+            w.setFrame(last.frame, display: false)
+            w.setFrameTopLeftPoint(w.cascadeTopLeft(from: NSPoint(x: last.frame.minX, y: last.frame.maxY)))
+        }
+        let d = DocWindow(window: w, web: web)
+        docs.append(d)
+        updateTitle()
+        web.load(URLRequest(url: URL(string: "lab://app/index.html" + (entry.map { "?entry=\($0)" } ?? ""))!))
+        if locker?.locked == true { locker.lockWindow(w) }
+        return d
+    }
+
+    @objc func newWindow() { makeDoc(entry: nil).window.makeKeyAndOrderFront(nil) }
+
+    @objc func newTab() { openTab(entry: nil) }
+
+    func openTab(entry: Int?) {
+        let host = current?.window
+        let d = makeDoc(entry: entry)
+        if let host { host.addTabbedWindow(d.window, ordered: .above) }
+        d.window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Nach dem Speichern in einem Fenster die anderen informieren (gleicher Eintrag dort offen?)
+    func broadcast(except sender: WKWebView?, _ js: String) {
+        for d in docs where d.web !== sender { d.web.evaluateJavaScript(js) }
     }
 
     // MARK: Laborbücher – ein Buch ist ein Ordner-Paket „Name.laborbuch“
@@ -104,15 +151,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func remember() {
+        if let s = store { try? QuickLookWriter.write(s) }
         guard let s = store, ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] == nil else { return }
         UserDefaults.standard.set(s.root.path, forKey: "lastBook")
+        var paths = UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String] ?? [:]
+        paths[s.bookID] = s.root.path  // damit ein Treffer aus Spotlight das richtige Buch findet
+        UserDefaults.standard.set(paths, forKey: "bookPaths")
         NSDocumentController.shared.noteNewRecentDocumentURL(s.root)
+        Spotlight.reindex(s)
     }
 
-    func updateTitle() { window?.title = store.map { "\($0.name) – Laborbuch" } ?? "Laborbuch" }
+    /// Klick auf einen Spotlight-Treffer
+    func application(_ app: NSApplication, continue activity: NSUserActivity, restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard activity.activityType == CSSearchableItemActionType,
+              let ident = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String, let t = Spotlight.parse(ident) else { return false }
+        if store?.bookID == t.book { web.evaluateJavaScript("app.openEntry(\(t.entry))"); return true }
+        guard let path = (UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String])?[t.book] else {
+            alert("Laborbuch nicht gefunden", "Das Buch zu diesem Treffer ist auf diesem Mac nicht bekannt."); return true
+        }
+        switchBook(to: URL(fileURLWithPath: path), entry: t.entry)
+        return true
+    }
+
+    func updateTitle() { for d in docs { d.window.title = store.map { "\($0.name) – Laborbuch" } ?? "Laborbuch" } }
+
+    /// Alle Fenster speichern lassen, dann weiter
+    func flushAll(_ then: @escaping () -> Void) {
+        let g = DispatchGroup()
+        for d in docs { g.enter(); d.web.evaluateJavaScript("app.flush()") { _, _ in g.leave() } }
+        g.notify(queue: .main, execute: then)
+    }
 
     /// Wechselt das Buch: offenen Stand sichern, neues Buch öffnen, Oberfläche neu laden.
-    func switchBook(to url: URL) {
+    func switchBook(to url: URL, entry: Int? = nil) {
         guard url.pathExtension == "laborbuch" else { return alert("Kein Laborbuch", "Bitte einen Ordner mit der Endung .laborbuch wählen.") }
         if url.standardizedFileURL == store?.root.standardizedFileURL { return }
         let open = { [self] in
@@ -121,12 +192,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 try? store?.snapshotAll()
                 store = s
                 remember(); updateTitle()
-                web.reload()
+                for (i, d) in docs.enumerated() { d.web.load(URLRequest(url: URL(string: "lab://app/index.html" + (i == 0 && entry != nil ? "?entry=\(entry!)" : ""))!)) }
                 scheduleOCR()
             } catch { alert("„\(url.lastPathComponent)“ lässt sich nicht öffnen", "\(error)") }
         }
-        if web == nil { pendingOpen = url; return }
-        web.evaluateJavaScript("app.flush()") { _, _ in open() }
+        if docs.isEmpty { pendingOpen = url; return }
+        flushAll(open)
     }
 
     @objc func newBook() {
@@ -162,10 +233,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     /// `--perftest` / `--selftest`: Test in der echten WebView ausführen, Ergebnis ausgeben, beenden (Abnahme ohne Bedienung).
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
+        guard !testStarted, w === docs.first?.web else { return }  // nur einmal, nur im ersten Fenster
+        if CommandLine.arguments.contains("--updatetest") { testStarted = true; return runUpdateTest() }
         let args = CommandLine.arguments
         let js = args.contains("--perftest") ? "await app.perfTest(); return window.perfResult.join('\\n')"
             : args.contains("--selftest") ? "await new Promise(r => setTimeout(r, 300)); return (await app.selfTest()).join('\\n')" : nil
         guard let js else { return }
+        testStarted = true
         w.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { r in
             switch r {
             case .success(let v): print(v as? String ?? "")
@@ -206,7 +280,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "finishRun": replyHandler(try s.finishRun(run: try int("run"), aborted: a["aborted"] as? Bool ?? false), nil)
             case "settings":
                 replyHandler(["author": Settings.author, "lockEnabled": Settings.lockEnabled, "lockMinutes": Settings.lockMinutes,
-                              "fingerprint": Keys.fingerprint() ?? NSNull(), "backupDir": Backup.dir(for: s).path,
+                              "fingerprint": Keys.fingerprint() ?? NSNull(), "backupDir": Backup.dir(for: s).path, "version": Updater.current,
                               "lastBackup": Backup.last(for: s).map { ISO8601DateFormatter().string(from: $0) } ?? NSNull()], nil)
             case "setSettings":
                 if let n = a["author"] as? String { Settings.author = n }
@@ -284,6 +358,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
             case "ocrText": replyHandler(try s.ocrText(try str("sha256")) ?? NSNull(), nil)
             // Nur im Testmodus mit LABORBUCH_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
+            case "testOther":  // Testmodus: JavaScript in einem anderen Fenster ausführen (Tabs/Fenster prüfen)
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                guard let other = docs.first(where: { $0.web !== m.webView }) else { return replyHandler(["windows": docs.count], nil) }
+                other.web.callAsyncJavaScript(try str("js"), arguments: [:], in: nil, in: .page) { r in
+                    switch r { case .success(let v): replyHandler(["windows": self.docs.count, "value": v], nil)
+                               case .failure(let e): replyHandler(nil, "\(e)") }
+                }
+            case "updateCheck":
+                let ci = Updater.canInstall
+                Updater.check { r in
+                    switch r {
+                    case .failure(let e): replyHandler(nil, "\(e)")
+                    case .success(let found):
+                        let rel: Updater.Release? = found
+                        self.pendingRelease = rel
+                        let latest: String = rel?.version ?? Updater.current
+                        replyHandler(["current": Updater.current, "latest": latest, "available": rel != nil,
+                                      "canInstall": ci.ok, "reason": ci.reason ?? ""], nil)
+                    }
+                }
+            case "updateInstall":
+                guard let rel = pendingRelease else { throw StoreError.invalid("Erst nach Updates suchen") }
+                let ci = Updater.canInstall
+                guard ci.ok else { throw StoreError.invalid(ci.reason ?? "Update nicht möglich") }
+                Updater.install(rel, progress: { [weak self] st in self?.broadcast(except: nil, "app.updateProgress && app.updateProgress('\(st)')") }) { err in
+                    if let err { return replyHandler(nil, "\(err)") }
+                    replyHandler(true, nil)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { NSApp.terminate(nil) }  // speichert, dann tauscht das Skript
+                }
+            case "testQuickLook":  // Testmodus: Vorschau schreiben und mit qlmanage prüfen, was macOS daraus macht
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                try QuickLookWriter.write(s)
+                let out = FileManager.default.temporaryDirectory.appendingPathComponent("lb-ql-\(UUID().uuidString)")
+                try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+                try FileExport.run("/usr/bin/qlmanage", ["-p", "-o", out.path, s.root.path])
+                try FileExport.run("/usr/bin/qlmanage", ["-t", "-s", "256", "-o", out.path, s.root.path])
+                let urlFile = out.appendingPathComponent("\(s.root.lastPathComponent).qlpreview/Preview.url")
+                let previewURL = (try? String(contentsOf: urlFile, encoding: .utf8)) ?? ""
+                let thumb = FileManager.default.fileExists(atPath: out.appendingPathComponent("\(s.root.lastPathComponent).png").path)
+                let html = (try? String(contentsOf: s.root.appendingPathComponent("QuickLook/Preview.html"), encoding: .utf8)) ?? ""
+                replyHandler(["previewURL": previewURL, "thumbnail": thumb, "html": html], nil)
+            case "testSpotlight":  // Testmodus: Buch indizieren, per Spotlight-Abfrage suchen, Index wieder löschen
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                let needle = try str("title"), book = s.bookID
+                Spotlight.reindex(s) { err in
+                    if let err { return replyHandler(nil, "Indizieren: \(err)") }
+                    var found = 0, tries = 0
+                    func ask() {
+                        let q = CSSearchQuery(queryString: "title == \"\(needle)\"", queryContext: { let c = CSSearchQueryContext(); c.fetchAttributes = ["title"]; return c }())
+                        q.foundItemsHandler = { found += $0.count }
+                        q.completionHandler = { _ in DispatchQueue.main.async {
+                            tries += 1
+                            if found > 0 || tries >= 20 { Spotlight.remove(book: book) { replyHandler(["found": found, "tries": tries], nil) } }
+                            else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: ask) }
+                        } }
+                        q.start()
+                    }
+                    ask()
+                }
             case "testWriteText", "testWriteBase64", "testReadText", "testList":
                 guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
                 let base = URL(fileURLWithPath: dir)
@@ -365,8 +498,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(true, nil)
             case "load": replyHandler(try s.load(id: try int("id")), nil)
             case "revision": replyHandler(try s.revision(id: try int("id"), no: try int("no")), nil)
-            case "save": replyHandler(try s.saveDraft(id: try int("id"), title: try str("title"), json: try str("json"), text: try str("text"),
-                                                      links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? []), nil)
+            case "save":
+                let id = try int("id")
+                replyHandler(try s.saveDraft(id: id, title: try str("title"), json: try str("json"), text: try str("text"),
+                                             links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? []), nil)
+                broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
+                if !testMode { Spotlight.update(s, id: id) }
+                scheduleQuickLook()
+            case "openInTab": openTab(entry: try int("id")); replyHandler(true, nil)
             case "snapshot": replyHandler(try s.snapshot(id: try int("id")) ?? NSNull(), nil)
             case "history": replyHandler(try s.history(id: try int("id")), nil)
             case "verify": replyHandler(try s.verify(id: try int("id")), nil)
@@ -427,6 +566,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 self.web.evaluateJavaScript("app.ocrDone && app.ocrDone('\(sha)')")
                 self.scheduleOCR()
             }
+        }
+    }
+
+    /// `--updatetest`: nach Update suchen und installieren, Fortschritt ausgeben (für den Test 1.0 → 1.1)
+    func runUpdateTest() {
+        print("Version \(Updater.current)"); fflush(stdout)
+        Updater.check { r in
+            guard case .success(let rel?) = r else { print("Kein Update: \(r)"); fflush(stdout); NSApp.terminate(nil); return }
+            print("Gefunden: \(rel.version)"); fflush(stdout)
+            Updater.install(rel, progress: { print("Schritt: \($0)"); fflush(stdout) }) { err in
+                print(err.map { "Fehler: \($0)" } ?? "Bereit, beende für den Austausch"); fflush(stdout)
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    // MARK: Quick Look (Vorschau im Finder), höchstens alle 30 s neu schreiben
+    var qlTimer: Timer?
+    func scheduleQuickLook() {
+        guard qlTimer == nil else { return }
+        qlTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
+            self?.qlTimer = nil
+            if let s = self?.store { try? QuickLookWriter.write(s) }
         }
     }
 
@@ -609,6 +771,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
                 let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
                 if ["Z", "N", "I", "E"].contains(key) { i.keyEquivalentModifierMask = [.command, .shift] }
+                if key == "NW" { i.keyEquivalent = "n"; i.keyEquivalentModifierMask = [.command, .option] }
                 m.addItem(i)
             }
         }
@@ -626,7 +789,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                            ("Einsetzen", #selector(NSText.paste(_:)), "v"), ("Alles auswählen", #selector(NSText.selectAll(_:)), "a"),
                            ("-", nil, ""), ("Suchen", #selector(focusSearch), "f")])
         add("Test", [("Leistungstest (5.000 Wörter, 20 Bilder)", #selector(perfTest), "")])
-        add("Fenster", [("Minimieren", #selector(NSWindow.performMiniaturize(_:)), "m")])
+        add("Fenster", [("Neues Fenster", #selector(newWindow), "NW"), ("Neuer Tab", #selector(newTab), "t"), ("-", nil, ""),
+                        ("Minimieren", #selector(NSWindow.performMiniaturize(_:)), "m")])
         NSApp.mainMenu = main
     }
     // Gesperrt: nur Beenden und Sperren bleiben im Menü aktiv
@@ -645,10 +809,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc func perfTest() { web.evaluateJavaScript("app.perfTest()") }
 
     // MARK: Lebenszyklus – vor dem Beenden letzten Stand speichern und Revisionen sichern
-    func windowWillClose(_ n: Notification) { NSApp.terminate(nil) }
+    /// Vor dem Schließen den Stand dieses Fensters speichern
+    func windowShouldClose(_ w: NSWindow) -> Bool {
+        guard let d = docs.first(where: { $0.window === w }), !d.flushed else { return true }
+        d.web.evaluateJavaScript("app.flush()") { _, _ in d.flushed = true; w.close() }
+        return false
+    }
+    func windowWillClose(_ n: Notification) {
+        docs.removeAll { $0.window === n.object as? NSWindow }
+        if docs.isEmpty { NSApp.terminate(nil) }  // letztes Fenster zu: App beenden (Revisionen werden gesichert)
+    }
     func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
-        web.evaluateJavaScript("app.flush()") { _, _ in
+        flushAll {
             try? self.store?.snapshotAll()
+            if let s = self.store { try? QuickLookWriter.write(s) }
             app.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

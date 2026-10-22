@@ -97,6 +97,8 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon.**
+
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
 | M0 ✅ | Prototyp Editor in WKWebView + SQLite-Speichern | 5.000 Wörter + 20 Bilder ohne Ruckeln; Entscheidung Editor. **Erledigt 2026-10-22:** WebKit, Tippen Median 1 ms / max 2 ms, Laden 15 ms → Plan A (TipTap) |
@@ -106,7 +108,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 | M4 ✅ | Signieren, Hash-Kette, Zeugen-PDF, Touch-ID-Sperre | Manipulierter Eintrag wird erkannt (Test); Zeugen-PDF trägt den Hash und lässt sich wieder anhängen. **Erledigt 2026-10-23:** Ed25519-Signatur, Fälschungen erkannt (Test), Zeugen-PDF mehrseitig mit Hash, wieder anhängbar; Touch-ID-Sperre |
 | M5 ✅ | Bilder: iPhone-Fotos, Annotation, OCR-Suche; Rohdaten verlinken | Gelbild mit Spurenbelegung; Text aus gescanntem Protokoll ist suchbar; geänderte Rohdatei wird gemeldet. **Erledigt 2026-10-23:** Gel mit Spurenbelegung, OCR-Text durchsuchbar, geänderte/fehlende Rohdatei gemeldet; iPhone-Übernahme ohne echtes iPhone ungetestet |
 | M6 ✅ | Import (.eln, Word/Markdown, Scan) und Export (PDF, PDF/A, Markdown, JSON, .eln), Backup | Buch exportieren und ohne die App lesen; eLabFTW-Export importieren. **Erledigt 2026-10-23:** Export ohne App lesbar, .eln-Export und Re-Import, Import Markdown/RTF/Scan; PDF/A nur mit Ghostscript; Import einer echten eLabFTW-Datei ungetestet |
-| M7 | Mac-Einbindung (Spotlight, Quick Look, Fenster/Tabs), Verpacken: Icon, DMG je Chip, Selbst-Update, README | Frische Installation und Update von 1.0 auf 1.1 getestet |
+| M7 ✅ | Mac-Einbindung (Spotlight, Quick Look, Fenster/Tabs), Verpacken: Icon, DMG je Chip, Selbst-Update, README | Frische Installation und Update von 1.0 auf 1.1 getestet. **Erledigt 2026-10-23:** Fenster/Tabs, Spotlight, Quick Look, Selbst-Update (Test 1.0 → 1.1 bestanden, falsche Prüfsumme und fremder Download abgelehnt), DMG nur Apple Silicon, frische Installation getestet |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
