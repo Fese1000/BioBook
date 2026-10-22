@@ -128,18 +128,23 @@ const EntryLink = TT.Mention.configure({
   },
 });
 
+/// Erweiterungen des Editors; ohne Oberfläche (forUI = false) auch für Export und Import
+function editorExtensions(forUI = true) {
+  return [
+    TT.StarterKit.configure({link: {openOnClick: false}}),
+    AnnotImage,
+    TT.TableKit.configure({table: {resizable: forUI}}),
+    TT.TaskList, TT.TaskItem.configure({nested: true}),
+    ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
+    TT.CharacterCount,
+    FileNode, EntryLink, CalcNode,
+  ];
+}
+
 function makeEditor() {
   editor = new TT.Editor({
     element: $('#editor'),
-    extensions: [
-      TT.StarterKit.configure({link: {openOnClick: false}}),
-      AnnotImage,
-      TT.TableKit.configure({table: {resizable: true}}),
-      TT.TaskList, TT.TaskItem.configure({nested: true}),
-      TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'}),
-      TT.CharacterCount,
-      FileNode, EntryLink, CalcNode,
-    ],
+    extensions: editorExtensions(),
     onUpdate: changed,
     onSelectionUpdate: renderToolbar,
     onTransaction: renderToolbar,
@@ -678,6 +683,51 @@ async function selfTest() {
   const got = await call('testReceive');
   await sleep(150);
   ok(got && editor.getJSON().content.some(n => n.type == 'image' && /^Foto /.test(n.attrs.alt)), 'Übernahme (wie vom iPhone) fügt Foto ein');
+
+  // M6: Export, Re-Import, Import aus Markdown/RTF/Scan, PDF, Sicherung
+  const alerts = []; window.alert = m => alerts.push(m);
+  const before = (await call('list')).length;
+  const ex = await exportBook();
+  const files = ex ? await call('testList') : [];
+  const exDir = ex?.path.split('/').pop();
+  const idx = ex ? await call('testReadText', {path: `${exDir}/index.html`}) : '';
+  const bookJson = ex ? JSON.parse(await call('testReadText', {path: `${exDir}/data/book.json`})) : {};
+  const mdFile = files.find(f => f.startsWith(exDir + '/entries/') && f.endsWith('.md') && /gescanntes-protokoll/.test(f));
+  const md = mdFile ? await call('testReadText', {path: mdFile}) : '';
+  ok(ex && idx.includes('Gescanntes Protokoll') && files.some(f => f.endsWith('.eln')) && files.some(f => f.includes('/files/')), `Export: Übersicht, Einträge, Dateien, .eln (${files.length} Dateien)`);
+  ok(bookJson.entries?.length == before && bookJson.revisions?.length > 0 && bookJson.signatures?.length > 0, 'Export: book.json mit allen Einträgen, Revisionen und Signaturen');
+  ok(/^---\nid: \d+/.test(md) && md.includes('# Gescanntes Protokoll') && md.includes('](../files/'), 'Export: Markdown mit Kopfdaten und Bild-Link');
+
+  const elnPath = `${ex.path}/${files.find(f => f.endsWith('.eln')).split('/').pop()}`;
+  const reIds = await importFiles([elnPath]);
+  ok(reIds.length == before, `Re-Import der .eln: ${reIds.length} von ${before} Einträgen`);
+  const origTitles = bookJson.entries.map(e => e.title).sort().join('|');
+  const reTitles = (await Promise.all(reIds.map(id => call('load', {id})))).map(e => e.title).sort().join('|');
+  const reImgs = (await Promise.all(reIds.map(id => call('load', {id})))).flatMap(e => [...(e.draft_json || '').matchAll(/lab:\/\/files\/([0-9a-f]{64})/g)].map(m => m[1]));
+  const imgOk = reImgs.length && (await Promise.all(reImgs.map(sh => fetch(`/files/${sh}`).then(r => r.ok)))).every(Boolean);
+  ok(reTitles == origTitles && imgOk, `Re-Import: gleiche Titel, ${reImgs.length} Bild(er) wieder ladbar`);
+
+  const mdPath = await call('testWriteText', {name: 'protokoll.md', text: '# Western Blot\n\n1. Gel laden\n2. Blotten **60 min**\n\n| Antikörper | Verdünnung |\n|---|---|\n| anti-GAPDH | 1:5000 |\n\n<script>alert(1)</script>'});
+  const rtfPath = await call('testWriteText', {name: 'notiz.rtf', text: '{\\rtf1\\ansi {\\b Fett gedruckt} und normal.\\par}'});
+  const png = (await new Promise(r => cv.toBlob(r, 'image/png')));
+  const pngPath = await call('testWriteBase64', {name: 'scan-2.png', base64: await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result.split(',')[1]); fr.readAsDataURL(png); })});
+  const imp = await importFiles([mdPath, rtfPath, pngPath]);
+  const j1 = JSON.parse((await call('load', {id: imp[0]})).draft_json), j2 = JSON.parse((await call('load', {id: imp[1]})).draft_json), j3 = JSON.parse((await call('load', {id: imp[2]})).draft_json);
+  const s1 = JSON.stringify(j1);
+  ok(s1.includes('"orderedList"') && s1.includes('"table"') && s1.includes('anti-GAPDH') && s1.includes('"bold"') && s1.includes('"text":"<script>alert(1)</script>"'), 'Markdown-Import: Liste, Tabelle, fett; Skript nur als harmloser Text');
+  ok(JSON.stringify(j2).includes('Fett gedruckt') && JSON.stringify(j2).includes('"bold"'), 'RTF/Word-Import mit Formatierung');
+  ok(j3.content.some(n => n.type == 'image') && JSON.stringify(j3).includes('Erkannter Text') && /Lysepuffer/i.test(JSON.stringify(j3)), 'Scan-Import: Bild und erkannter Text im Eintrag');
+
+  await refreshList(imp[0]);
+  const pdf1 = await exportEntryPDF(false);
+  ok(pdf1?.pages >= 1, `Eintrag als PDF (${pdf1?.pages} Seite/n)`);
+  const pdfa = await exportEntryPDF(true);
+  ok(!pdfa && alerts.some(a => /Ghostscript/.test(a)), 'PDF/A ohne Ghostscript: klarer Hinweis statt Absturz');
+
+  const bk = await backupNow();
+  ok(bk && bk.copied > 0 && /^db-/.test(bk.db), `Sicherung: Datenbank und ${bk?.copied} Datei(en) kopiert`);
+  const bk2 = await backupNow();
+  ok(bk2 && bk2.copied == 0, 'Zweite Sicherung kopiert keine Datei doppelt');
   return out;
 }
 
@@ -735,6 +785,7 @@ setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS)
 
 // Von Swift aufgerufen (Menü, Beenden)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
+  exportBook, exportEntryPDF, importFiles, backupNow,
   // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
   insertReceived: it => {
     if (!cur || preview || curSigned) return alert('Bitte zuerst einen bearbeitbaren Eintrag öffnen.');

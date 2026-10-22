@@ -130,6 +130,14 @@ final class Store {
 
     var name: String { root.deletingPathExtension().lastPathComponent }
 
+    /// Feste ID des Buches (aus meta.json), damit Sicherungen auch nach Umbenennen zugeordnet bleiben
+    var bookID: String {
+        ((try? JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("meta.json")))) as? [String: Any])?["id"] as? String ?? name
+    }
+
+    /// Konsistente Kopie der Datenbank (auch während die App läuft)
+    func backupDB(to url: URL) throws { try query("VACUUM INTO ?", [url.path]) }
+
     deinit { sqlite3_close(db) }
 
     static func now() -> String {
@@ -484,6 +492,33 @@ final class Store {
         var r: [String: Any] = ["ok": broken == nil && allValid, "chain_ok": broken == nil, "count": revs.count, "signatures": sigs]
         if let b = broken { r["broken"] = b }
         return r
+    }
+
+    // MARK: Export
+    /// Alles außer den Dateiinhalten, als JSON-taugliche Struktur (für data/book.json und den Export der Oberfläche)
+    func dump() throws -> [String: Any] {
+        let meta = (try? JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("meta.json")))) ?? [:]
+        return [
+            "format": "laborbuch-export-1", "exported": Store.now(), "book": name, "meta": meta, "schema": Store.schemaVersion,
+            "projects": try query("SELECT id, name, archived, created FROM project ORDER BY id"),
+            "entries": try query("""
+            SELECT e.id, e.title, e.kind, e.created, e.updated, e.project_id, p.name AS project, e.template_id, e.template_version, e.signed_no,
+              e.draft_json, e.draft_text,
+              (SELECT group_concat(t.name, ', ') FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id) AS tags,
+              (SELECT hash FROM revision r WHERE r.entry_id = e.id ORDER BY no DESC LIMIT 1) AS last_hash,
+              (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions
+            FROM entry e LEFT JOIN project p ON p.id = e.project_id ORDER BY e.id
+            """),
+            "revisions": try query("SELECT entry_id, no, title, created, prev_hash, hash, content_json FROM revision ORDER BY entry_id, no"),
+            "signatures": try query("SELECT entry_id, rev_no, kind, name, signed_at, pubkey, sig, file_sha256, hash_found FROM signature ORDER BY id"),
+            "signers": try query("SELECT pubkey, name, created FROM signer"),
+            "links": try query("SELECT from_entry, to_entry FROM link"),
+            "attachments": try query("SELECT sha256, name, mime, size, created, stored, path, ocr_text FROM attachment ORDER BY created"),
+            "entry_files": try query("SELECT entry_id, sha256 FROM entry_file"),
+            "templates": try query("SELECT t.id, t.name, t.archived, v.version, v.title, v.kind, v.created, v.content_json FROM template t JOIN template_version v ON v.template_id = t.id ORDER BY t.id, v.version"),
+            "runs": try query("SELECT id, entry_id, started, finished, status, steps_json FROM run ORDER BY id"),
+            "run_steps": try query("SELECT run_id, step_no, done_at, note FROM run_step ORDER BY run_id, step_no"),
+        ]
     }
 
     // MARK: Signaturen

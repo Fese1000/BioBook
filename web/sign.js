@@ -53,9 +53,8 @@ async function addendum() {
   editor.commands.focus('end');
 }
 
-/// HTML für das Zeugen-PDF: Kopf mit Hash und Signatur, Inhalt, Felder für Unterschriften
-function witnessHTML(r, book) {
-  const css = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;color:#111;margin:0}
+/// Druckformat für Zeugen-PDF und PDF-Export
+const PRINT_CSS = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;color:#111;margin:0}
     h1{font:600 18pt/1.25 "New York",Georgia,serif;margin:0 0 4pt} h2,h3{font-family:"New York",Georgia,serif;margin:14pt 0 4pt}
     .head{border:1px solid #999;border-radius:4pt;padding:8pt 10pt;margin-bottom:14pt;font-size:9pt}
     code,.hash{font:8.5pt/1.4 Menlo,monospace;word-break:break-all}
@@ -66,6 +65,10 @@ function witnessHTML(r, book) {
     div[data-calc],div[data-file]{border:1px solid #bbb;border-radius:4pt;padding:5pt 8pt;margin:6pt 0;font-size:10pt}
     .sign{margin-top:22pt;page-break-inside:avoid;border-top:1px solid #999;padding-top:10pt;font-size:10pt}
     .line{display:flex;gap:24pt;margin-top:28pt}.line div{flex:1;border-top:1px solid #333;padding-top:3pt;font-size:9pt;color:#444}`;
+
+/// HTML für das Zeugen-PDF: Kopf mit Hash und Signatur, Inhalt, Felder für Unterschriften
+function witnessHTML(r, book) {
+  const css = PRINT_CSS;
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${css}</style></head><body>
     <div class="head"><b>Laborbuch „${esc(book)}“</b> · Eintrag Nr. ${cur} · Revision ${r.no}<br>
       Abgeschlossen und signiert von <b>${esc(r.name)}</b> am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})<br>
@@ -109,8 +112,13 @@ async function showSettings() {
     <p class="sub">Persönlicher Signaturschlüssel: ${s.fingerprint ? `<code>${esc(s.fingerprint)}</code> (im Schlüsselbund)` : 'wird beim ersten Signieren angelegt und im Schlüsselbund gespeichert'}</p>
     <label class="row"><input type="checkbox" id="setLock" ${s.lockEnabled ? 'checked' : ''}> Mit Touch ID sperren (beim Start und wenn der Mac schläft)</label>
     <label class="row">… und nach <input id="setLockMin" type="number" min="0" max="240" value="${s.lockMinutes}" style="width:70px"> Minuten ohne Eingabe (0 = nie)</label>
+    <p class="row"><b>Sicherung</b></p>
+    <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
+    <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
     <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on" id="setSave">Sichern</button></div></form>`;
   dlg.showModal();
+  $('#bkChoose').onclick = async () => { const p = await call('chooseBackupDir'); if (p) $('#bkDir').textContent = (await call('settings')).backupDir; };
+  $('#bkNow').onclick = async () => { const r = await backupNow(); if (r) $('#bkLast').textContent = when(new Date().toISOString()); };
   dlg.onclose = async () => {
     if (dlg.returnValue != 'ok') return;
     await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0)});
@@ -125,3 +133,10 @@ document.addEventListener('click', e => {
   else if (d.addendum !== undefined) addendum();
   else if (d.openpdf) { e.preventDefault(); call('openFile', {sha256: d.openpdf, name: 'Zeugen-PDF.pdf'}).catch(err => alert(err.message)); }
 });
+
+async function backupNow() {
+  await flush();
+  status('Sicherung läuft …');
+  try { const r = await call('backupNow'); status(`Gesichert (${r.copied} neue Datei(en)) nach ${r.dir}`); return r; }
+  catch (e) { status(''); alert('Sicherung fehlgeschlagen: ' + e.message); }
+}

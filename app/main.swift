@@ -81,6 +81,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         scheduleOCR()
+        if !testMode {
+            autoBackup()
+            Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in self?.autoBackup() }
+        }
         locker = Locker(window: window, disabled: testMode)
         locker.lockIfEnabled()
         web.load(URLRequest(url: URL(string: "lab://app/index.html")!))
@@ -202,7 +206,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "finishRun": replyHandler(try s.finishRun(run: try int("run"), aborted: a["aborted"] as? Bool ?? false), nil)
             case "settings":
                 replyHandler(["author": Settings.author, "lockEnabled": Settings.lockEnabled, "lockMinutes": Settings.lockMinutes,
-                              "fingerprint": Keys.fingerprint() ?? NSNull()], nil)
+                              "fingerprint": Keys.fingerprint() ?? NSNull(), "backupDir": Backup.dir(for: s).path,
+                              "lastBackup": Backup.last(for: s).map { ISO8601DateFormatter().string(from: $0) } ?? NSNull()], nil)
             case "setSettings":
                 if let n = a["author"] as? String { Settings.author = n }
                 if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
@@ -279,6 +284,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
             case "ocrText": replyHandler(try s.ocrText(try str("sha256")) ?? NSNull(), nil)
             // Nur im Testmodus mit LABORBUCH_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
+            case "testWriteText", "testWriteBase64", "testReadText", "testList":
+                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
+                let base = URL(fileURLWithPath: dir)
+                if cmd == "testList" { return replyHandler(FileManager.default.enumerator(atPath: base.path)?.allObjects as? [String] ?? [], nil) }
+                let url = try FileExport.safe(try str(cmd == "testReadText" ? "path" : "name"), in: base)
+                if cmd == "testReadText" { return replyHandler(try String(contentsOf: url, encoding: .utf8), nil) }
+                let data = cmd == "testWriteText" ? Data(try str("text").utf8) : Data(base64Encoded: try str("base64")) ?? Data()
+                try data.write(to: url)
+                replyHandler(url.path, nil)
             case "testWriteFile", "testModifyFile", "testReceive":
                 guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
                 if cmd == "testReceive" {
@@ -292,6 +306,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     else { var d = try Data(contentsOf: url); d[0] = d[0] &+ 1; try d.write(to: url) }
                     replyHandler(url.path, nil)
                 }
+            case "backupNow": autoBackup(force: true, reply: replyHandler)
+            case "chooseBackupDir":
+                let p = NSOpenPanel()
+                p.title = "Ordner für Sicherungen (z. B. externe Platte oder iCloud Drive)"; p.prompt = "Wählen"
+                p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
+                guard p.runModal() == .OK, let u = p.url else { return replyHandler(NSNull(), nil) }
+                UserDefaults.standard.set(u.path, forKey: "backupDir")
+                replyHandler(u.path, nil)
+            case "exportData": replyHandler(try s.dump(), nil)
+            case "exportWrite": exportWrite(a, s, reply: replyHandler)
+            case "entryPDF":
+                let html = try str("html"), pdfa = a["pdfa"] as? Bool ?? false
+                if pdfa && FileExport.ghostscript == nil { throw ExportError.tool("Für PDF/A wird Ghostscript gebraucht (im Terminal: brew install ghostscript). Normales PDF geht ohne.") }
+                WitnessPDF.make(html: html, hash: (a["hash"] as? String) ?? "", scheme: scheme) { [weak self] r in
+                    switch r {
+                    case .failure(let e): replyHandler(nil, "\(e)")
+                    case .success(let data):
+                        do { self?.savePDF(pdfa ? try FileExport.pdfA(data) : data, name: (a["name"] as? String) ?? "Eintrag.pdf", reply: replyHandler) }
+                        catch { replyHandler(nil, "\(error)") }
+                    }
+                }
+            case "importPick": importPick(a, s, reply: replyHandler)
             case "notify":
                 // Timer abgelaufen: Ton und Dock-Symbol hüpfen lassen, auch wenn die App im Hintergrund ist
                 NSSound(named: "Glass")?.play()
@@ -357,7 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     /// Bild oder gescanntes PDF übernehmen: als Anhang speichern und an der Schreibmarke einfügen
     @objc func readSelection(from pboard: NSPasteboard) -> Bool {
         guard let s = store else { return false }
-        let stamp = Store.now().prefix(19).replacingOccurrences(of: ":", with: "-")
+        let stamp = FileExport.stamp(seconds: true)
         var item: [String: Any]?
         do {
             if let pdf = pboard.data(forType: .pdf) {
@@ -391,6 +427,144 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 self.web.evaluateJavaScript("app.ocrDone && app.ocrDone('\(sha)')")
                 self.scheduleOCR()
             }
+        }
+    }
+
+    // MARK: Sicherung
+    func autoBackup(force: Bool = false, reply: ((Any?, String?) -> Void)? = nil) {
+        guard let s = store else { return }
+        Backup.run(s, force: force, queue: ocrQueue) { r in
+            switch r {
+            case .success(let info): reply?(info, nil)
+            case .failure(let e): reply?(nil, "\(e)"); if reply == nil { NSLog("Laborbuch: Sicherung fehlgeschlagen: \(e)") }
+            }
+        }
+    }
+
+    @objc func backupNow() { web.evaluateJavaScript("app.backupNow()") }
+
+    // MARK: Export und Import
+    func exportTarget(_ a: [String: Any]) -> URL? {
+        if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], testMode { return URL(fileURLWithPath: dir) }
+        let p = NSOpenPanel()
+        p.title = "Ordner für den Export wählen"; p.prompt = "Exportieren"
+        p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
+        return p.runModal() == .OK ? p.url : nil
+    }
+
+    /// Schreibt den Export-Ordner: Texte von der Oberfläche, Dateikopien, data/book.json und das .eln-Archiv
+    func exportWrite(_ a: [String: Any], _ s: Store, reply: @escaping (Any?, String?) -> Void) {
+        guard let parent = exportTarget(a) else { return reply(NSNull(), nil) }
+        let dir = parent.appendingPathComponent("\(s.name) – Export \(FileExport.stamp())")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for t in a["texts"] as? [[String: String]] ?? [] { try FileExport.write(t["text"] ?? "", to: try FileExport.safe(t["path"] ?? "", in: dir)) }
+            for c in a["copies"] as? [[String: String]] ?? [] {
+                guard let sha = c["sha"], sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { continue }
+                try FileExport.copy(s.fileURL(sha), to: try FileExport.safe(c["path"] ?? "", in: dir))
+            }
+            let dump = try JSONSerialization.data(withJSONObject: try s.dump(), options: [.prettyPrinted, .sortedKeys])
+            try FileManager.default.createDirectory(at: dir.appendingPathComponent("data"), withIntermediateDirectories: true)
+            try dump.write(to: dir.appendingPathComponent("data/book.json"))
+            if let eln = a["eln"] as? [String: Any], let folder = eln["folder"] as? String, let meta = eln["metadata"] as? String {
+                let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-eln-\(UUID().uuidString)")
+                defer { try? FileManager.default.removeItem(at: tmp) }
+                let root = try FileExport.safe(folder, in: tmp)
+                try FileExport.write(meta, to: root.appendingPathComponent("ro-crate-metadata.json"))
+                for c in eln["copies"] as? [[String: String]] ?? [] {
+                    guard let sha = c["sha"], sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { continue }
+                    try FileExport.copy(s.fileURL(sha), to: try FileExport.safe(c["path"] ?? "", in: root))
+                }
+                try FileExport.zipELN(folder: root, to: dir.appendingPathComponent("\(s.name).eln"))
+            }
+            if !testMode { NSWorkspace.shared.activateFileViewerSelecting([dir]) }
+            reply(["path": dir.path], nil)
+        } catch { reply(nil, "\(error)") }
+    }
+
+    /// Dateien zum Import wählen und lesen. Antwort: Liste von Einträgen für die Oberfläche (die baut daraus die Einträge)
+    func importPick(_ a: [String: Any], _ s: Store, reply: @escaping (Any?, String?) -> Void) {
+        let urls: [URL]
+        if let t = a["testPaths"] as? [String], testMode { urls = t.map { URL(fileURLWithPath: $0) } }
+        else {
+            let p = NSOpenPanel()
+            p.title = "Importieren: .eln (eLabFTW u. a.), Markdown, Word, RTF, ODT, HTML, PDF oder Bilder (Scans)"
+            p.allowsMultipleSelection = true; p.canChooseDirectories = false
+            guard p.runModal() == .OK else { return reply([], nil) }
+            urls = p.urls
+        }
+        var items: [[String: Any]] = [], scans: [(Int, URL, String)] = []
+        do {
+            for u in urls {
+                let ext = u.pathExtension.lowercased(), title = u.deletingPathExtension().lastPathComponent
+                switch ext {
+                case "eln", "zip": items += try readELN(u, s)
+                case "md", "markdown", "txt": items.append(["kind": "markdown", "title": title, "text": try String(contentsOf: u, encoding: .utf8), "source": u.lastPathComponent])
+                case "html", "htm": items.append(["kind": "html", "title": title, "html": try String(contentsOf: u, encoding: .utf8), "source": u.lastPathComponent])
+                case "docx", "doc", "rtf", "odt", "rtfd": items.append(["kind": "html", "title": title, "html": try FileExport.documentHTML(u), "source": u.lastPathComponent])
+                case "pdf", "png", "jpg", "jpeg", "heic", "tif", "tiff":
+                    let mime = UTType(filenameExtension: ext)?.preferredMIMEType ?? "application/octet-stream"
+                    let data = try Data(contentsOf: u)
+                    guard data.count <= 50_000_000 else { throw StoreError.invalid("\(u.lastPathComponent) ist größer als 50 MB") }
+                    let sha = try s.putFile(name: u.lastPathComponent, mime: mime, data: data)
+                    scans.append((items.count, s.fileURL(sha), mime))
+                    items.append(["kind": "scan", "title": title, "source": u.lastPathComponent,
+                                  "file": ["sha256": sha, "name": u.lastPathComponent, "mime": mime, "size": data.count]])
+                default: throw StoreError.invalid("Dateityp nicht unterstützt: \(u.lastPathComponent)")
+                }
+            }
+        } catch { return reply(nil, "\(error)") }
+        // Scans: Text sofort erkennen (im Hintergrund), damit er im neuen Eintrag steht
+        let root = s.root
+        ocrQueue.async {
+            let texts = scans.map { ($0.0, $0.2 == "application/pdf" || $0.2.hasPrefix("image/") ? OCR.recognize(url: $0.1, mime: $0.2) : "") }
+            DispatchQueue.main.async {
+                guard let s = self.store, s.root == root else { return reply(nil, "Laborbuch gewechselt") }
+                for (i, t) in texts {
+                    items[i]["text"] = t
+                    if let sha = (items[i]["file"] as? [String: Any])?["sha256"] as? String { try? s.setOCR(sha: sha, text: t) }
+                }
+                reply(items, nil)
+            }
+        }
+    }
+
+    /// .eln (RO-Crate): jeder Datensatz unter dem Wurzelordner wird ein Eintrag; Dateien kommen als Anhänge ins Buch
+    func readELN(_ zip: URL, _ s: Store) throws -> [[String: Any]] {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-import-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try FileExport.unzip(zip, to: tmp)
+        guard let metaURL = FileManager.default.enumerator(at: tmp, includingPropertiesForKeys: nil)?
+                .compactMap({ $0 as? URL }).first(where: { $0.lastPathComponent == "ro-crate-metadata.json" }) else {
+            throw StoreError.invalid("\(zip.lastPathComponent): keine ro-crate-metadata.json – kein .eln-Archiv?")
+        }
+        let base = metaURL.deletingLastPathComponent().standardizedFileURL
+        guard let json = try JSONSerialization.jsonObject(with: Data(contentsOf: metaURL)) as? [String: Any],
+              let graph = json["@graph"] as? [[String: Any]] else { throw StoreError.invalid("ro-crate-metadata.json ist unlesbar") }
+        let byId = Dictionary(graph.compactMap { n in (n["@id"] as? String).map { ($0, n) } }, uniquingKeysWith: { a, _ in a })
+        let ids: (Any?) -> [String] = { v in
+            if let d = v as? [String: Any], let i = d["@id"] as? String { return [i] }
+            return (v as? [[String: Any]])?.compactMap { $0["@id"] as? String } ?? []
+        }
+        let isType = { (n: [String: Any], t: String) in (n["@type"] as? String) == t || ((n["@type"] as? [String])?.contains(t) ?? false) }
+        let rootDS = byId["./"] ?? graph.first { isType($0, "Dataset") }
+        let parts = ids(rootDS?["hasPart"]).compactMap { byId[$0] }.filter { isType($0, "Dataset") }
+        return try parts.map { ds in
+            var files: [[String: Any]] = []
+            for fid in ids(ds["hasPart"]) {
+                guard let f = byId[fid], isType(f, "File") else { continue }
+                let url = base.appendingPathComponent(fid.removingPercentEncoding ?? fid).standardizedFileURL
+                guard url.path.hasPrefix(base.path + "/"), let data = try? Data(contentsOf: url), data.count <= 50_000_000 else { continue }  // nichts außerhalb des Archivs
+                let name = (f["name"] as? String) ?? url.lastPathComponent
+                let declared = (f["encodingFormat"] as? String)?.components(separatedBy: ";")[0].trimmingCharacters(in: .whitespaces)
+                let mime = declared.flatMap { $0.range(of: "^[a-z]+/[a-z0-9.+-]+$", options: .regularExpression) != nil ? $0 : nil }
+                    ?? UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+                files.append(["sha256": try s.putFile(name: name, mime: mime, data: data), "name": name, "mime": mime, "size": data.count])
+            }
+            let kw = ds["keywords"]
+            let tags = (kw as? String)?.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } ?? (kw as? [String]) ?? []
+            return ["kind": "eln", "title": (ds["name"] as? String) ?? "Ohne Titel", "html": (ds["text"] as? String) ?? (ds["description"] as? String) ?? "",
+                    "tags": tags, "created": (ds["dateCreated"] as? String) ?? "", "source": zip.lastPathComponent, "files": files]
         }
     }
 
@@ -434,7 +608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     m.addItem(i); continue
                 }
                 let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
-                if key == "Z" || key == "N" { i.keyEquivalentModifierMask = [.command, .shift] }
+                if ["Z", "N", "I", "E"].contains(key) { i.keyEquivalentModifierMask = [.command, .shift] }
                 m.addItem(i)
             }
         }
@@ -443,7 +617,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         add("Ablage", [("Neuer Eintrag", #selector(newEntry), "n"), ("Revision sichern", #selector(snapshotNow), "s"), ("-", nil, ""),
                        ("Neues Laborbuch …", #selector(newBook), "N"), ("Laborbuch öffnen …", #selector(openBook), "o"),
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
-                       ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("-", nil, ""),
+                       ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("Importieren …", #selector(importFiles), "I"),
+                       ("Laborbuch exportieren …", #selector(exportBook), "E"), ("Eintrag als PDF …", #selector(entryPDF), "p"),
+                       ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
                        ("Schließen", #selector(NSWindow.performClose(_:)), "w")])
         add("Bearbeiten", [("Widerrufen", Selector(("undo:")), "z"), ("Wiederholen", Selector(("redo:")), "Z"), ("-", nil, ""),
                            ("Ausschneiden", #selector(NSText.cut(_:)), "x"), ("Kopieren", #selector(NSText.copy(_:)), "c"),
@@ -457,6 +633,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         !(locker?.locked ?? false) || item.action == #selector(NSApplication.terminate(_:)) || item.action == #selector(lockNow)
     }
+    @objc func importFiles() { web.evaluateJavaScript("app.importFiles()") }
+    @objc func exportBook() { web.evaluateJavaScript("app.exportBook()") }
+    @objc func entryPDF() { web.evaluateJavaScript("app.exportEntryPDF(false)") }
+    @objc func entryPDFA() { web.evaluateJavaScript("app.exportEntryPDF(true)") }
     @objc func showSettings() { if !locker.locked { web.evaluateJavaScript("app.settings()") } }
     @objc func lockNow() { locker.lock() }
     @objc func newEntry() { web.evaluateJavaScript("app.newEntry()") }

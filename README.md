@@ -1,6 +1,6 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **M5**, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **M6**, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Was schon geht
 - Mehrere Laborbücher: neu anlegen (⇧⌘N), öffnen (⌘O), im Finder zeigen. Ein Buch ist ein Paket `Name.laborbuch` und öffnet sich per Doppelklick; die App merkt sich das zuletzt geöffnete.
@@ -18,6 +18,10 @@ Ein schnelles, lokales Laborbuch für den Mac. Stand: **M5**, siehe [BAUPLAN.md]
 - Texterkennung: Text in Bildern und gescannten PDFs wird im Hintergrund lokal erkannt (Vision-Framework, Deutsch und Englisch) und ist durchsuchbar, ebenso Dateinamen.
 - Große Rohdaten verlinken („🔗 Rohdaten“): Dateien bleiben am Ort, das Laborbuch speichert Pfad und SHA-256. Beim Öffnen des Eintrags wird geprüft, ob sie verändert wurden oder fehlen.
 - Fotos und Scans vom iPhone: Ablage › „Vom iPhone oder iPad importieren“ (Kamera-Übernahme von macOS).
+- Export (Ablage › „Laborbuch exportieren …“, ⇧⌘E): ein Ordner, der ohne die App lesbar ist – `index.html` als Übersicht, jeder Eintrag als HTML und Markdown (mit Kopfdaten), alle Anhänge mit Originalnamen, `data/book.json` mit allen Revisionen, Hashes und Signaturen, dazu `<Buch>.eln` (RO-Crate) für andere Laborbücher wie eLabFTW.
+- Eintrag als PDF (⌘P); als PDF/A nur, wenn Ghostscript installiert ist (`brew install ghostscript`), sonst kommt ein Hinweis.
+- Import (⇧⌘I): `.eln`-Archive (eLabFTW u. a.), Markdown, Word/RTF/ODT, HTML sowie gescannte PDFs und Bilder (Text wird erkannt und in den Eintrag geschrieben). Fremdes HTML wird entschärft: keine Skripte, keine Bilder aus dem Netz.
+- Automatische Sicherung: täglich eine Kopie der Datenbank (die letzten 14 bleiben) und neue Anhänge, standardmäßig nach `~/Library/Application Support/Laborbuch/Sicherungen/`; Ordner (z. B. externe Platte) und „Jetzt sichern“ in den Einstellungen.
 - Dateianhänge jeder Art bis 50 MB als Karte im Text: Öffnen (schreibgeschützte Kopie mit Originalnamen), Vorschau für PDF, CSV/TSV und Text
 - Einträge anlegen, Titel, Liste mit Volltextsuche (⌘F), Suche im gewählten Projekt
 - Block-Editor (TipTap): Überschriften, Listen, Checklisten, Tabellen, Code, Zitate, Bilder und Dateien per Drag & Drop, Einfügen oder Knopf
@@ -25,6 +29,8 @@ Ein schnelles, lokales Laborbuch für den Mac. Stand: **M5**, siehe [BAUPLAN.md]
 - Bilder als Anhänge nach SHA-256
 
 Der private Signaturschlüssel liegt im macOS-Schlüsselbund („Laborbuch Signaturschlüssel“), im Laborbuch nur der öffentliche Teil. Weil die App nur ad hoc signiert ist, fragt macOS nach einem Update eventuell einmal, ob sie den Schlüssel weiter verwenden darf („Immer erlauben“). Signatur und Zeitstempel sind Nachweise, keine Zertifizierung nach GLP oder 21 CFR Part 11.
+
+Wiederherstellen aus einer Sicherung: App beenden, im Sicherungsordner die gewünschte `db-….sqlite` als `db.sqlite` zusammen mit `files/` und `meta.json` in einen Ordner `Name.laborbuch` kopieren und diesen öffnen.
 
 Das Standard-Buch liegt in `~/Library/Application Support/Laborbuch/Standard.laborbuch/` (SQLite + `files/`). Ältere Bücher werden beim Öffnen automatisch aktualisiert; vorher legt die App eine Kopie der Datenbank in `backups/` ab. Bücher aus einer neueren App-Version werden nicht angefasst.
 
@@ -38,9 +44,9 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 ## Tests
 ```bash
 swiftc app/Store.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
-node --test tests/calc.test.js                                                  # Rechner gegen Handrechnung
+node --test tests/calc.test.js tests/markdown.test.js                           # Rechner gegen Handrechnung, Markdown hin und zurück
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
 
@@ -58,6 +64,10 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `app/Lock.swift` | Sperre mit Touch ID |
 | `app/OCR.swift` | Texterkennung in Bildern und PDFs |
 | `web/annotate.js` | Bilder beschriften, Spurenbelegung |
+| `web/markdown.js` | Markdown-Export und -Import (getestet) |
+| `web/io.js` | Export (HTML, Markdown, .eln), PDF, Import |
+| `app/Export.swift` | Schreiben, Zippen, Dokumente lesen, PDF/A |
+| `app/Backup.swift` | Automatische Sicherung |
 | `web/` | Oberfläche und Logik (JavaScript), Editor-Bündel |
 | `tools/` | Bündeln des Editors, Icon-Erzeugung |
 | `tests/` | Speicher-Tests, Browser-Testumgebung |
