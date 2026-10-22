@@ -73,6 +73,41 @@ _ = try s.saveDraft(id: e2, title: "Gel", json: "{}", text: "ohne Verweis")
 check(try s.backlinks(id: id).isEmpty, "Verweis entfernt, wenn er aus dem Text verschwindet")
 check((try s.titles()).count >= 2, "Titelliste für Verweise")
 
+// M3: Vorlagen mit Versionen, Läufe
+let proto = try s.create(title: "PCR-Protokoll", kind: "protocol")
+_ = try s.saveDraft(id: proto, title: "PCR-Protokoll", json: #"{"v":1}"#, text: "Schritt 1")
+let t1 = try s.saveTemplate(name: " PCR Q5 ", fromEntry: proto)
+check(t1["version"] as? Int == 1 && t1["unchanged"] as? Bool == false, "Vorlage Version 1 angelegt")
+check((try s.saveTemplate(name: "pcr q5", fromEntry: proto))["unchanged"] as? Bool == true, "Gleicher Inhalt: keine neue Version (Name ohne Groß/Klein)")
+_ = try s.saveDraft(id: proto, title: "PCR-Protokoll", json: #"{"v":2}"#, text: "Schritt 1 und 2")
+check((try s.saveTemplate(name: "PCR Q5", fromEntry: proto))["version"] as? Int == 2, "Geänderter Inhalt: Version 2")
+let tid = t1["id"] as! Int
+check((try s.templates()).first?["version"] as? Int == 2, "Vorlagenliste zeigt neueste Version")
+check((try s.templateVersions(id: tid)).count == 2, "Beide Versionen erhalten")
+let fromT = try s.createFromTemplate(id: tid, version: 1, project: nil)
+let ft = try s.load(id: fromT)
+check(ft["draft_json"] as? String == #"{"v":1}"# && ft["template_version"] as? Int == 1 && ft["kind"] as? String == "protocol", "Eintrag aus Version 1 mit Vermerk")
+check((try s.load(id: try s.createFromTemplate(id: tid, version: nil, project: nil)))["draft_json"] as? String == #"{"v":2}"#, "Ohne Version: neueste")
+var tdb: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &tdb)
+check(sqlite3_exec(tdb, "UPDATE template_version SET content_json = 'x'", nil, nil, nil) != SQLITE_OK, "Vorlagenversionen sind unveränderlich")
+sqlite3_close(tdb)
+check((try? s.saveTemplate(name: "", fromEntry: proto)) == nil, "Vorlage ohne Namen abgelehnt")
+
+let run = try s.startRun(entry: fromT, steps: ["Mastermix ansetzen", "5 min inkubieren", "Gel laden"])
+check(try s.startRun(entry: fromT, steps: ["x"]) == run, "Laufender Lauf wird wiederverwendet")
+let st1 = try s.completeStep(run: run, step: 2, note: "37 °C")
+check(st1["note"] as? String == "37 °C", "Schritt erledigt mit Notiz")
+_ = try s.completeStep(run: run, step: 2, note: "später")
+let doneSteps = (try s.activeRun(entry: fromT))?["done"] as? [[String: Any]] ?? []
+check(doneSteps.count == 1 && doneSteps[0]["note"] as? String == "37 °C", "Erster Zeitstempel zählt")
+check((try? s.completeStep(run: run, step: 9, note: "")) == nil, "Unbekannter Schritt abgelehnt")
+let fin = try s.finishRun(run: run, aborted: false)
+check(fin["status"] as? String == "done" && fin["finished"] is String, "Lauf beendet")
+check(try s.activeRun(entry: fromT) == nil, "Kein laufender Lauf mehr")
+check((try? s.completeStep(run: run, step: 1, note: "")) == nil, "Beendeter Lauf nimmt keine Schritte mehr an")
+check((try? s.startRun(entry: fromT, steps: [])) == nil, "Lauf ohne Schritte abgelehnt")
+
 // Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
 let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")
 defer { try? FileManager.default.removeItem(at: old) }

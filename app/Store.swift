@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 2
+    static let schemaVersion = 3
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -77,6 +77,23 @@ final class Store {
                 DROP TABLE search;
                 CREATE VIRTUAL TABLE search USING fts5(title, body, tags, tokenize='unicode61 remove_diacritics 2');
                 INSERT INTO search(rowid, title, body, tags) SELECT id, title, draft_text, '' FROM entry;
+                """)
+            }
+            if v < 3 {
+                // Vorlagen mit unveränderlichen Versionen; Läufe (Ausführung eines Protokolls mit Zeitstempeln je Schritt)
+                try exec("""
+                CREATE TABLE template(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, created TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE template_version(template_id INTEGER NOT NULL REFERENCES template(id), version INTEGER NOT NULL, title TEXT NOT NULL,
+                  kind TEXT NOT NULL, content_json TEXT NOT NULL, created TEXT NOT NULL, source_entry INTEGER, PRIMARY KEY(template_id, version));
+                CREATE TRIGGER template_version_ro_u BEFORE UPDATE ON template_version BEGIN SELECT RAISE(ABORT, 'Vorlagenversionen sind unveränderlich'); END;
+                CREATE TRIGGER template_version_ro_d BEFORE DELETE ON template_version BEGIN SELECT RAISE(ABORT, 'Vorlagenversionen sind unveränderlich'); END;
+                ALTER TABLE entry ADD COLUMN template_id INTEGER REFERENCES template(id);
+                ALTER TABLE entry ADD COLUMN template_version INTEGER;
+                CREATE TABLE run(id INTEGER PRIMARY KEY, entry_id INTEGER NOT NULL REFERENCES entry(id), started TEXT NOT NULL, finished TEXT,
+                  status TEXT NOT NULL DEFAULT 'running', steps_json TEXT NOT NULL);
+                CREATE INDEX run_entry ON run(entry_id);
+                CREATE TABLE run_step(run_id INTEGER NOT NULL REFERENCES run(id), step_no INTEGER NOT NULL, done_at TEXT NOT NULL,
+                  note TEXT NOT NULL DEFAULT '', PRIMARY KEY(run_id, step_no));
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -219,6 +236,96 @@ final class Store {
             .compactMap { $0["name"] as? String }
     }
 
+    // MARK: Vorlagen
+    func templates() throws -> [[String: Any]] {
+        try query("""
+        SELECT t.id, t.name, t.archived, v.version, v.title, v.kind, v.created AS updated
+        FROM template t JOIN template_version v ON v.template_id = t.id
+        WHERE v.version = (SELECT MAX(version) FROM template_version WHERE template_id = t.id)
+        ORDER BY t.archived, t.name COLLATE NOCASE
+        """)
+    }
+
+    /// Aktuellen Stand eines Eintrags als Vorlage speichern. Gibt es den Namen schon, entsteht eine neue Version;
+    /// ist der Inhalt gleich der letzten Version, bleibt alles wie es ist.
+    func saveTemplate(name: String, fromEntry id: Int) throws -> [String: Any] {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { throw StoreError.invalid("Name der Vorlage fehlt") }
+        return try transaction {
+            guard let e = try query("SELECT title, kind, draft_json FROM entry WHERE id = ?", [id]).first,
+                  let json = e["draft_json"] as? String, !json.isEmpty else { throw StoreError.invalid("Der Eintrag ist leer") }
+            var tid = try query("SELECT id FROM template WHERE name = ?", [n]).first?["id"] as? Int
+            if tid == nil {
+                try query("INSERT INTO template(name, created) VALUES(?, ?)", [n, Store.now()])
+                tid = Int(sqlite3_last_insert_rowid(db))
+            }
+            let last = try query("SELECT version, title, kind, content_json FROM template_version WHERE template_id = ? ORDER BY version DESC LIMIT 1", [tid!]).first
+            if let l = last, l["content_json"] as? String == json, l["title"] as? String == e["title"] as? String, l["kind"] as? String == e["kind"] as? String {
+                return ["id": tid!, "version": l["version"]!, "unchanged": true]
+            }
+            let ver = (last?["version"] as? Int ?? 0) + 1
+            try query("INSERT INTO template_version(template_id, version, title, kind, content_json, created, source_entry) VALUES(?,?,?,?,?,?,?)",
+                      [tid!, ver, e["title"], e["kind"], json, Store.now(), id])
+            try query("UPDATE template SET archived = 0 WHERE id = ?", [tid!])
+            return ["id": tid!, "version": ver, "unchanged": false]
+        }
+    }
+
+    func templateVersions(id: Int) throws -> [[String: Any]] {
+        try query("SELECT version, title, created, source_entry FROM template_version WHERE template_id = ? ORDER BY version DESC", [id])
+    }
+
+    func archiveTemplate(id: Int, archived: Bool) throws {
+        try query("UPDATE template SET archived = ? WHERE id = ?", [archived ? 1 : 0, id])
+    }
+
+    /// Neuer Eintrag aus einer Vorlage (neueste Version, wenn keine angegeben). Vorlage und Version werden am Eintrag vermerkt.
+    func createFromTemplate(id: Int, version: Int?, project: Int?) throws -> Int {
+        let v = try query("""
+        SELECT version, title, kind, content_json FROM template_version WHERE template_id = ? \(version == nil ? "" : "AND version = ?")
+        ORDER BY version DESC LIMIT 1
+        """, version == nil ? [id] : [id, version!]).first
+        guard let tv = v else { throw StoreError.invalid("Vorlage gibt es nicht") }
+        let eid = try create(title: tv["title"] as? String ?? "", project: project, kind: tv["kind"] as? String ?? "experiment")
+        try query("UPDATE entry SET draft_json = ?, template_id = ?, template_version = ? WHERE id = ?", [tv["content_json"], id, tv["version"], eid])
+        return eid
+    }
+
+    // MARK: Läufe
+    /// Startet einen Lauf mit den Schritten (Text je Schritt) oder liefert den schon laufenden.
+    func startRun(entry id: Int, steps: [String]) throws -> Int {
+        guard !steps.isEmpty else { throw StoreError.invalid("Keine Schritte gefunden") }
+        if let r = try query("SELECT id FROM run WHERE entry_id = ? AND status = 'running'", [id]).first?["id"] as? Int { return r }
+        guard try !query("SELECT 1 FROM entry WHERE id = ?", [id]).isEmpty else { throw StoreError.invalid("Eintrag \(id) gibt es nicht") }
+        let json = String(data: try JSONSerialization.data(withJSONObject: steps), encoding: .utf8)!
+        try query("INSERT INTO run(entry_id, started, steps_json) VALUES(?, ?, ?)", [id, Store.now(), json])
+        return Int(sqlite3_last_insert_rowid(db))
+    }
+
+    /// Laufender Lauf eines Eintrags mit erledigten Schritten, oder nil
+    func activeRun(entry id: Int) throws -> [String: Any]? {
+        guard var r = try query("SELECT id, started, steps_json FROM run WHERE entry_id = ? AND status = 'running'", [id]).first else { return nil }
+        r["done"] = try query("SELECT step_no, done_at, note FROM run_step WHERE run_id = ? ORDER BY step_no", [r["id"]!])
+        return r
+    }
+
+    /// Schritt als erledigt vermerken (einmalig; der erste Zeitstempel zählt)
+    func completeStep(run: Int, step: Int, note: String) throws -> [String: Any] {
+        guard let r = try query("SELECT steps_json, status FROM run WHERE id = ?", [run]).first else { throw StoreError.invalid("Lauf gibt es nicht") }
+        guard r["status"] as? String == "running" else { throw StoreError.invalid("Der Lauf ist schon beendet") }
+        let count = (try JSONSerialization.jsonObject(with: Data((r["steps_json"] as! String).utf8)) as? [Any])?.count ?? 0
+        guard step >= 1, step <= count else { throw StoreError.invalid("Schritt \(step) gibt es nicht") }
+        try query("INSERT OR IGNORE INTO run_step(run_id, step_no, done_at, note) VALUES(?, ?, ?, ?)", [run, step, Store.now(), note])
+        return try query("SELECT step_no, done_at, note FROM run_step WHERE run_id = ? AND step_no = ?", [run, step]).first!
+    }
+
+    func finishRun(run: Int, aborted: Bool) throws -> [String: Any] {
+        try query("UPDATE run SET status = ?, finished = ? WHERE id = ? AND status = 'running'", [aborted ? "aborted" : "done", Store.now(), run])
+        guard var r = try query("SELECT id, entry_id, started, finished, status, steps_json FROM run WHERE id = ?", [run]).first else { throw StoreError.invalid("Lauf gibt es nicht") }
+        r["done"] = try query("SELECT step_no, done_at, note FROM run_step WHERE run_id = ? ORDER BY step_no", [run])
+        return r
+    }
+
     // MARK: Verweise
     /// Einträge, die auf diesen Eintrag verweisen
     func backlinks(id: Int) throws -> [[String: Any]] {
@@ -253,7 +360,7 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         e["tags"] = try entryTags(id)

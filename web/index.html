@@ -12,6 +12,7 @@
   <div class="sec"><span>Projekte</span><button id="newProject" class="link" title="Neues Projekt">+ Projekt</button></div>
   <ul id="projects"></ul>
   <div id="tagsec" hidden><div class="sec"><span>Tags</span></div><div id="tags"></div></div>
+  <div id="tplsec" hidden><div class="sec"><span>Vorlagen</span></div><ul id="templates"></ul></div>
   <div class="sec"><span id="listTitle">Einträge</span></div>
   <ul id="list"></ul>
 </aside>
@@ -19,12 +20,17 @@
   <div id="empty" class="empty">Noch keine Einträge. Lege mit <b>+</b> oder ⌘N den ersten an.</div>
   <div id="doc" hidden>
     <div id="preview" hidden></div>
+    <div id="runbar" class="bar" hidden></div>
     <input id="title" placeholder="Titel" autocomplete="off">
     <div id="meta">
       <label>Projekt <select id="metaProject"></select></label>
       <label>Art <select id="metaKind"></select></label>
       <span class="tagedit"><span id="etags"></span><input id="tagInput" list="tagnames" placeholder="+ Tag" autocomplete="off" spellcheck="false"></span>
       <datalist id="tagnames"></datalist>
+      <span id="tplinfo"></span>
+      <span class="grow"></span>
+      <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
+      <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
     </div>
     <div id="toolbar"></div>
     <div id="editor"></div>
@@ -32,8 +38,12 @@
   </div>
   <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
+<section id="run" hidden></section>
 <section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><ol id="revlist"></ol></section>
 <input id="filepick" type="file" multiple hidden>
 <script src="vendor/tiptap.js"></script>
+<script src="calc.js"></script>
+<script src="calcblock.js"></script>
+<script src="run.js"></script>
 <script src="app.js"></script>
 </body></html>

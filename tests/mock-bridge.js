@@ -21,6 +21,23 @@
     backlinks: a => db.entries.filter(e => (db.links[e.id] || []).includes(a.id)).map(e => ({id: e.id, title: e.title, kind: e.kind})),
     titles: () => db.entries.map(e => ({id: e.id, title: e.title})),
     openFile: a => { db.opened.push(a); return true; },
+    templates: () => (db.tpls ||= []).map(t => ({id: t.id, name: t.name, archived: t.archived, ...t.versions.at(-1), updated: t.versions.at(-1).created})),
+    saveTemplate: a => { const e = entry(a.entry); if (!a.name?.trim()) fail('Name der Vorlage fehlt'); db.tpls ||= [];
+      let t = db.tpls.find(x => x.name.toLowerCase() == a.name.trim().toLowerCase());
+      if (!t) { t = {id: db.tpls.length + 1, name: a.name.trim(), archived: 0, versions: []}; db.tpls.push(t); }
+      const l = t.versions.at(-1);
+      if (l && l.content_json == e.draft_json && l.title == e.title && l.kind == e.kind) return {id: t.id, version: l.version, unchanged: true};
+      t.versions.push({version: t.versions.length + 1, title: e.title, kind: e.kind, content_json: e.draft_json, created: now()}); return {id: t.id, version: t.versions.length, unchanged: false}; },
+    templateVersions: a => db.tpls.find(t => t.id == a.id).versions.slice().reverse(),
+    archiveTemplate: a => { db.tpls.find(t => t.id == a.id).archived = a.archived ? 1 : 0; return true; },
+    createFromTemplate: a => { const t = db.tpls.find(x => x.id == a.id); const v = a.version ? t.versions[a.version - 1] : t.versions.at(-1);
+      const id = H.create({title: v.title, kind: v.kind, project: a.project}); Object.assign(entry(id), {draft_json: v.content_json, template_id: t.id, template_version: v.version}); return id; },
+    startRun: a => { db.runs ||= []; const r0 = db.runs.find(r => r.entry_id == a.entry && r.status == 'running'); if (r0) return r0.id;
+      if (!a.steps?.length) fail('Keine Schritte gefunden'); const r = {id: db.runs.length + 1, entry_id: a.entry, started: now(), status: 'running', steps_json: JSON.stringify(a.steps), done: []}; db.runs.push(r); return r.id; },
+    activeRun: a => (db.runs || []).find(r => r.entry_id == a.entry && r.status == 'running') || null,
+    completeStep: a => { const r = db.runs.find(x => x.id == a.run); let d = r.done.find(x => x.step_no == a.step); if (!d) { d = {step_no: a.step, done_at: now(), note: a.note}; r.done.push(d); } return d; },
+    finishRun: a => { const r = db.runs.find(x => x.id == a.run); r.status = a.aborted ? 'aborted' : 'done'; r.finished = now(); return r; },
+    notify: () => { db.notified = (db.notified || 0) + 1; return true; },
     create: a => { const e = {id: db.next++, title: a.title || '', created: now(), updated: now(), draft_json: '', text: '', kind: a.kind || 'experiment', project_id: a.project ?? null}; db.entries.push(e); return e.id; },
     setMeta: a => { const e = entry(a.id); if (a.project != null) e.project_id = a.project || null; if (a.kind) e.kind = a.kind; return true; },
     load: a => ({...entry(a.id), tags: tagsOf(a.id)}),

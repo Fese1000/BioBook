@@ -101,7 +101,7 @@ function makeEditor() {
       TT.TaskList, TT.TaskItem.configure({nested: true}),
       TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'}),
       TT.CharacterCount,
-      FileNode, EntryLink,
+      FileNode, EntryLink, CalcNode,
     ],
     onUpdate: changed,
     onSelectionUpdate: renderToolbar,
@@ -161,6 +161,7 @@ const TOOLS = [
   ['|'],
   ['Datei', 'Bild oder Datei einfügen', () => $('#filepick').click()],
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
+  ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
   ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
   ['|'],
@@ -273,6 +274,54 @@ function addTagFromInput() {
   if (names.length) saveEntryTags([...JSON.parse($('#etags').dataset.names || '[]'), ...names]);
 }
 
+// ---------- Vorlagen ----------
+let templates = [], curTemplate = null;  // curTemplate: {id, version} des offenen Eintrags
+
+async function loadTemplates() {
+  templates = await call('templates');
+  $('#tplsec').hidden = !templates.length;
+  $('#templates').innerHTML = templates.map(t => `<li data-tpl="${t.id}" class="${t.archived ? 'arch' : ''}" title="Neuer Eintrag aus „${esc(t.name)}“ (Version ${t.version})">
+    <span class="n">📋 ${esc(t.name)}</span><button class="ed vchip" data-tplver="${t.id}" title="Ältere Version verwenden">v${t.version}</button>
+    <button class="ed" data-tplarch="${t.id}" title="${t.archived ? 'Wiederherstellen' : 'Archivieren'}">${t.archived ? '↺' : '🗄'}</button></li>`).join('');
+  renderTemplateInfo();
+}
+
+function renderTemplateInfo() {
+  const t = curTemplate && templates.find(x => x.id == curTemplate.id);
+  $('#tplinfo').innerHTML = t ? `aus Vorlage <b>${esc(t.name)}</b> v${curTemplate.version}${t.version > curTemplate.version ? ` <span class="sub">(neueste: v${t.version})</span>` : ''}` : '';
+}
+
+async function saveAsTemplate() {
+  if (!cur) return;
+  await flush();
+  const own = curTemplate && templates.find(x => x.id == curTemplate.id);
+  const name = prompt('Name der Vorlage (gibt es den Namen schon, entsteht eine neue Version)', own?.name || $('#title').value);
+  if (!name?.trim()) return;
+  try {
+    const r = await call('saveTemplate', {name, entry: cur});
+    status(r.unchanged ? `Vorlage „${name.trim()}“ ist schon auf diesem Stand (v${r.version})` : `Vorlage „${name.trim()}“ als Version ${r.version} gespeichert`);
+    await loadTemplates();
+  } catch (e) { alert(e.message); }
+}
+
+async function fromTemplate(id, version) {
+  try {
+    const eid = await call('createFromTemplate', {id, ...(version ? {version} : {}), ...(project > 0 ? {project} : {})});
+    $('#search').value = '';
+    await loadProjects();
+    await refreshList(eid);
+    dirty = true; await flush();  // Text für die Suche speichern
+  } catch (e) { alert(e.message); }
+}
+
+async function pickTemplateVersion(id) {
+  const vs = await call('templateVersions', {id});
+  const v = prompt(`Version wählen:\n${vs.map(x => `v${x.version} vom ${when(x.created)}`).join('\n')}`, String(vs[0].version));
+  if (v == null) return;
+  if (!vs.some(x => x.version == +v)) return alert('Diese Version gibt es nicht.');
+  fromTemplate(id, +v);
+}
+
 // ---------- Einträge ----------
 async function refreshList(selectId) {
   const q = $('#search').value.trim();
@@ -308,6 +357,9 @@ async function open(id) {
   fillMetaProject(String(e.project_id ?? 0));
   $('#metaKind').value = e.kind;
   renderEntryTags(e.tags || []);
+  curTemplate = e.template_id ? {id: e.template_id, version: e.template_version} : null;
+  renderTemplateInfo();
+  if (RUN && RUN.entry != e.id) hideRun();
   editor.commands.setContent(e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '', {emitUpdate: false});
   showBacklinks();
   dirty = changedSinceSnap = false; lastSnap = Date.now();
@@ -315,6 +367,7 @@ async function open(id) {
   updateCounts();
   document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == cur));
   if (!$('#history').hidden) showHistory();
+  updateRunBar();
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
 }
 
@@ -378,6 +431,7 @@ function changed() {
 }
 
 async function flush() {
+  if (!preview) CALC_PENDING.forEach(f => f());  // Rechner-Eingaben übernehmen, die noch im Feld stehen
   clearTimeout(saveTimer);
   if (!cur || !dirty) return;
   dirty = false;
@@ -494,6 +548,27 @@ async function selfTest() {
   ok(t && (await call('list', {tag: t.id})).length == 1, 'Tag-Filter');
   document.querySelector('.ProseMirror a.elink').click(); await sleep(300);
   ok(cur == a, 'Klick auf Verweis öffnet Ziel');
+
+  // Rechner: Eingabe wird übernommen, wenn der Fokus den Block verlässt
+  editor.commands.setContent(''); insertCalc('dilution'); await sleep(50);
+  const c1 = document.querySelector('.calc [data-k="c1"]');
+  c1.focus(); c1.value = '10'; c1.dispatchEvent(new Event('input', {bubbles: true}));
+  document.querySelector('#title').focus(); await sleep(50);
+  ok(editor.getJSON().content.find(n => n.type == 'calc')?.attrs.data.c1.v == '10', 'Rechner übernimmt Eingabe beim Verlassen (Fokus)');
+
+  // Vorlage und Lauf
+  editor.commands.setContent({type: 'doc', content: [{type: 'orderedList', content: ['Ansetzen', '5 min inkubieren', 'Messen'].map(t => ({type: 'listItem', content: [{type: 'paragraph', content: [{type: 'text', text: t}]}]}))}]});
+  changed(); await flush();
+  const tpl = await call('saveTemplate', {name: 'Selbsttest-Vorlage', entry: cur});
+  const fromT = await call('createFromTemplate', {id: tpl.id});
+  await refreshList(fromT);
+  ok(cur == fromT && extractSteps(editor.getJSON()).length == 3, 'Eintrag aus Vorlage mit 3 Schritten');
+  await startRun(); await sleep(100);
+  document.querySelector('[data-rdone]').click(); await sleep(150);
+  ok(!!document.querySelector('[data-rtimer="300"]'), 'Timer für „5 min“ erkannt');
+  window.confirm = () => true;
+  await finishRun(false); await sleep(200);
+  ok(editor.getJSON().content.some(n => n.type == 'table') && !(await call('activeRun', {entry: cur})), 'Lauf beendet, Ablaufprotokoll angehängt');
   return out;
 }
 
@@ -501,7 +576,7 @@ async function selfTest() {
 $('#toolbar').addEventListener('mousedown', e => {
   const b = e.target.closest('[data-tool]'); if (!b) return;
   e.preventDefault();  // Fokus im Editor behalten
-  TOOLS[+b.dataset.tool][2](editor);
+  TOOLS[+b.dataset.tool][2](editor, b);
 });
 $('#list').addEventListener('click', e => { const li = e.target.closest('li'); if (li) open(+li.dataset.id); });
 $('#new').onclick = newEntry;
@@ -522,6 +597,13 @@ $('#projects').addEventListener('click', e => {
   const li = e.target.closest('li'); if (li) selectProject(li.dataset.p);
 });
 $('#newProject').onclick = newProject;
+$('#saveTpl').onclick = saveAsTemplate;
+$('#runBtn').onclick = startRun;
+$('#templates').addEventListener('click', async e => {
+  if (e.target.dataset.tplver) return pickTemplateVersion(+e.target.dataset.tplver);
+  if (e.target.dataset.tplarch) { const t = templates.find(x => x.id == e.target.dataset.tplarch); await call('archiveTemplate', {id: t.id, archived: !t.archived}); return loadTemplates(); }
+  const li = e.target.closest('li[data-tpl]'); if (li) fromTemplate(+li.dataset.tpl);
+});
 $('#tags').addEventListener('click', e => {
   const b = e.target.closest('[data-tag]'); if (!b) return;
   tag = tag == +b.dataset.tag ? null : +b.dataset.tag;  // nochmal klicken hebt den Filter auf
@@ -542,7 +624,7 @@ $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest};
+window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun};
 
 async function start() {
   makeEditor();
@@ -553,6 +635,7 @@ async function start() {
   $('#metaKind').innerHTML = book.kinds.map(k => `<option value="${k}">${KINDS[k] || k}</option>`).join('');
   await loadProjects();
   await loadTags();
+  await loadTemplates();
   await refreshList();
   const first = $('#list li'); if (first) await open(+first.dataset.id);
 }

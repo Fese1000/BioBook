@@ -49,6 +49,55 @@ a.elink:hover{text-decoration:underline}
 .fprev pre{margin:0;font:12px/1.5 var(--mono);white-space:pre-wrap}
 .fprev table{border-collapse:collapse;font-size:12px}.fprev td,.fprev th{border:1px solid var(--line);padding:2px 6px;text-align:left}
 .sub{color:var(--mut);font-size:12px}
+/* Vorlagen und Ausführungsmodus */
+.grow{flex:1}
+#templates{list-style:none;margin:0;padding:0 6px 6px;max-height:22vh;overflow:auto}
+#templates li{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;cursor:pointer}
+#templates li:hover{background:var(--sel)}#templates li.arch{opacity:.55;font-style:italic}
+#templates li .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#templates li .ed{visibility:hidden;border:0;background:none;color:inherit;cursor:pointer;padding:0 2px;font-size:12px}
+#templates li .vchip{visibility:visible;font-size:11px;opacity:.7}#templates li:hover .ed{visibility:visible}
+#tplinfo b{color:var(--ink)}
+.bar{display:flex;gap:10px;align-items:center;background:var(--sel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+#run{position:fixed;inset:0;z-index:30;background:var(--bg);display:flex;flex-direction:column;padding:16px 24px}
+.rhead{display:flex;gap:12px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line);font-size:14px}
+.rhead span{color:var(--mut);font-size:13px}
+#timers{display:flex;flex-wrap:wrap;gap:8px;padding:10px 0;min-height:12px}
+.timer{display:inline-flex;align-items:center;gap:8px;background:var(--sel);border:1px solid var(--line);border-radius:16px;padding:4px 6px 4px 12px;font:600 15px/1.2 var(--mono)}
+.timer.over{background:#c0392b;color:#fff;border-color:#c0392b;animation:blink 1s steps(2) infinite}
+.timer button{border:0;background:none;color:inherit;cursor:pointer;font-size:15px}
+@keyframes blink{50%{opacity:.6}}
+.rmain{flex:1;display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:28px;min-height:0}
+.rlist{overflow:auto;margin:0;padding:0 0 0 22px;font-size:13.5px}
+.rlist li{padding:6px 8px;border-radius:6px;cursor:pointer;margin-bottom:2px}.rlist li:hover{background:var(--sel)}
+.rlist li.cur{background:var(--acc);color:var(--accfg)}.rlist li.done span{text-decoration:line-through;opacity:.7}
+.rlist li small{float:right;opacity:.75;margin-left:8px}
+.rstep{display:flex;flex-direction:column;justify-content:center;gap:22px;max-width:760px}
+.rnum{color:var(--mut);font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+.rtext{font:600 32px/1.3 var(--serif)}
+#rnote{font:16px -apple-system,system-ui;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.rbtns,.rnav{display:flex;gap:12px;flex-wrap:wrap}
+.btn.big{font-size:18px;padding:12px 22px;border-radius:10px}.btn.big small{opacity:.7;font-size:12px;margin-left:6px}
+.rdone{font-size:16px;color:var(--acc)}
+@media(max-width:900px){.rmain{grid-template-columns:1fr}.rlist{max-height:25vh}.rtext{font-size:24px}}
+/* Rechner-Blöcke */
+.calc{border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:8px;margin:12px 0;padding:10px 12px;background:var(--side);font-size:13px}
+.calc.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.chead{display:flex;justify-content:space-between;font-weight:600;margin-bottom:8px}
+.calc .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px;line-height:1;padding:0 4px}
+.cgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}
+.cf{display:flex;align-items:center;gap:6px}.cf span{flex:0 0 112px;color:var(--mut)}
+.calc input,.calc select{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px;min-width:0}
+.cf input{flex:1;width:70px}.cf.res input{border-color:var(--acc);font-weight:600}
+.calc input::placeholder{color:var(--acc);opacity:.9}
+.cres{margin-top:8px;padding:5px 8px;border-radius:5px;font-size:12.5px}.cres.ok{background:var(--sel)}.cres.err{color:#c0392b;background:rgba(192,57,43,.08)}
+.cmm-head{display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:8px}.cmm-head input{width:60px}
+.calc table.cmm{margin:4px 0 6px;width:100%;table-layout:auto}
+.calc table.cmm td,.calc table.cmm th{border:0;border-bottom:1px solid var(--line);padding:3px 6px;background:none}
+.calc table.cmm td input{width:100%}.calc .num{text-align:right;font-variant-numeric:tabular-nums}
+.calc tr.water td{color:var(--mut)}.calc tr.sum td{font-weight:600}
+.calc .btn{font-size:12px;padding:2px 8px}
+@media(max-width:900px){.cgrid{grid-template-columns:1fr}}
 #meta select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 4px;margin-left:4px}
 #preview{position:sticky;top:-28px;z-index:3;display:flex;gap:10px;align-items:center;background:var(--sel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 #preview .grow{flex:1}
