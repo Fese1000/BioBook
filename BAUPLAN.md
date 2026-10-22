@@ -101,7 +101,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 | --- | --- | --- |
 | M0 ✅ | Prototyp Editor in WKWebView + SQLite-Speichern | 5.000 Wörter + 20 Bilder ohne Ruckeln; Entscheidung Editor. **Erledigt 2026-10-22:** WebKit, Tippen Median 1 ms / max 2 ms, Laden 15 ms → Plan A (TipTap) |
 | M1 ✅ | Datenmodell, Projekte/Einträge, Revisionen, Speichern/Öffnen | Eintrag anlegen, ändern, Verlauf sehen, App neu starten ohne Datenverlust. **Erledigt 2026-10-22:** mehrere Bücher (Neu/Öffnen/Doppelklick), Projekte, Art, alte Revisionen ansehen/wiederherstellen, Migration mit Sicherung |
-| M2 | Suche, Tags, Verweise, Anhänge | Suche < 100 ms bei 10.000 Testeinträgen |
+| M2 ✅ | Suche, Tags, Verweise, Anhänge | Suche < 100 ms bei 10.000 Testeinträgen. **Erledigt 2026-10-22:** Suche 0,1 ms bei 10.000; Tags, Verweise mit [[ und Rückverweise, Dateianhänge mit Vorschau |
 | M3 | Vorlagen, Rechner-Blöcke, Ausführungsmodus mit Timern | Mastermix-Vorlage anlegen, als Lauf ausführen, Schritte mit Zeitstempel im Eintrag; Rechner gegen Handrechnung getestet |
 | M4 | Signieren, Hash-Kette, Zeugen-PDF, Touch-ID-Sperre | Manipulierter Eintrag wird erkannt (Test); Zeugen-PDF trägt den Hash und lässt sich wieder anhängen |
 | M5 | Bilder: iPhone-Fotos, Annotation, OCR-Suche; Rohdaten verlinken | Gelbild mit Spurenbelegung; Text aus gescanntem Protokoll ist suchbar; geänderte Rohdatei wird gemeldet |

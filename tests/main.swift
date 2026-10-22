@@ -55,6 +55,24 @@ try s.updateProject(id: p1, name: "Klonierung alt", archived: true)
 check((try s.projects()).first?["archived"] as? Int == 1, "Projekt archiviert")
 check((try s.revision(id: id, no: 2))["title"] as? String == "PCR Test 2", "Alte Revision lesbar")
 
+// M2: Tags, Verweise, Dateien je Eintrag
+check(try s.setTags(id: id, names: ["#PCR", " Klonierung ", "pcr", "", "a,b"]) == ["Klonierung", "PCR"], "Tags bereinigt, doppelt/leer/mit Komma verworfen")
+check((try s.tags()).count == 2, "Tag-Liste")
+check((try s.search("klonier")).contains { $0["id"] as? Int == id }, "Suche findet Eintrag über Tag")
+let tagId = (try s.tags()).first { $0["name"] as? String == "PCR" }!["id"] as! Int
+check((try s.list(tag: tagId)).map { $0["id"] as! Int } == [id], "Liste nach Tag gefiltert")
+check((try s.list(tag: tagId)).first?["tags"] as? String == "Klonierung, PCR", "Liste zeigt Tags")
+_ = try s.setTags(id: id, names: ["Klonierung"])
+check((try s.tags()).count == 1, "Ungenutzter Tag wird gelöscht")
+check((try? s.setTags(id: 999, names: ["x"])) == nil, "Tags für unbekannten Eintrag abgelehnt")
+_ = try s.saveDraft(id: e2, title: "Gel", json: "{}", text: "siehe PCR", links: [id, id, e2, 999], files: [sha, String(repeating: "a", count: 64)])
+let bl = try s.backlinks(id: id)
+check(bl.count == 1 && bl[0]["id"] as? Int == e2, "Rückverweis; doppelte, eigene und unbekannte Verweise ignoriert")
+check(try s.backlinks(id: e2).isEmpty, "Kein Verweis auf sich selbst")
+_ = try s.saveDraft(id: e2, title: "Gel", json: "{}", text: "ohne Verweis")
+check(try s.backlinks(id: id).isEmpty, "Verweis entfernt, wenn er aus dem Text verschwindet")
+check((try s.titles()).count >= 2, "Titelliste für Verweise")
+
 // Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
 let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")
 defer { try? FileManager.default.removeItem(at: old) }

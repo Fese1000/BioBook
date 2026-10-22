@@ -9,9 +9,88 @@ const SNAPSHOT_MS = 5 * 60 * 1000;  // spätestens alle 5 Minuten eine unveränd
 const KINDS = {experiment: 'Experiment', note: 'Notiz', protocol: 'Protokoll'};
 let editor = null, cur = null, saveTimer = null, dirty = false, changedSinceSnap = false, lastSnap = 0;
 let projects = [], project = null;  // project: null = alle, 0 = ohne Projekt, sonst ID
+let tags = [], tag = null;          // tag: gewählter Tag-Filter (ID) oder null
 let preview = null;                 // angezeigte alte Revision (nur lesen) oder null
 
 // ---------- Editor ----------
+const fmtSize = n => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const PREVIEW = {pdf: /^application\/pdf$/, table: /^text\/(csv|tab-separated-values)$/, text: /^(text\/|application\/json$)/};
+const fileIcon = m => /pdf/.test(m) ? '📄' : /csv|spreadsheet|excel|tab-separated/.test(m) ? '📊' : /zip|compressed/.test(m) ? '🗜' : /text|json/.test(m) ? '📝' : '📎';
+
+// Datei-Anhang als eigener Block: Karte mit Öffnen und Vorschau (PDF, CSV/TSV, Text)
+const FileNode = TT.Node.create({
+  name: 'file', group: 'block', atom: true, draggable: true,
+  addAttributes() {
+    const a = k => ({default: null, parseHTML: el => el.getAttribute('data-' + k), renderHTML: v => ({['data-' + k]: v[k]})});
+    return {sha: a('sha'), name: a('name'), mime: a('mime'), size: {...a('size'), parseHTML: el => +el.getAttribute('data-size')}};
+  },
+  parseHTML: () => [{tag: 'div[data-file]'}],
+  renderHTML: ({HTMLAttributes}) => ['div', TT.mergeAttributes({'data-file': ''}, HTMLAttributes)],
+  addNodeView: () => ({node}) => {
+    const {sha, name, mime, size} = node.attrs;
+    const kind = Object.keys(PREVIEW).find(k => PREVIEW[k].test(mime || ''));
+    const dom = document.createElement('div');
+    dom.className = 'filecard'; dom.contentEditable = 'false';
+    dom.innerHTML = `<div class="fhead"><span class="ficon">${fileIcon(mime || '')}</span><span class="fname">${esc(name)}</span>
+      <span class="fsize">${fmtSize(size || 0)}</span>${kind ? '<button class="btn" data-fprev>Vorschau</button>' : ''}<button class="btn" data-fopen>Öffnen</button></div><div class="fprev" hidden></div>`;
+    dom.addEventListener('click', async e => {
+      if (e.target.dataset.fopen !== undefined) return call('openFile', {sha256: sha, name}).catch(err => alert(err.message));
+      if (e.target.dataset.fprev === undefined) return;
+      const box = dom.querySelector('.fprev');
+      box.hidden = !box.hidden;
+      e.target.textContent = box.hidden ? 'Vorschau' : 'Vorschau schließen';
+      if (box.hidden || box.dataset.done) return;
+      box.dataset.done = '1';
+      const url = `/files/${sha}`;  // gleicher Ursprung wie die Oberfläche, sonst blockiert WebKit fetch
+      if (kind == 'pdf') { box.innerHTML = `<iframe src="${url}" title="${esc(name)}"></iframe>`; return; }
+      const text = await (await fetch(url)).text();
+      if (kind == 'table') {
+        const sep = /tab-separated/.test(mime) ? '\t' : (text.split('\n')[0].split(';').length > text.split('\n')[0].split(',').length ? ';' : ',');
+        const rows = text.split(/\r?\n/).filter(Boolean).slice(0, 31).map(l => l.split(sep));
+        box.innerHTML = `<table>${rows.map((r, i) => `<tr>${r.map(c => i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`).join('')}</tr>`).join('')}</table>`
+          + (text.split(/\r?\n/).filter(Boolean).length > 31 ? '<p class="sub">Nur die ersten 30 Zeilen.</p>' : '');
+      } else box.innerHTML = `<pre>${esc(text.slice(0, 20000))}${text.length > 20000 ? '\n…' : ''}</pre>`;
+    });
+    return {dom};
+  },
+});
+
+// Verweis auf einen anderen Eintrag: „[[“ tippen, Eintrag wählen
+const EntryLink = TT.Mention.configure({
+  renderText: ({node}) => `[[${node.attrs.label}]]`,
+  renderHTML: ({node}) => ['a', {class: 'elink', href: '#', 'data-entry': node.attrs.id, title: 'Eintrag öffnen'}, `↗ ${node.attrs.label}`],
+  suggestion: {
+    char: '[[', allowSpaces: true,
+    items: async ({query}) => {
+      const rows = query ? await call('search', {q: query}) : await call('list');
+      return rows.filter(r => r.id != cur).slice(0, 8).map(r => ({id: String(r.id), label: r.title || 'Ohne Titel', kind: r.kind}));
+    },
+    render: () => {
+      let el, sel = 0, items = [], cmd;
+      const draw = () => {
+        el.innerHTML = items.length ? items.map((it, i) => `<div class="opt ${i == sel ? 'on' : ''}" data-i="${i}">${esc(it.label)}<small>${KINDS[it.kind] || ''}</small></div>`).join('')
+          : '<div class="none">Kein Eintrag gefunden</div>';
+      };
+      const place = rect => { const r = rect?.(); if (r) { el.style.left = `${r.left}px`; el.style.top = `${r.bottom + 4}px`; } };
+      const take = p => { items = p.items; cmd = p.command; sel = 0; draw(); place(p.clientRect); };
+      return {
+        onStart: p => {
+          el = document.createElement('div'); el.className = 'suggest'; document.body.appendChild(el);
+          el.addEventListener('mousedown', e => { const o = e.target.closest('[data-i]'); if (o) { e.preventDefault(); cmd(items[+o.dataset.i]); } });
+          take(p);
+        },
+        onUpdate: take,
+        onKeyDown: ({event: e}) => {
+          if (e.key == 'ArrowDown' || e.key == 'ArrowUp') { sel = (sel + (e.key == 'ArrowDown' ? 1 : items.length - 1)) % Math.max(items.length, 1); draw(); return true; }
+          if ((e.key == 'Enter' || e.key == 'Tab') && items[sel]) { cmd(items[sel]); return true; }
+          return false;
+        },
+        onExit: () => el?.remove(),
+      };
+    },
+  },
+});
+
 function makeEditor() {
   editor = new TT.Editor({
     element: $('#editor'),
@@ -20,21 +99,46 @@ function makeEditor() {
       TT.Image,
       TT.TableKit.configure({table: {resizable: true}}),
       TT.TaskList, TT.TaskItem.configure({nested: true}),
-      TT.Placeholder.configure({placeholder: 'Schreib los … Bilder per Drag & Drop oder Einfügen.'}),
+      TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'}),
       TT.CharacterCount,
+      FileNode, EntryLink,
     ],
     onUpdate: changed,
     onSelectionUpdate: renderToolbar,
     onTransaction: renderToolbar,
     editorProps: {
-      handlePaste: (view, e) => insertImages([...(e.clipboardData?.files || [])]),
+      handlePaste: (view, e) => insertFiles([...(e.clipboardData?.files || [])]),
       handleDrop: (view, e) => {
         const files = [...(e.dataTransfer?.files || [])];
         const pos = view.posAtCoords({left: e.clientX, top: e.clientY})?.pos;
-        return insertImages(files, pos);
+        return insertFiles(files, pos);
       },
     },
   });
+}
+
+/// Verweise und Dateien im Dokument einsammeln (für Rückverweise und Dateiliste im Speicher)
+function collectRefs(doc) {
+  const links = new Set(), files = new Set();
+  const walk = n => {
+    if (n.type == 'mention' && n.attrs?.id) links.add(+n.attrs.id);
+    if (n.type == 'file' && n.attrs?.sha) files.add(n.attrs.sha);
+    if (n.type == 'image') { const m = /^lab:\/\/files\/([0-9a-f]{64})$/.exec(n.attrs?.src || ''); if (m) files.add(m[1]); }
+    (n.content || []).forEach(walk);
+  };
+  walk(doc);
+  return {links: [...links], files: [...files]};
+}
+
+/// Verweis-Beschriftungen auf die aktuellen Titel bringen (Titel können sich geändert haben)
+async function refreshLinkLabels(doc) {
+  const titles = new Map((await call('titles')).map(t => [String(t.id), t.title || 'Ohne Titel']));
+  const walk = n => {
+    if (n.type == 'mention' && n.attrs) n.attrs.label = titles.get(String(n.attrs.id)) ?? `${n.attrs.label} (gelöscht)`;
+    (n.content || []).forEach(walk);
+  };
+  walk(doc);
+  return doc;
 }
 
 const TOOLS = [
@@ -55,7 +159,8 @@ const TOOLS = [
   ['+ Spalte', 'Spalte rechts', e => e.chain().focus().addColumnAfter().run(), null, e => e.isActive('table')],
   ['− Tabelle', 'Tabelle löschen', e => e.chain().focus().deleteTable().run(), null, e => e.isActive('table')],
   ['|'],
-  ['Bild', 'Bild einfügen', () => $('#filepick').click()],
+  ['Datei', 'Bild oder Datei einfügen', () => $('#filepick').click()],
+  ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
   ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
   ['|'],
@@ -69,18 +174,22 @@ function renderToolbar() {
     : show && !show(editor) ? '' : `<button data-tool="${i}" title="${esc(title)}" class="${active && active(editor) ? 'on' : ''}">${esc(l)}</button>`).join('');
 }
 
-// ---------- Bilder ----------
-function insertImages(files, pos) {
-  const imgs = files.filter(f => f.type.startsWith('image/'));
-  if (!imgs.length) return false;  // kein Bild: Editor macht das Übliche
+// ---------- Bilder und Dateien ----------
+const MAX_FILE = 50 * 1048576;  // größere Rohdaten werden ab M5 verlinkt statt kopiert
+
+function insertFiles(files, pos) {
+  if (!files.length || preview) return false;  // keine Datei: Editor macht das Übliche
   (async () => {
-    for (const f of imgs) {
+    for (const f of files) {
+      if (f.size > MAX_FILE) { alert(`„${f.name}“ ist größer als 50 MB und wurde nicht übernommen.`); continue; }
+      status(`Speichert „${f.name}“ …`);
       const sha = await upload(f);
-      const node = {type: 'image', attrs: {src: `lab://files/${sha}`, alt: f.name}};
+      const node = f.type.startsWith('image/') ? {type: 'image', attrs: {src: `lab://files/${sha}`, alt: f.name}}
+        : {type: 'file', attrs: {sha, name: f.name, mime: f.type || 'application/octet-stream', size: f.size}};
       if (pos != null) { editor.chain().focus().insertContentAt(pos, node).run(); pos += 1; }
       else editor.chain().focus().insertContent(node).run();
     }
-  })().catch(e => alert('Bild konnte nicht gespeichert werden: ' + e.message));
+  })().catch(e => alert('Datei konnte nicht gespeichert werden: ' + e.message));
   return true;
 }
 
@@ -138,17 +247,53 @@ async function archiveProject(id) {
   await loadProjects();
 }
 
+// ---------- Tags ----------
+async function loadTags() {
+  tags = await call('tags');
+  if (tag != null && !tags.some(t => t.id == tag)) tag = null;  // Tag gibt es nicht mehr
+  $('#tagsec').hidden = !tags.length;
+  $('#tags').innerHTML = tags.map(t => `<button class="tagchip ${t.id == tag ? 'on' : ''}" data-tag="${t.id}">#${esc(t.name)} <small>${t.entries}</small></button>`).join('');
+  $('#tagnames').innerHTML = tags.map(t => `<option value="${esc(t.name)}">`).join('');
+}
+
+function renderEntryTags(list) {
+  $('#etags').innerHTML = list.map(n => `<span class="tagchip">#${esc(n)} <button data-untag="${esc(n)}" title="Tag entfernen">×</button></span>`).join('');
+  $('#etags').dataset.names = JSON.stringify(list);
+}
+
+async function saveEntryTags(names) {
+  try { renderEntryTags(await call('setTags', {id: cur, names})); } catch (e) { return alert(e.message); }
+  await loadTags();
+  await refreshList();
+}
+
+function addTagFromInput() {
+  const inp = $('#tagInput'), names = inp.value.split(',').map(s => s.trim().replace(/^#+/, '')).filter(Boolean);
+  inp.value = '';
+  if (names.length) saveEntryTags([...JSON.parse($('#etags').dataset.names || '[]'), ...names]);
+}
+
 // ---------- Einträge ----------
 async function refreshList(selectId) {
   const q = $('#search').value.trim();
-  let rows = q ? await call('search', {q}) : await call('list', project == null ? {} : {project});
+  const filter = {...(project == null ? {} : {project}), ...(tag == null ? {} : {tag})};
+  let rows = q ? await call('search', {q}) : await call('list', filter);
   if (q && project != null) rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
+  if (q && tag != null) { const n = tags.find(t => t.id == tag)?.name.toLowerCase(); rows = rows.filter(r => (r.tags || '').toLowerCase().split(', ').includes(n)); }
   $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''}">
     <div class="t">${esc(r.title || 'Ohne Titel')}</div>
     <div class="m">${KINDS[r.kind] || ''} · ${when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
+    ${r.tags ? `<div class="m">${r.tags.split(', ').map(t => '#' + esc(t)).join(' ')}</div>` : ''}
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
-  $('#empty').hidden = !!(rows.length || q || cur || project != null);
+  $('#listTitle').textContent = [project == null ? 'Einträge' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
+  $('#empty').hidden = !!(rows.length || q || cur || project != null || tag != null);
   if (selectId) await open(selectId);
+}
+
+async function showBacklinks() {
+  const b = await call('backlinks', {id: cur});
+  $('#backlinks').hidden = !b.length;
+  $('#backlinks').innerHTML = `<h4>Verweise auf diesen Eintrag</h4>` + b.map(r => `<a href="#" class="elink" data-entry="${r.id}">↗ ${esc(r.title || 'Ohne Titel')}</a>`).join(' ');
 }
 
 async function open(id) {
@@ -162,7 +307,9 @@ async function open(id) {
   $('#title').value = e.title;
   fillMetaProject(String(e.project_id ?? 0));
   $('#metaKind').value = e.kind;
-  editor.commands.setContent(e.draft_json ? JSON.parse(e.draft_json) : '', {emitUpdate: false});
+  renderEntryTags(e.tags || []);
+  editor.commands.setContent(e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '', {emitUpdate: false});
+  showBacklinks();
   dirty = changedSinceSnap = false; lastSnap = Date.now();
   status('Gespeichert');
   updateCounts();
@@ -203,7 +350,7 @@ async function showRevision(no) {
   const r = await call('revision', {id: cur, no});
   setPreview(r);
   $('#title').value = r.title;
-  editor.commands.setContent(JSON.parse(r.content_json), {emitUpdate: false});
+  editor.commands.setContent(await refreshLinkLabels(JSON.parse(r.content_json)), {emitUpdate: false});
   updateCounts();
 }
 
@@ -236,7 +383,8 @@ async function flush() {
   dirty = false;
   status('Speichert …');
   try {
-    await call('save', {id: cur, title: $('#title').value, json: JSON.stringify(editor.getJSON()), text: editor.getText()});
+    const doc = editor.getJSON();
+    await call('save', {id: cur, title: $('#title').value, json: JSON.stringify(doc), text: editor.getText(), ...collectRefs(doc)});
     status('Gespeichert');
     if (Date.now() - lastSnap > SNAPSHOT_MS && changedSinceSnap) await snapshot(true);
     const li = document.querySelector(`#list li[data-id="${cur}"] .t`);
@@ -323,6 +471,32 @@ async function perfTest() {
   alert('Leistungstest\n\n' + out.join('\n'));
 }
 
+// ---------- Selbsttest in der echten App (--selftest) ----------
+async function selfTest() {
+  const out = [], ok = (c, what) => out.push(`${c ? 'ok  ' : 'FAIL'} ${what}`), sleep = ms => new Promise(r => setTimeout(r, ms));
+  const a = await call('create', {title: 'Selbsttest Ziel'}), b = await call('create', {title: 'Selbsttest Quelle'});
+  await refreshList(b);
+  const csv = 'Probe;Wert\nA1;42,7\nA2;38,1\n';
+  const sha = await upload(new File([csv], 'werte.csv', {type: 'text/csv'}));
+  ok(await (await fetch(`/files/${sha}`)).text() == csv, 'Anhang über /files lesbar (fetch)');
+  const img = await new Promise(r => { const c = document.createElement('canvas'); c.width = c.height = 8; c.toBlob(r, 'image/png'); });
+  const isha = await upload(img, 'punkt.png');
+  ok(await new Promise(r => { const i = new Image(); i.onload = () => r(i.width == 8); i.onerror = () => r(false); i.src = `lab://files/${isha}`; }), 'Bild über lab://files ladbar');
+  editor.commands.setContent({type: 'doc', content: [
+    {type: 'paragraph', content: [{type: 'text', text: 'siehe '}, {type: 'mention', attrs: {id: String(a), label: 'x'}}]},
+    {type: 'file', attrs: {sha, name: 'werte.csv', mime: 'text/csv', size: csv.length}}]});
+  changed(); await flush();
+  document.querySelector('.filecard [data-fprev]').click(); await sleep(300);
+  ok(document.querySelectorAll('.fprev tr').length == 3, 'CSV-Vorschau zeigt 3 Zeilen');
+  ok((await call('backlinks', {id: a})).some(r => r.id == b), 'Rückverweis gespeichert');
+  await call('setTags', {id: b, names: ['selbsttest']});
+  const t = (await call('tags')).find(x => x.name == 'selbsttest');
+  ok(t && (await call('list', {tag: t.id})).length == 1, 'Tag-Filter');
+  document.querySelector('.ProseMirror a.elink').click(); await sleep(300);
+  ok(cur == a, 'Klick auf Verweis öffnet Ziel');
+  return out;
+}
+
 // ---------- Ereignisse ----------
 $('#toolbar').addEventListener('mousedown', e => {
   const b = e.target.closest('[data-tool]'); if (!b) return;
@@ -335,7 +509,7 @@ let searchTimer;
 $('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => refreshList(), 120); });
 $('#title').addEventListener('input', changed);
 $('#title').addEventListener('keydown', e => { if (e.key == 'Enter') { e.preventDefault(); editor.commands.focus('start'); } });
-$('#filepick').addEventListener('change', e => { insertImages([...e.target.files]); e.target.value = ''; });
+$('#filepick').addEventListener('change', e => { insertFiles([...e.target.files]); e.target.value = ''; });
 $('#histBtn').onclick = () => { const h = $('#history'); h.hidden = !h.hidden; if (!h.hidden) showHistory(); };
 $('#revlist').addEventListener('click', e => { const li = e.target.closest('li'); if (li && cur) showRevision(li.value); });
 $('#preview').addEventListener('click', e => {
@@ -348,12 +522,27 @@ $('#projects').addEventListener('click', e => {
   const li = e.target.closest('li'); if (li) selectProject(li.dataset.p);
 });
 $('#newProject').onclick = newProject;
+$('#tags').addEventListener('click', e => {
+  const b = e.target.closest('[data-tag]'); if (!b) return;
+  tag = tag == +b.dataset.tag ? null : +b.dataset.tag;  // nochmal klicken hebt den Filter auf
+  loadTags().then(() => refreshList());
+});
+$('#etags').addEventListener('click', e => {
+  const n = e.target.dataset.untag; if (n == null) return;
+  saveEntryTags(JSON.parse($('#etags').dataset.names || '[]').filter(x => x != n));
+});
+$('#tagInput').addEventListener('keydown', e => { if (e.key == 'Enter' || e.key == ',') { e.preventDefault(); addTagFromInput(); } });
+$('#tagInput').addEventListener('change', addTagFromInput);  // Auswahl aus der Vorschlagsliste
+// Verweise im Text und Rückverweise öffnen den verlinkten Eintrag
+for (const sel of ['#editor', '#backlinks']) {
+  $(sel).addEventListener('click', e => { const a = e.target.closest('a.elink'); if (a) { e.preventDefault(); open(+a.dataset.entry); } });
+}
 $('#metaProject').addEventListener('change', e => setMeta({project: +e.target.value}));
 $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest};
+window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest};
 
 async function start() {
   makeEditor();
@@ -363,6 +552,7 @@ async function start() {
   $('#book').title = `${book.path}\nAnderes Laborbuch: ⌘O`;
   $('#metaKind').innerHTML = book.kinds.map(k => `<option value="${k}">${KINDS[k] || k}</option>`).join('');
   await loadProjects();
+  await loadTags();
   await refreshList();
   const first = $('#list li'); if (first) await open(+first.dataset.id);
 }

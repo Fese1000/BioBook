@@ -24,7 +24,31 @@ aside{background:var(--side);border-right:1px solid var(--line);display:flex;fle
 #list{list-style:none;margin:0;padding:0 6px 12px;overflow:auto;flex:1}
 #list li{padding:7px 10px;border-radius:6px;cursor:pointer;margin-bottom:1px}
 #list li:hover{background:var(--sel)}#list li.cur{background:var(--acc);color:var(--accfg)}
-#meta{display:flex;gap:16px;font-size:12.5px;color:var(--mut);margin-bottom:8px}
+#meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:12.5px;color:var(--mut);margin-bottom:8px}
+.tagedit{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px}
+#tagInput{width:90px;border:0;border-bottom:1px dashed var(--line);background:none;color:var(--ink);font:inherit;outline:none;padding:1px 2px}
+.tagchip{display:inline-flex;align-items:center;gap:3px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:0 8px;font:12px/20px -apple-system,system-ui;cursor:pointer}
+.tagchip small{opacity:.6}.tagchip.on{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+.tagchip button{border:0;background:none;color:var(--mut);cursor:pointer;padding:0 0 0 2px;font-size:13px;line-height:1}
+#etags .tagchip{cursor:default}
+#tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 14px 8px;max-height:18vh;overflow:auto}
+#backlinks{border-top:1px solid var(--line);margin-top:28px;padding-top:12px;font-size:13px}
+#backlinks h4{margin:0 0 6px;font:600 12px -apple-system,system-ui;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+a.elink{color:var(--acc);background:var(--sel);border-radius:4px;padding:0 5px;text-decoration:none;white-space:nowrap;cursor:pointer}
+a.elink:hover{text-decoration:underline}
+.suggest{position:fixed;z-index:20;min-width:240px;max-width:420px;background:var(--bg);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:4px;font-size:13px}
+.suggest .opt{display:flex;justify-content:space-between;gap:12px;padding:5px 9px;border-radius:5px;cursor:pointer}
+.suggest .opt small{color:var(--mut)}.suggest .opt.on{background:var(--acc);color:var(--accfg)}.suggest .opt.on small{color:inherit}
+.suggest .none{padding:5px 9px;color:var(--mut)}
+.filecard{border:1px solid var(--line);border-radius:8px;margin:10px 0;background:var(--side);user-select:none}
+.filecard.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.fhead{display:flex;align-items:center;gap:10px;padding:8px 10px}
+.ficon{font-size:20px}.fname{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fsize{color:var(--mut);font-size:12px}
+.fprev{border-top:1px solid var(--line);padding:8px;max-height:520px;overflow:auto;background:var(--bg);border-radius:0 0 8px 8px}
+.fprev iframe{width:100%;height:500px;border:0}
+.fprev pre{margin:0;font:12px/1.5 var(--mono);white-space:pre-wrap}
+.fprev table{border-collapse:collapse;font-size:12px}.fprev td,.fprev th{border:1px solid var(--line);padding:2px 6px;text-align:left}
+.sub{color:var(--mut);font-size:12px}
 #meta select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 4px;margin-left:4px}
 #preview{position:sticky;top:-28px;z-index:3;display:flex;gap:10px;align-items:center;background:var(--sel);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
 #preview .grow{flex:1}

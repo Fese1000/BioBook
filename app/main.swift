@@ -12,12 +12,14 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ w: WKWebView, start task: WKURLSchemeTask) {
         guard let url = task.request.url else { return }
         var file: URL?, mime = "application/octet-stream"
-        if url.host == "app" {
+        // Anhänge: lab://files/<sha> (Bilder im Text) und lab://app/files/<sha> (gleicher Ursprung wie die Oberfläche, für fetch)
+        let filesPath = url.host == "app" && url.path.hasPrefix("/files/")
+        if url.host == "app" && !filesPath {
             let rel = url.path == "/" || url.path.isEmpty ? "index.html" : String(url.path.dropFirst())
             let f = web.appendingPathComponent(rel).standardizedFileURL
             if f.path.hasPrefix(web.standardizedFileURL.path + "/") { file = f }
             mime = ["html": "text/html", "js": "text/javascript", "css": "text/css", "svg": "image/svg+xml", "png": "image/png"][f.pathExtension] ?? mime
-        } else if url.host == "files", let s = store() {
+        } else if url.host == "files" || filesPath, let s = store() {
             let sha = url.lastPathComponent
             if sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil { file = s.fileURL(sha); mime = s.mime(sha) }
         }
@@ -138,10 +140,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
         let a = NSAlert(); a.messageText = title; a.informativeText = text; a.runModal()
     }
 
-    /// `--perftest`: Leistungstest in der echten WebView ausführen, Ergebnis ausgeben, beenden (M0-Abnahme ohne Bedienung).
+    /// `--perftest` / `--selftest`: Test in der echten WebView ausführen, Ergebnis ausgeben, beenden (Abnahme ohne Bedienung).
     func webView(_ w: WKWebView, didFinish n: WKNavigation!) {
-        guard CommandLine.arguments.contains("--perftest") else { return }
-        w.callAsyncJavaScript("await app.perfTest(); return window.perfResult.join('\\n')", arguments: [:], in: nil, in: .page) { r in
+        let args = CommandLine.arguments
+        let js = args.contains("--perftest") ? "await app.perfTest(); return window.perfResult.join('\\n')"
+            : args.contains("--selftest") ? "await new Promise(r => setTimeout(r, 300)); return (await app.selfTest()).join('\\n')" : nil
+        guard let js else { return }
+        w.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { r in
             switch r {
             case .success(let v): print(v as? String ?? "")
             case .failure(let e): print("Fehler: \(e)")
@@ -169,7 +174,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
             case "updateProject":
                 try s.updateProject(id: try int("id"), name: a["name"] as? String, archived: a["archived"] as? Bool)
                 replyHandler(true, nil)
-            case "list": replyHandler(try s.list(project: a["project"] as? Int), nil)
+            case "list": replyHandler(try s.list(project: a["project"] as? Int, tag: a["tag"] as? Int), nil)
+            case "tags": replyHandler(try s.tags(), nil)
+            case "setTags": replyHandler(try s.setTags(id: try int("id"), names: a["names"] as? [String] ?? []), nil)
+            case "backlinks": replyHandler(try s.backlinks(id: try int("id")), nil)
+            case "titles": replyHandler(try s.titles(), nil)
+            case "openFile":
+                // Anhänge liegen nach Prüfsumme ohne Endung; zum Öffnen eine Kopie mit Originalnamen anlegen
+                let sha = try str("sha256")
+                guard sha.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { throw StoreError.invalid("Ungültige Datei") }
+                let src = s.fileURL(sha)
+                guard FileManager.default.fileExists(atPath: src.path) else { throw StoreError.invalid("Datei fehlt im Laborbuch") }
+                var name = URL(fileURLWithPath: (a["name"] as? String) ?? "Anhang").lastPathComponent
+                if name.isEmpty || name.hasPrefix(".") { name = "Anhang" + name }
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Laborbuch/\(sha.prefix(16))")
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let dst = dir.appendingPathComponent(name)
+                try? FileManager.default.removeItem(at: dst)
+                try FileManager.default.copyItem(at: src, to: dst)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: dst.path)  // Kopie schreibgeschützt: Original bleibt unverändert
+                NSWorkspace.shared.open(dst)
+                replyHandler(true, nil)
             case "create": replyHandler(try s.create(title: (a["title"] as? String) ?? "", project: a["project"] as? Int,
                                                      kind: (a["kind"] as? String) ?? "experiment"), nil)
             case "setMeta":
@@ -177,13 +202,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKSc
                 replyHandler(true, nil)
             case "load": replyHandler(try s.load(id: try int("id")), nil)
             case "revision": replyHandler(try s.revision(id: try int("id"), no: try int("no")), nil)
-            case "save": replyHandler(try s.saveDraft(id: try int("id"), title: try str("title"), json: try str("json"), text: try str("text")), nil)
+            case "save": replyHandler(try s.saveDraft(id: try int("id"), title: try str("title"), json: try str("json"), text: try str("text"),
+                                                      links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? []), nil)
             case "snapshot": replyHandler(try s.snapshot(id: try int("id")) ?? NSNull(), nil)
             case "history": replyHandler(try s.history(id: try int("id")), nil)
             case "verify": replyHandler(try s.verify(id: try int("id")), nil)
             case "search": replyHandler(try s.search(try str("q")), nil)
             case "putFile":
-                guard let data = Data(base64Encoded: try str("base64")) else { throw StoreError.invalid("Datei unlesbar") }
+                let b64 = try str("base64")
+                guard b64.utf8.count <= 70_000_000 else { throw StoreError.invalid("Datei zu groß (max. 50 MB). Große Rohdaten werden ab M5 verlinkt statt kopiert.") }
+                guard let data = Data(base64Encoded: b64) else { throw StoreError.invalid("Datei unlesbar") }
                 let mime = try str("mime")
                 guard mime.range(of: "^[a-z]+/[a-z0-9.+-]+$", options: .regularExpression) != nil else { throw StoreError.invalid("Dateityp ungültig") }
                 replyHandler(["sha256": try s.putFile(name: try str("name"), mime: mime, data: data)], nil)

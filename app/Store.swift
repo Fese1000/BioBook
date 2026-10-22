@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 1
+    static let schemaVersion = 2
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -64,6 +64,19 @@ final class Store {
                 ALTER TABLE entry ADD COLUMN project_id INTEGER REFERENCES project(id);
                 ALTER TABLE entry ADD COLUMN kind TEXT NOT NULL DEFAULT 'experiment';
                 CREATE INDEX entry_project ON entry(project_id);
+                """)
+            }
+            if v < 2 {
+                // Tags, Verweise zwischen Einträgen, Dateien je Eintrag; Suche zusätzlich über Tags
+                try exec("""
+                CREATE TABLE tag(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE);
+                CREATE TABLE entry_tag(entry_id INTEGER NOT NULL REFERENCES entry(id), tag_id INTEGER NOT NULL REFERENCES tag(id), PRIMARY KEY(entry_id, tag_id));
+                CREATE TABLE link(from_entry INTEGER NOT NULL REFERENCES entry(id), to_entry INTEGER NOT NULL REFERENCES entry(id), PRIMARY KEY(from_entry, to_entry));
+                CREATE INDEX link_to ON link(to_entry);
+                CREATE TABLE entry_file(entry_id INTEGER NOT NULL REFERENCES entry(id), sha256 TEXT NOT NULL REFERENCES attachment(sha256), PRIMARY KEY(entry_id, sha256));
+                DROP TABLE search;
+                CREATE VIRTUAL TABLE search USING fts5(title, body, tags, tokenize='unicode61 remove_diacritics 2');
+                INSERT INTO search(rowid, title, body, tags) SELECT id, title, draft_text, '' FROM entry;
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -160,14 +173,60 @@ final class Store {
     }
 
     // MARK: Einträge
-    /// project: nil = alle, 0 = ohne Projekt, sonst Projekt-ID
-    func list(project: Int? = nil) throws -> [[String: Any]] {
-        let filter = project == nil ? "" : project == 0 ? "WHERE e.project_id IS NULL" : "WHERE e.project_id = ?"
+    /// project: nil = alle, 0 = ohne Projekt, sonst Projekt-ID; tag: nur Einträge mit diesem Tag
+    func list(project: Int? = nil, tag: Int? = nil) throws -> [[String: Any]] {
+        var conds: [String] = [], args: [Any?] = []
+        if let p = project { if p == 0 { conds.append("e.project_id IS NULL") } else { conds.append("e.project_id = ?"); args.append(p) } }
+        if let t = tag { conds.append("e.id IN (SELECT entry_id FROM entry_tag WHERE tag_id = ?)"); args.append(t) }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions
-        FROM entry e \(filter) ORDER BY e.updated DESC
-        """, project.map { $0 == 0 ? [] : [$0] } ?? [])
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions,
+          (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
+        FROM entry e \(conds.isEmpty ? "" : "WHERE " + conds.joined(separator: " AND ")) ORDER BY e.updated DESC
+        """, args)
     }
+
+    // MARK: Tags
+    func tags() throws -> [[String: Any]] {
+        try query("SELECT t.id, t.name, COUNT(et.entry_id) AS entries FROM tag t JOIN entry_tag et ON et.tag_id = t.id GROUP BY t.id ORDER BY t.name COLLATE NOCASE")
+    }
+
+    static func cleanTag(_ s: String) -> String? {
+        var t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        while t.hasPrefix("#") { t.removeFirst() }
+        t = String(t.prefix(40)).trimmingCharacters(in: .whitespaces)
+        return t.isEmpty || t.contains(",") ? nil : t
+    }
+
+    /// Ersetzt die Tags eines Eintrags; neue Tags werden angelegt, ungenutzte gelöscht.
+    func setTags(id: Int, names: [String]) throws -> [String] {
+        var seen = Set<String>(), clean: [String] = []
+        for n in names.compactMap(Store.cleanTag) where seen.insert(n.lowercased()).inserted { clean.append(n) }
+        try transaction {
+            guard try !query("SELECT 1 FROM entry WHERE id = ?", [id]).isEmpty else { throw StoreError.invalid("Eintrag \(id) gibt es nicht") }
+            try query("DELETE FROM entry_tag WHERE entry_id = ?", [id])
+            for n in clean {
+                try query("INSERT OR IGNORE INTO tag(name) VALUES(?)", [n])
+                try query("INSERT INTO entry_tag(entry_id, tag_id) SELECT ?, id FROM tag WHERE name = ?", [id, n])
+            }
+            try query("DELETE FROM tag WHERE id NOT IN (SELECT tag_id FROM entry_tag)")
+            try query("UPDATE search SET tags = ? WHERE rowid = ?", [clean.joined(separator: " "), id])
+        }
+        return try entryTags(id)
+    }
+
+    func entryTags(_ id: Int) throws -> [String] {
+        try query("SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = ? ORDER BY t.name COLLATE NOCASE", [id])
+            .compactMap { $0["name"] as? String }
+    }
+
+    // MARK: Verweise
+    /// Einträge, die auf diesen Eintrag verweisen
+    func backlinks(id: Int) throws -> [[String: Any]] {
+        try query("SELECT e.id, e.title, e.kind FROM link l JOIN entry e ON e.id = l.from_entry WHERE l.to_entry = ? ORDER BY e.updated DESC", [id])
+    }
+
+    /// Titel aller Einträge, damit Verweise im Text den aktuellen Titel zeigen
+    func titles() throws -> [[String: Any]] { try query("SELECT id, title FROM entry") }
 
     func create(title: String, project: Int? = nil, kind: String = "experiment") throws -> Int {
         guard Store.kinds.contains(kind) else { throw StoreError.invalid("Unbekannte Art: \(kind)") }
@@ -176,7 +235,7 @@ final class Store {
         return try transaction {
             try query("INSERT INTO entry(title, created, updated, project_id, kind) VALUES(?, ?, ?, ?, ?)", [title, t, t, project, kind])
             let id = Int(sqlite3_last_insert_rowid(db))
-            try query("INSERT INTO search(rowid, title, body) VALUES(?, ?, '')", [id, title])
+            try query("INSERT INTO search(rowid, title, body, tags) VALUES(?, ?, '', '')", [id, title])
             return id
         }
     }
@@ -194,9 +253,10 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard let e = try query("SELECT id, title, created, updated, draft_json, kind, project_id FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
+        e["tags"] = try entryTags(id)
         return e
     }
 
@@ -208,11 +268,20 @@ final class Store {
     }
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
-    func saveDraft(id: Int, title: String, json: String, text: String) throws -> [String: Any] {
+    /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
+    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = []) throws -> [String: Any] {
         let t = Store.now()
         try transaction {
             try query("UPDATE entry SET title = ?, draft_json = ?, draft_text = ?, updated = ? WHERE id = ?", [title, json, text, t, id])
             try query("UPDATE search SET title = ?, body = ? WHERE rowid = ?", [title, text, id])
+            try query("DELETE FROM link WHERE from_entry = ?", [id])
+            for to in Set(links) where to != id {
+                try query("INSERT INTO link(from_entry, to_entry) SELECT ?, id FROM entry WHERE id = ?", [id, to])
+            }
+            try query("DELETE FROM entry_file WHERE entry_id = ?", [id])
+            for sha in Set(files) {
+                try query("INSERT INTO entry_file(entry_id, sha256) SELECT ?, sha256 FROM attachment WHERE sha256 = ?", [id, sha])
+            }
         }
         return ["updated": t]
     }
@@ -264,7 +333,8 @@ final class Store {
         let terms = q.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
         if terms.isEmpty { return [] }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, 1, '[', ']', '…', 12) AS snippet
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, 1, '[', ']', '…', 12) AS snippet,
+          (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])
     }
