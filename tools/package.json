@@ -1,0 +1,17 @@
+{
+  "name": "laborbuch-tools",
+  "private": true,
+  "description": "Nur zum Bündeln des Editors nach web/vendor/tiptap.js (npm run bundle)",
+  "scripts": {
+    "bundle": "esbuild entry.js --bundle --minify --format=iife --global-name=TT --outfile=../web/vendor/tiptap.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.32.0",
+    "@tiptap/extension-image": "^3.32.0",
+    "@tiptap/extension-list": "^3.32.0",
+    "@tiptap/extension-table": "^3.32.0",
+    "@tiptap/extensions": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "esbuild": "^0.28.2"
+  }
+}

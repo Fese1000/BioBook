@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<title>Laborbuch</title>
+<link rel="stylesheet" href="style.css">
+</head><body>
+<aside>
+  <div class="side-head">
+    <input id="search" type="search" placeholder="Suchen (⌘F)" autocomplete="off" spellcheck="false">
+    <button id="new" class="btn" title="Neuer Eintrag (⌘N)">+</button>
+  </div>
+  <ul id="list"></ul>
+</aside>
+<main>
+  <div id="empty" class="empty">Noch keine Einträge. Lege mit <b>+</b> oder ⌘N den ersten an.</div>
+  <div id="doc" hidden>
+    <input id="title" placeholder="Titel" autocomplete="off">
+    <div id="toolbar"></div>
+    <div id="editor"></div>
+  </div>
+  <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
+</main>
+<section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><ol id="revlist"></ol></section>
+<input id="filepick" type="file" accept="image/*" multiple hidden>
+<script src="vendor/tiptap.js"></script>
+<script src="app.js"></script>
+</body></html>
