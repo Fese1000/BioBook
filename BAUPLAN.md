@@ -97,7 +97,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
-**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) und Phase 3 (M14–M17) abgeschlossen.**
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) und Phase 3 (M14–M17) abgeschlossen; Phase 4 (M18–M24) geplant.**
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
@@ -129,6 +129,19 @@ Alles läuft lokal und offline; nur M16 fragt auf Klick bei NCBI/UniProt an. Rec
 | M15 ✅ | Primer und Restriktion: Primer-Rechner (Tm nach Nearest-Neighbor, GC, Länge, Selbstkomplementarität), Primer auf der Vorlage finden; Restriktionsenzyme (häufige Enzyme mit Erkennungsstelle), Schnittstellen auf der Karte, virtueller Verdau mit Fragmentgrößen und virtuellem Gel | Tm stimmt auf ±1 °C mit Referenzwerten; pUC19 × EcoRI + HindIII ergibt 2635 + 51 bp. **Erledigt 2026-10-23:** Tm auf 0,05 °C gleich Primer3 (primer3-py, mit und ohne Mg²⁺); pUC19: EcoRI + HindIII 2635 + 51, PvuII 2364 + 322; Typ IIS in beiden Richtungen; Gel und Einzelschneider in der App |
 | M16 ✅ | Datenbank-Verweise: Kennungen (GenBank/RefSeq, UniProt, PubMed, Addgene) im Text werden Links; auf Klick Sequenz bzw. Eintrag von NCBI/UniProt holen und als Registry-Objekt anlegen | „NM_000546“ im Text wird Link; Abruf von L09137 legt ein Plasmid mit Sequenz an (ohne Netz: verständliche Meldung). **Erledigt 2026-10-23:** Selbsttest mit hinterlegten Antworten; echte Abfragen geprüft: NM_000546 (69 Features, CDS übersetzt zu p53 mit 393 aa) und UniProt P04637 (TP53, 393 aa); Editor-Bündel exportiert dafür zusätzlich Extension/Plugin/Decoration |
 | M17 ✅ | Diagramme und Statistik: Diagramm-Block aus einer Tabelle im Eintrag (Punkte, Linie, Balken mit Fehlerbalken), Standardkurve mit linearer Regression und Berechnung unbekannter Proben, Kennzahlen, t-Test | Bradford-Standardkurve mit R², unbekannte Proben gegen Handrechnung; t-Test-p-Wert stimmt mit Referenz. **Erledigt 2026-10-23:** Regression und t-Tests (Welch, Student, gepaart) auf ~1e−12 gleich scipy 1.17; Standardkurve „aus Tabelle darüber“, Proben mit Verdünnung, Diagramm im Export |
+
+## 10d. Meilensteine Phase 4 (Komfort)
+Netz nur auf Klick und nur zu festen Adressen (Crossref, PubMed, Anthropic); Schlüssel im Schlüsselbund; alles andere lokal.
+
+| M | Inhalt | Fertig, wenn … |
+| --- | --- | --- |
+| M18 | Literatur: Quellen aus DOI/PMID holen (Crossref, PubMed), Literaturliste im Eintrag mit Zitierblock (Autor Jahr), BibTeX/RIS importieren und exportieren, Anbindung an eine laufende Zotero-App (lokale Schnittstelle) | DOI 10.1016/0378-1119(85)90120-9 ergibt „Yanisch-Perron et al. 1985, Gene“; Literaturliste im Eintrag und im PDF; BibTeX-Datei mit 3 Quellen importiert |
+| M19 | Aufgaben und Termine: Aufgaben mit Fälligkeit im Eintrag (Checkliste mit Datum), Übersicht „Heute / Diese Woche“ über alles Fällige (Aufgaben, Geräte, Mycoplasma, Ablauf, Bestellungen), Export als .ics für Kalender/Erinnerungen | Aufgabe mit Datum erscheint in der Übersicht, ebenso fällige Kalibrierung und ablaufende Charge; .ics lässt sich in Kalender importieren |
+| M20 | Gerätedateien: Plattenleser-Export (CSV/TSV, 96/384-Raster oder Liste) auf die Platte legen (Werte und Heatmap), NanoDrop-Export in Ergebniszeilen, qPCR-Ct-Tabellen | Plattenleser-CSV mit 96 Werten als Heatmap; NanoDrop-Export füllt eine Plasmid-Präp-Tabelle |
+| M21 | Chemie: SMILES eingeben oder zeichnen → Strukturformel, Summenformel, Molmasse; Verknüpfung mit Chemikalien in der Registry und dem Einwaage-Rechner | SMILES von Tris ergibt C4H11NO3, 121,14 g/mol und ein Strukturbild; Einwaage-Rechner übernimmt die Molmasse |
+| M22 | Kurzbefehle und AppleScript: `laborbuch://`-Aktionen (neuer Eintrag, Text anhängen, suchen), AppleScript-Wörterbuch (Einträge lesen/anlegen), Dienste-Menü „Ins Laborbuch“ | Kurzbefehl legt Eintrag mit Text an; `tell application "Laborbuch" to make new entry` funktioniert |
+| M23 | KI-Assistent mit eigenem Schlüssel: Eintrag zusammenfassen, Fragen an das Laborbuch (Suche + Antwort mit Quellen), Protokoll aus Stichpunkten; nur auf Klick, zeigt vorher, was gesendet wird | Ohne Schlüssel unsichtbar; mit Schlüssel Zusammenfassung eines Eintrags mit Verweisen; Schlüssel nur im Schlüsselbund |
+| M24 | Erweiterungen: eigene Blöcke/Rechner als JavaScript-Dateien im Ordner „Erweiterungen“ mit begrenzter Schnittstelle (kein Dateisystem, kein Netz), ein- und ausschaltbar | Beispiel-Erweiterung (Zellzahl-Rechner) erscheint als Block; Fehler in einer Erweiterung stören die App nicht |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
