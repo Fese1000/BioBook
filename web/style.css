@@ -315,3 +315,8 @@ pre.seqtext .pos{color:var(--mut)}pre.seqtext mark{background:#f3c27a;color:#2b1
 .seqtools input[data-svenz]{width:200px}.seqtools input[data-svprimer]{font-family:var(--mono);width:260px}
 .digest{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin:10px 0}.digest>div{flex:1;min-width:240px}
 .gel{width:auto;height:280px}.gel .gelbg{fill:#1d2126}.gel .band{fill:#e9f2ff}.gel .tl{font:10px -apple-system,system-ui;fill:var(--mut)}
+/* Datenbank-Verweise */
+.dblink{text-decoration:underline dotted;text-underline-offset:3px;text-decoration-color:var(--acc);cursor:help}
+#dbrefs{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;font-size:13px}
+#dbrefs h4{margin:0 0 6px;font:600 12px -apple-system,system-ui;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.dbref{display:inline-flex;gap:6px;align-items:center;margin:0 14px 6px 0}.dbref a{font-family:var(--mono)}

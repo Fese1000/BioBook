@@ -1,5 +1,7 @@
 // Bündelt den TipTap-Editor in eine Datei (web/vendor/tiptap.js, global TT), damit die App offline ohne Build-Schritt läuft.
-export { Editor, Node, mergeAttributes } from '@tiptap/core'
+export { Editor, Node, Extension, mergeAttributes } from '@tiptap/core'
+export { Plugin, PluginKey } from '@tiptap/pm/state'
+export { Decoration, DecorationSet } from '@tiptap/pm/view'
 export { StarterKit } from '@tiptap/starter-kit'
 export { Image } from '@tiptap/extension-image'
 export { TableKit } from '@tiptap/extension-table'

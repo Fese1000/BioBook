@@ -1,6 +1,6 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **Phase 2 (M8–M13)** und **M14–M15** aus Phase 3 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **Phase 2 (M8–M13)** und **M14–M16** aus Phase 3 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Installieren
 `Laborbuch-AppleSilicon.dmg` öffnen und die App nach „Programme“ ziehen (macOS 13 oder neuer, Apple Silicon). Die App ist nur ad hoc signiert: Beim ersten Start einer heruntergeladenen Kopie fragt macOS nach. Ab macOS 15 einmal öffnen, dann Systemeinstellungen › Datenschutz & Sicherheit › „Trotzdem öffnen“; unter macOS 13/14 Rechtsklick › Öffnen.
@@ -12,6 +12,7 @@ Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das D
 - Bestand (Seitenleiste „📦 Bestand“): Standorte als Baum (Raum › Gerät › Regal › Box mit Raster), Chargen mit Menge, Einheit, Chargennummer, Ablaufdatum, Mindestbestand, GHS-Gefahren und Sicherheitsdatenblatt. Jede Mengenänderung ist eine unveränderliche Buchung. Im Eintrag bucht der Block „📦 Verbrauch“ eine Menge ab (mit Einheitenumrechnung, stornierbar); die Buchung verweist auf den Eintrag. Abgelaufene, bald ablaufende und knappe Chargen werden gemeldet.
 - Strukturierte Ergebnisse (Block „📊 Ergebnisse“): Tabellen nach festen Schemata mit Feldern, Einheiten und berechneten Feldern per Formel (z. B. Ausbeute = konz × volumen / 1000); mitgeliefert sind Plasmid-Präp, Proteinbestimmung und qPCR, eigene Schemata lassen sich anlegen. Die „📈 Auswertung“ sammelt alle Zeilen eines Schemas über Einträge hinweg (Filter nach Projekt und Zeitraum), zeigt Kennzahlen, ein Diagramm über die Zeit oder gegen ein anderes Feld und exportiert CSV.
 - Sequenzen: Sequenzfelder in der Registry (z. B. Plasmid) lassen sich aus GenBank- oder FASTA-Dateien füllen; Features und „ringförmig“ werden übernommen. Darunter: Ring- bzw. lineare Karte mit Features, Basen mit Positionen und Übersetzung (Rahmen +1 bis +3), Motivsuche auf beiden Strängen (IUPAC, über den Ursprung), ORF-Suche (≥ 100 aa, als Feature übernehmen), Revers-Komplement, Export als FASTA oder GenBank. Restriktion: gut 50 gängige Enzyme (auch Typ IIS wie BsaI), Einzelschneider auf einen Klick, Schnitte auf der Karte, virtueller Verdau mit Fragmenten und virtuellem Gel. Primer: Tm nach Nearest-Neighbor (SantaLucia, mit Mg²⁺ – gleiche Werte wie Primer3), GC, Hinweise (3'-Ende, Wiederholungen, Selbstbindung) und Bindestellen auf der Vorlage, auch mit 5'-Überhang; Primer-Objekte in der Registry zeigen dieselbe Tm. Im Eintrag zeigt der Block „🧬 Sequenz“ die Karte eines Objekts. Wird die Sequenz später geändert, gelten die Features als veraltet.
+- Datenbank-Verweise: Kennungen im Text (GenBank/RefSeq wie L09137 oder NM_000546, UniProt wie P04637, PMID, DOI, Addgene) werden unterstrichen; ⌘-Klick öffnet die Datenbank im Browser. Unter dem Eintrag stehen sie als Liste; „📥 in die Registry“ holt eine Sequenz von NCBI (samt Features, Typ wählbar) bzw. ein Protein von UniProt (Typ „Protein“ wird angelegt). Das ist die einzige Stelle, an der die App von sich aus ins Netz geht – und nur auf Klick.
 - Bestellungen (Seitenleiste „🛒 Bestellungen“): knappe oder leere Chargen ohne offene Bestellung erscheinen als Vorschlag; „+ Auf die Liste“ oder „🛒 Nachbestellen“ an der Charge übernimmt Lieferant und Katalognummer. Status offen → bestellt → geliefert (oder storniert) mit unveränderlichem Verlauf; der Wareneingang legt eine neue Charge mit Chargennummer, Ablauf und Standort an. Die offene Liste lässt sich als CSV speichern. „Knapp“ zählt alle gleichartigen Chargen zusammen.
 - Zellkultur (Seitenleiste „🧫 Zellkultur“): Kulturen mit Zelllinie, Passage, Gefäß und Medium. Passage, Mediumwechsel, Mycoplasma-Test, Einfrieren, Korrektur und Beenden sind unveränderliche Ereignisse; im Eintrag bucht der Block „↻ Passage“ (z. B. P12 → P13, Split 1:10) mit Verweis auf den Eintrag. Einfrieren legt eine Charge (Röhrchen) im Bestand an; die Einfrierliste zeigt alle Röhrchen mit Passage und Platz, Auftauen startet daraus eine neue Kultur. Gemeldet werden fällige oder positive Mycoplasma-Tests und das Erreichen der Höchstpassage.
 - Gerätebuch (Seitenleiste „🔧 Geräte“): Geräte mit wiederkehrenden Aufgaben (Wartung, Kalibrierung, Prüfung, Reinigung) im festen Intervall; „Erledigt“ trägt ins unveränderliche Protokoll ein und rechnet die nächste Fälligkeit aus. Überfällige und bald fällige Aufgaben sowie defekte Geräte (Störung/Reparatur) werden in der Seitenleiste gemeldet.
@@ -62,9 +63,9 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 ## Tests
 ```bash
 swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
-node --test tests/                                                             # Rechner gegen Handrechnung, Markdown, Sequenzen und Verdau (pUC19 aus NCBI L09137), Tm gegen Primer3
+node --test tests/                                                             # Rechner gegen Handrechnung, Markdown, Sequenzen und Verdau (pUC19 aus NCBI L09137), Tm gegen Primer3, Kennungen
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 114 Prüfungen
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 120 Prüfungen
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
@@ -103,6 +104,7 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `web/culture.js` | Zellkultur- und Geräte-Ansicht, Passage-Block im Eintrag |
 | `app/Orders.swift` | Bestellvorschläge, Bestellliste mit Statusverlauf, Wareneingang |
 | `web/orders.js` | Bestellungen-Ansicht, Wareneingang, CSV |
+| `web/dblinks.js` | Kennungen erkennen, Links im Editor, Abruf von NCBI/UniProt |
 | `web/bio.js` | Sequenz-Funktionen: GenBank/FASTA, Motivsuche, ORFs, Übersetzung, Tm, Primer, Enzyme, Verdau |
 | `app/Sequences.swift`, `web/seqview.js` | Sequenz-Anmerkungen (Ring, Features); Karte, Basenansicht, Sequenz-Block |
 | `web/` | Oberfläche und Logik (JavaScript), Editor-Bündel |

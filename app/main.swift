@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     let ocrQueue = DispatchQueue(label: "de.felix.laborbuch.ocr", qos: .utility)
     var ocrRunning = false
     var testStarted = false
+    var testNet: [String: String] = [:]  // Testmodus: Antworten statt Netz (Quelle:Kennung → Text)
     var pendingRelease: Updater.Release?
     let testMode = ["--selftest", "--perftest", "--updatetest"].contains { CommandLine.arguments.contains($0) }
 
@@ -588,6 +589,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "setPurchaseStatus": replyHandler(try s.setPurchaseStatus(id: try int("id"), status: try str("status"), note: (a["note"] as? String) ?? "", author: Settings.author), nil)
             case "receivePurchase": replyHandler(try s.receivePurchase(id: try int("id"), values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
             case "purchaseCounts": replyHandler(try s.purchaseCounts(), nil)
+            case "fetchRemote":  // nur auf Klick, nur zu festen Adressen bei NCBI und UniProt
+                let src = try str("source"), id = try str("id")
+                guard id.range(of: "^[A-Za-z0-9_.]{3,30}$", options: .regularExpression) != nil else { throw StoreError.invalid("Ungültige Kennung") }
+                if testMode {
+                    guard let t = testNet["\(src):\(id)"] else { throw StoreError.invalid("Keine Verbindung zum Server (Testmodus, \(id))") }
+                    return replyHandler(t, nil)
+                }
+                let url: URL
+                switch src {
+                case "ncbi-nuccore": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gbwithparts&retmode=text&tool=Laborbuch&id=\(id)")!
+                case "uniprot": url = URL(string: "https://rest.uniprot.org/uniprotkb/\(id).json")!
+                default: throw StoreError.invalid("Unbekannte Quelle")
+                }
+                var req = URLRequest(url: url, timeoutInterval: 25)
+                req.setValue("Laborbuch (macOS)", forHTTPHeaderField: "User-Agent")
+                URLSession.shared.dataTask(with: req) { data, resp, err in
+                    DispatchQueue.main.async {
+                        if let e = err as? URLError {
+                            return replyHandler(nil, [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .timedOut].contains(e.code)
+                                                ? "Keine Verbindung zu \(url.host ?? "dem Server"). Bitte Internet prüfen." : e.localizedDescription)
+                        }
+                        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+                        guard let data, code == 200, data.count < 30_000_000, let text = String(data: data, encoding: .utf8) else {
+                            return replyHandler(nil, code == 400 || code == 404 ? "\(id) wurde nicht gefunden" : "Abruf fehlgeschlagen (HTTP \(code))")
+                        }
+                        if src == "ncbi-nuccore" && !text.hasPrefix("LOCUS") { return replyHandler(nil, "\(id) wurde bei NCBI nicht gefunden") }
+                        replyHandler(text, nil)
+                    }
+                }.resume()
+            case "testSetNet":
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)
             case "seqAnnotation": replyHandler(try s.seqAnnotation(entity: try int("entity"), field: try str("field")), nil)
             case "setSeqAnnotation":
                 replyHandler(try s.setSeqAnnotation(entity: try int("entity"), field: try str("field"), circular: a["circular"] as? Bool ?? false,

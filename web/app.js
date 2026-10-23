@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, DbLinks,
   ];
 }
 
@@ -409,6 +409,7 @@ async function showBacklinks() {
   const b = await call('backlinks', {id: cur});
   $('#backlinks').hidden = !b.length;
   $('#backlinks').innerHTML = `<h4>Verweise auf diesen Eintrag</h4>` + b.map(r => `<a href="#" class="elink" data-entry="${r.id}">↗ ${esc(r.title || 'Ohne Titel')}</a>`).join(' ');
+  refreshDbRefs();
 }
 
 async function open(id) {
@@ -552,7 +553,9 @@ function changed() {
   updateCounts();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 600);
+  clearTimeout(dbRefTimer); dbRefTimer = setTimeout(refreshDbRefs, 800);
 }
+let dbRefTimer;
 
 async function flush() {
   if (!preview) CALC_PENDING.forEach(f => f());  // Rechner-Eingaben übernehmen, die noch im Feld stehen
@@ -656,6 +659,7 @@ async function perfTest() {
 
 // ---------- Selbsttest in der echten App (--selftest) ----------
 async function selfTest() {
+  window.TESTING = true;  // externe Links nicht wirklich öffnen
   const out = [], sleep = ms => new Promise(r => setTimeout(r, ms));
   const ok = (c, what) => { const l = `${c ? 'ok  ' : 'FAIL'} ${what}`; out.push(l); call('testProgress', {line: l}).catch(() => {}); };
   const a = await call('create', {title: 'Selbsttest Ziel'}), b = await call('create', {title: 'Selbsttest Quelle'});
@@ -1106,6 +1110,35 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm15-verdau.png'}).catch(() => {});
   ok(/Tm ≈ 66,3 °C/.test(seqStats('CGTTCCAAAGATGTGGGCATGAGCTTAC')), 'Primer in der Registry: Tm wie Primer3 (66,3 °C)');
   showView('doc');
+
+  // M16: Datenbank-Verweise (Netz im Test durch hinterlegte Antworten ersetzt)
+  await call('testSetNet', {source: 'ncbi-nuccore', id: 'L09137', text: Bio.toGenBank({name: 'SYNPUC19CV', description: 'Cloning vector pUC19c, complete sequence.', seq: seqS, circular: true,
+    features: [{type: 'CDS', label: 'bla', start: 11, end: 349, strand: 1}]})});
+  await call('testSetNet', {source: 'uniprot', id: 'P04637', text: JSON.stringify({primaryAccession: 'P04637', uniProtkbId: 'P53_HUMAN', genes: [{geneName: {value: 'TP53'}}],
+    proteinDescription: {recommendedName: {fullName: {value: 'Cellular tumor antigen p53'}}}, organism: {scientificName: 'Homo sapiens'}, sequence: {value: 'MEEPQSDPSV', length: 393}})});
+  const dbEntry = await call('create', {title: 'Kennungen'}); await refreshList(dbEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'paragraph', content: [{type: 'text', text: 'Vektor L09137, mRNA NM_000546, p53 P04637, PMID: 2851488, Code PL-0001.'}]}]});
+  changed(); await flush(); await sleep(900);
+  const dls = [...document.querySelectorAll('#editor .dblink')];
+  ok(dls.map(d => d.textContent).join('|') == 'L09137|NM_000546|P04637|PMID: 2851488', `Kennungen im Text werden Links: ${dls.map(d => d.textContent).join(', ')}`);
+  dls[1].dispatchEvent(new MouseEvent('click', {bubbles: true, metaKey: true}));
+  ok(OPENED.at(-1) == 'https://www.ncbi.nlm.nih.gov/nuccore/NM_000546', '⌘-Klick öffnet NM_000546 bei NCBI');
+  ok(!$('#dbrefs').hidden && document.querySelectorAll('#dbrefs .dbref').length == 4 && document.querySelectorAll('#dbrefs [data-dbfetch]').length == 3, 'Liste „Datenbank-Verweise“ unter dem Eintrag');
+  document.querySelector('#dbrefs [data-dbid="L09137"]').click(); await sleep(150);
+  $('#dbType').value = String(plT.id); $('#dbGo').click(); await sleep(700);
+  const fetched = (await call('entities', {type: plT.id})).find(x => x.name.startsWith('L09137'));
+  const fAnn = fetched && await call('seqAnnotation', {entity: fetched.id, field: 'sequence'});
+  ok(fetched && fAnn.circular && fAnn.features.length == 1 && fAnn.source == 'NCBI L09137' && !$('#reg').hidden && document.querySelector('#reg .seqpanel svg.ring'),
+    'L09137 geholt: Plasmid mit Sequenz, Ring und Feature angelegt und geöffnet');
+  showView('doc'); await open(dbEntry); await sleep(200);
+  document.querySelector('#dbrefs [data-dbid="NM_000546"]').click(); await sleep(150);
+  $('#dbGo').click(); await sleep(300);
+  ok(/Keine Verbindung/.test($('#dbMsg').textContent) && $('#locdlg').open, `Ohne Netz verständliche Meldung: „${$('#dbMsg').textContent}“`);
+  $('#locdlg').close();
+  const prot = await dbImport('uniprot', 'P04637');
+  const protE = await call('entity', {id: prot.id});
+  ok(protE.type_name == 'Protein' && parseJSON(protE.fields_json, {}).gene == 'TP53' && /p53/.test(protE.name), 'UniProt P04637 als Protein (Gen TP53) angelegt');
+  showView('doc');
   return out;
 }
 
@@ -1208,6 +1241,7 @@ async function start() {
   initCulture();
   initOrders();
   initSeqView();
+  initDbLinks();
   refreshOrderBadge();
   await loadResultSchemas();
   refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);
