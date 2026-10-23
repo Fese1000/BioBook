@@ -1089,6 +1089,22 @@ async function selfTest() {
   const sqTa = document.querySelector('#entform [data-field="sequence"]'); sqTa.value += 'A';
   await saveEntityForm(); await sleep(200);
   ok(/Features veraltet/.test(document.querySelector('#reg .seqpanel .seqbar').textContent), 'Sequenz geändert: Features als veraltet gemeldet');
+
+  // M15: Primer und Restriktion (pSelbst hat jetzt 560 bp: EcoRI schneidet nach 3, HindIII nach 352)
+  const typeIn = async (sel, v) => { const i = document.querySelector(`#reg ${sel}`); i.value = v; i.dispatchEvent(new Event('input', {bubbles: true})); await sleep(400); };
+  await typeIn('[data-svenz]', 'ecori, HindIII');
+  const fragText = [...document.querySelectorAll('#reg .digest .feattab td b')].map(b => b.textContent);
+  ok(fragText.join(' + ') == '349 bp + 211 bp' && /EcoRI 3 · HindIII 352/.test(document.querySelector('#reg .digest').textContent), `Verdau EcoRI + HindIII: ${fragText.join(' + ')}`);
+  ok(document.querySelectorAll('#reg svg.gel rect.band').length == LADDER.length + 2, 'Virtuelles Gel mit Leiter und zwei Banden');
+  document.querySelector('#reg [data-svsingle]').click(); await sleep(150);
+  const chips = [...document.querySelectorAll('#reg .enzchips .chip')].map(c => c.textContent);
+  ok(chips.includes('EcoRI') && chips.includes('HindIII'), `Einzelschneider gefunden (${chips.length})`);
+  await typeIn('[data-svprimer]', 'ATGAAAGCTGCTGCTGCTGC');
+  const pb = document.querySelector('#reg .primerbox')?.textContent || '';
+  ok(/20 nt · Tm \d+,?\d* °C/.test(pb) && /bindet 11–30 \(\+\)/.test(pb) && pb.includes(Calc.fmt(Bio.tm('ATGAAAGCTGCTGCTGCTGC'))), 'Primer: Tm (Nearest-Neighbor) und Bindestelle 11–30');
+  document.querySelector('#reg .digest').scrollIntoView(); await sleep(50);
+  await call('testSnapshot', {name: 'm15-verdau.png'}).catch(() => {});
+  ok(/Tm ≈ 66,3 °C/.test(seqStats('CGTTCCAAAGATGTGGGCATGAGCTTAC')), 'Primer in der Registry: Tm wie Primer3 (66,3 °C)');
   showView('doc');
   return out;
 }

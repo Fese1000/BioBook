@@ -85,3 +85,48 @@ test('Revers-Komplement, Übersetzung, GC', () => {
   assert.equal(B.gc('GGCCAATT'), 50);
   assert.ok(Math.abs(B.gc(puc.seq) - 50.1) < 1, `GC pUC19 ${B.gc(puc.seq)}`);
 });
+
+test('Tm nach Nearest-Neighbor wie Primer3 (calc_tm, primer3-py 2.3.1)', () => {
+  // Referenz: primer3.calc_tm(p) mit Voreinstellungen bzw. mit dv_conc=0, dntp_conc=0
+  const ref = [['CGTTCCAAAGATGTGGGCATGAGCTTAC', 66.31, 60.32], ['AGCGGATAACAATTTCACACAGGA', 60.81, 54.84], ['GTAAAACGACGGCCAGT', 54.70, 49.17],
+    ['ATGCGTACGTTAGC', 45.98, 40.78], ['GGGGCCCCGGGGCCCC', 71.88, 65.80], ['TTATTATATTAAATTTAA', 31.56, 26.07]];
+  for (const [p, withMg, noMg] of ref) {
+    assert.ok(Math.abs(B.tm(p) - withMg) < 0.05, `${p}: ${B.tm(p)} statt ${withMg}`);
+    assert.ok(Math.abs(B.tm(p, {mg: 0, dntp: 0}) - noMg) < 0.05, `${p} ohne Mg: ${B.tm(p, {mg: 0, dntp: 0})} statt ${noMg}`);
+  }
+  assert.throws(() => B.tm('ACGN'), /eindeutige Basen/);
+});
+
+test('Primer-Hinweise und Selbstkomplementarität', () => {
+  const m13 = B.primerInfo('GTAAAACGACGGCCAGT');
+  assert.equal(m13.length, 17); assert.ok(m13.notes.includes('kurz (< 18 nt)'));
+  const bad = B.primerInfo('ATATATATATGAATTC');
+  assert.ok(bad.self3 >= 6 && bad.notes.some(n => /3'-Ende bindet/.test(n)), JSON.stringify(bad));
+  assert.equal(B.dimer('AAAAAA').run, 0);
+});
+
+test('Primer auf der Vorlage finden, auch mit Überhang', () => {
+  const fwd = puc.seq.slice(99, 121), rev = B.revcomp(puc.seq.slice(499, 520));
+  const f = B.primerSites(puc.seq, fwd, {circular: true}), r = B.primerSites(puc.seq, rev, {circular: true});
+  assert.deepEqual([f[0].start, f[0].strand, f[0].overhang], [100, 1, 0]);
+  assert.deepEqual([r[0].start, r[0].end, r[0].strand, r[0].start3], [500, 520, -1, 500]);
+  const tailed = B.primerSites(puc.seq, 'GCGGCCGCTTAA' + fwd, {circular: true});
+  assert.deepEqual([tailed[0].start, tailed[0].matched, tailed[0].overhang], [100, 22, 12]);
+});
+
+test('Virtueller Verdau von pUC19', () => {
+  const d = (e, c = true) => B.digest(puc.seq, e, {circular: c}).map(f => f.size);
+  assert.deepEqual(d(['EcoRI', 'HindIII']), [2635, 51]);
+  assert.deepEqual(d(['PvuII']), [2364, 322]);
+  assert.deepEqual(d(['EcoRI']), [2686]);
+  assert.deepEqual(d(['NotI']), [2686]);
+  assert.equal(B.digest(puc.seq, ['NotI'], {circular: true})[0].uncut, true);
+  const lin = d(['EcoRI'], false);
+  assert.equal(lin.length, 2); assert.equal(lin[0] + lin[1], 2686);
+});
+
+test('Typ-IIS-Enzym schneidet neben der Stelle, in beiden Richtungen', () => {
+  assert.deepEqual(B.cutSites('AAAGGTCTCAGGGGTTTTTTTT', ['BsaI']).map(c => [c.cut, c.strand]), [[10, 1]]);
+  assert.deepEqual(B.cutSites('TTTTTTTTGAGACCAAAAA', ['BsaI']).map(c => [c.cut, c.strand]), [[3, -1]]);
+  assert.throws(() => B.enzyme('FooI'), /Unbekanntes Enzym/);
+});

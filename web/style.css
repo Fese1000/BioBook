@@ -309,3 +309,9 @@ h3.osec{font:600 13px -apple-system,system-ui;text-transform:uppercase;letter-sp
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px}
 pre.seqtext{font:12px/1.55 var(--mono);background:var(--bg);border-radius:8px;padding:10px 12px;max-height:340px;overflow:auto;margin:8px 0 0;letter-spacing:.02em}
 pre.seqtext .pos{color:var(--mut)}pre.seqtext mark{background:#f3c27a;color:#2b1d00;border-radius:2px}pre.seqtext .aa{color:#2a78d6}
+.enzchips{margin:-2px 0 8px}.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:1px 8px;font:12px -apple-system,system-ui;cursor:pointer;margin:2px}
+.chip:hover{border-color:var(--acc)}
+.primerbox{font-size:13px;background:var(--bg);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.seqtools input[data-svenz]{width:200px}.seqtools input[data-svprimer]{font-family:var(--mono);width:260px}
+.digest{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin:10px 0}.digest>div{flex:1;min-width:240px}
+.gel{width:auto;height:280px}.gel .gelbg{fill:#1d2126}.gel .band{fill:#e9f2ff}.gel .tl{font:10px -apple-system,system-ui;fill:var(--mut)}

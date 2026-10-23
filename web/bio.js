@@ -216,6 +216,122 @@
     return f.strand == -1 ? revcomp(raw) : raw;
   }
 
-  const Bio = {clean, revcomp, gc, translate, codon, parseFasta, parseGenBank, parseLocation, formatLocation, parseAny, toFasta, toGenBank, findMotif, orfs, featureSeq, BioError};
+  // ---------- Primer ----------
+  // Nearest-Neighbor nach SantaLucia (1998), ΔH in kcal/mol, ΔS in cal/(K·mol); Salzkorrektur nach SantaLucia,
+  // Mg²⁺ als Na⁺-Äquivalent (von Ahsen 2001: Na + 120·√(Mg − dNTP)). Gleiches Verfahren wie Primer3 mit santalucia/santalucia.
+  const NN = {AA: [-7.9, -22.2], TT: [-7.9, -22.2], AT: [-7.2, -20.4], TA: [-7.2, -21.3], CA: [-8.5, -22.7], TG: [-8.5, -22.7],
+    GT: [-8.4, -22.4], AC: [-8.4, -22.4], CT: [-7.8, -21.0], AG: [-7.8, -21.0], GA: [-8.2, -22.2], TC: [-8.2, -22.2],
+    CG: [-10.6, -27.2], GC: [-9.8, -24.4], GG: [-8.0, -19.9], CC: [-8.0, -19.9]};
+  const TM_DEFAULTS = {na: 50, mg: 1.5, dntp: 0.6, oligo: 50};  // mM, mM, mM, nM – die Voreinstellungen von Primer3
+
+  function tm(seq, opts = {}) {
+    const o = {...TM_DEFAULTS, ...opts}, s = clean(seq).replace(/U/g, 'T');
+    if (s.length < 2) fail('Primer zu kurz');
+    if (/[^ACGT]/.test(s)) fail('Tm nur für eindeutige Basen (A, C, G, T)');
+    let dH = 0, dS = 0;
+    for (let i = 0; i < s.length - 1; i++) { const [h, e] = NN[s.slice(i, i + 2)]; dH += h; dS += e; }
+    for (const end of [s[0], s[s.length - 1]]) { if (end == 'G' || end == 'C') { dH += 0.1; dS += -2.8; } else { dH += 2.3; dS += 4.1; } }
+    const self = s == revcomp(s);
+    if (self) dS += -1.4;
+    const naEq = o.na + (o.mg > o.dntp ? 120 * Math.sqrt(o.mg - o.dntp) : 0);
+    dS += 0.368 * (s.length - 1) * Math.log(naEq / 1000);
+    const ct = o.oligo * 1e-9 / (self ? 1 : 4);
+    return 1000 * dH / (dS + 1.987 * Math.log(ct)) - 273.15;
+  }
+
+  /// Längster komplementärer Abschnitt zwischen zwei Oligos (beide 5'→3'), und wie viele davon am 3'-Ende von a liegen
+  function dimer(a, b = a) {
+    const x = clean(a), y = revcomp(clean(b));
+    let best = 0, end3 = 0;
+    for (let shift = -y.length + 1; shift < x.length; shift++) {
+      let run = 0;
+      for (let i = 0; i < x.length; i++) {
+        const j = i - shift;
+        if (j >= 0 && j < y.length && x[i] == y[j]) { run++; if (run > best) best = run; if (i == x.length - 1 && run > end3) end3 = run; }
+        else run = 0;
+      }
+    }
+    return {run: best, end3};
+  }
+
+  /// Kennzahlen eines Primers mit Hinweisen
+  function primerInfo(seq, opts) {
+    const s = clean(seq).replace(/U/g, 'T'), t = tm(s, opts), d = dimer(s), notes = [];
+    const g = gc(s);
+    if (s.length < 18) notes.push('kurz (< 18 nt)'); if (s.length > 30) notes.push('lang (> 30 nt)');
+    if (g < 40 || g > 60) notes.push(`GC ${Math.round(g)} % (ideal 40–60 %)`);
+    if (!/[GC]$/.test(s)) notes.push('kein G/C am 3\'-Ende');
+    if (/[GC]{4,}$/.test(s)) notes.push('mehr als 3 G/C am 3\'-Ende');
+    if (/(A{5,}|C{5,}|G{5,}|T{5,})/.test(s)) notes.push('Wiederholung von 5+ gleichen Basen');
+    if (d.end3 >= 4) notes.push(`3'-Ende bindet an sich selbst (${d.end3} bp)`);
+    return {seq: s, length: s.length, gc: g, tm: t, selfRun: d.run, self3: d.end3, notes};
+  }
+
+  /// Bindestellen eines Primers auf der Vorlage: ganzer Primer oder (bei Überhängen) mindestens min Basen am 3'-Ende
+  function primerSites(template, primer, {circular = false, min = 15} = {}) {
+    const p = clean(primer).replace(/U/g, 'T');
+    for (let k = p.length; k >= Math.min(min, p.length); k--) {
+      const tail = p.slice(p.length - k), hits = findMotif(template, tail, {circular});
+      if (hits.length) return hits.map(h => ({...h, matched: k, overhang: p.length - k,
+        start3: h.strand == 1 ? h.end : h.start}));  // Position des 3'-Endes auf der Vorlage
+    }
+    return [];
+  }
+
+  // ---------- Restriktion ----------
+  // Erkennungsstelle mit ^ an der Schnittstelle im oberen Strang; Typ IIS: Stelle(n1/n2) = Schnitt n1 bzw. n2 Basen hinter der Stelle
+  const ENZYMES = {
+    AatII: 'GACGT^C', AflII: 'C^TTAAG', AgeI: 'A^CCGGT', AluI: 'AG^CT', ApaI: 'GGGCC^C', AscI: 'GG^CGCGCC', AvrII: 'C^CTAGG',
+    BamHI: 'G^GATCC', BglII: 'A^GATCT', BsaI: 'GGTCTC(1/5)', BsmBI: 'CGTCTC(1/5)', BspHI: 'T^CATGA', BsrGI: 'T^GTACA',
+    ClaI: 'AT^CGAT', DraI: 'TTT^AAA', EcoRI: 'G^AATTC', EcoRV: 'GAT^ATC', HaeIII: 'GG^CC', HincII: 'GTY^RAC', HindIII: 'A^AGCTT',
+    HinfI: 'G^ANTC', HpaI: 'GTT^AAC', KpnI: 'GGTAC^C', MfeI: 'C^AATTG', MluI: 'A^CGCGT', MspI: 'C^CGG', NcoI: 'C^CATGG',
+    NdeI: 'CA^TATG', NheI: 'G^CTAGC', NlaIII: 'CATG^', NotI: 'GC^GGCCGC', NruI: 'TCG^CGA', NsiI: 'ATGCA^T', PacI: 'TTAAT^TAA',
+    PmeI: 'GTTT^AAAC', PstI: 'CTGCA^G', PvuI: 'CGAT^CG', PvuII: 'CAG^CTG', SacI: 'GAGCT^C', SacII: 'CCGC^GG', SalI: 'G^TCGAC',
+    SapI: 'GCTCTTC(1/4)', ScaI: 'AGT^ACT', SmaI: 'CCC^GGG', SpeI: 'A^CTAGT', SphI: 'GCATG^C', SspI: 'AAT^ATT', StuI: 'AGG^CCT',
+    SwaI: 'ATTT^AAAT', XbaI: 'T^CTAGA', XhoI: 'C^TCGAG', XmaI: 'C^CCGGG', ZraI: 'GAC^GTC',
+  };
+
+  function enzyme(name) {
+    const def = ENZYMES[name] || fail(`Unbekanntes Enzym: ${name}`);
+    const iis = /^([A-Z]+)\((-?\d+)\/(-?\d+)\)$/.exec(def);
+    if (iis) return {name, site: iis[1], cut: iis[1].length + +iis[2], cut2: iis[1].length + +iis[3], iis: true};
+    const site = def.replace('^', '');
+    return {name, site, cut: def.indexOf('^'), cut2: site.length - def.indexOf('^'), iis: false};
+  }
+
+  /// Schnittstellen im oberen Strang: {enzyme, cut (nach dieser Base, 1-basiert), site (Start der Erkennungsstelle), strand}
+  function cutSites(seq, names, {circular = false} = {}) {
+    const n = seq.length, out = [];
+    for (const name of names) {
+      const e = enzyme(name);
+      for (const h of findMotif(seq, e.site, {circular})) {
+        // Vorwärts: Schnitt nach Base start-1+cut; rückwärts (Typ IIS): vor der Stelle, um cut2 Basen versetzt
+        let c = h.strand == 1 || !e.iis ? h.start - 1 + (h.strand == 1 ? e.cut : e.site.length - e.cut2) : h.start - 1 - (e.cut2 - e.site.length);
+        if (!circular && (c <= 0 || c >= n)) continue;
+        c = ((c - 1) % n + n) % n + 1;
+        out.push({enzyme: name, cut: c, site: h.start, strand: h.strand});
+      }
+    }
+    return out.sort((a, b) => a.cut - b.cut);
+  }
+
+  /// Virtueller Verdau: Fragmente {size, from, to} absteigend nach Größe
+  function digest(seq, names, {circular = false} = {}) {
+    const n = seq.length, cuts = [...new Set(cutSites(seq, names, {circular}).map(c => c.cut))].sort((a, b) => a - b);
+    if (!cuts.length) return [{size: n, from: 1, to: n, uncut: true}];
+    const frags = [];
+    if (circular) {
+      for (let i = 0; i < cuts.length; i++) {
+        const a = cuts[i], b = cuts[(i + 1) % cuts.length];
+        frags.push({size: i + 1 < cuts.length ? b - a : n - a + b, from: a % n + 1, to: b});
+      }
+    } else {
+      const pts = [0, ...cuts, n];
+      for (let i = 0; i + 1 < pts.length; i++) frags.push({size: pts[i + 1] - pts[i], from: pts[i] + 1, to: pts[i + 1]});
+    }
+    return frags.sort((a, b) => b.size - a.size);
+  }
+
+  const Bio = {tm, dimer, primerInfo, primerSites, ENZYMES, enzyme, cutSites, digest, clean, revcomp, gc, translate, codon, parseFasta, parseGenBank, parseLocation, formatLocation, parseAny, toFasta, toGenBank, findMotif, orfs, featureSeq, BioError};
   if (typeof module != 'undefined' && module.exports) module.exports = Bio; else root.Bio = Bio;
 })(this);

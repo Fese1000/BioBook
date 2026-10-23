@@ -10,7 +10,8 @@ function seqStats(seq) {
   const s = (seq || '').toUpperCase().replace(/[^ACGTUNRYSWKMBDHV]/g, '');
   if (!s) return '';
   const gc = (s.match(/[GCS]/g) || []).length, at = (s.match(/[ATUW]/g) || []).length, n = s.length;
-  const tm = n < 14 ? 2 * at + 4 * gc : 64.9 + 41 * (gc - 16.4) / n;
+  let tm = n < 14 ? 2 * at + 4 * gc : 64.9 + 41 * (gc - 16.4) / n;
+  if (n <= 60 && /^[ACGTU]+$/.test(s)) try { tm = Bio.tm(s); } catch {}  // Nearest-Neighbor wie Primer3
   return `${n} nt · GC ${Math.round(gc / n * 100)} %${n <= 60 ? ` · Tm ≈ ${tm.toFixed(1).replace('.', ',')} °C` : ''}`;  // Tm nur für Primer-Längen sinnvoll
 }
 

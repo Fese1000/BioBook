@@ -128,7 +128,7 @@ async function renderSeqPanel(el) {
   const e = await call('entity', {id: entity});
   const seq = parseJSON(e.fields_json, {})[field] || '';
   const ann = await call('seqAnnotation', {entity, field});
-  const st = SEQ_STATE.get(el) || {motif: '', frame: 0, orfs: null, rc: false};
+  const st = SEQ_STATE.get(el) || {motif: '', frame: 0, orfs: null, rc: false, enz: [], primer: ''};
   Object.assign(st, {entity, field, seq, ann, name: e.name, code: e.code});
   SEQ_STATE.set(el, st);
   drawSeqPanel(el);
@@ -139,7 +139,13 @@ function drawSeqPanel(el) {
   const shown = st.rc ? Bio.revcomp(seq) : seq;
   let hits = [], motifErr = '';
   if (st.motif) { try { hits = Bio.findMotif(shown, st.motif, {circular: ann.circular}).map(h => ({...h, len: Bio.clean(st.motif).length, label: st.motif.toUpperCase()})); } catch (err) { motifErr = err.message; } }
-  const feats = st.rc ? [] : [...ann.features, ...(st.orfs || []).map(o => ({...o, type: 'ORF', label: `ORF ${o.aa} aa`, orf: true}))];
+  // Enzyme: Schnitte als Treffer, Fragmente und Gel; Primer: Kennzahlen und Bindestellen als vorläufige Features
+  let cuts = [], frags = [], enzErr = '', pinfo = null, psites = [], primErr = '';
+  if (st.enz.length && !st.rc) { try { cuts = Bio.cutSites(seq, st.enz, {circular: ann.circular}); frags = Bio.digest(seq, st.enz, {circular: ann.circular}); } catch (err) { enzErr = err.message; } }
+  if (st.primer && !st.rc) { try { pinfo = Bio.primerInfo(st.primer); psites = Bio.primerSites(seq, st.primer, {circular: ann.circular}); } catch (err) { primErr = err.message; } }
+  hits = [...hits, ...cuts.map(c => ({start: c.cut, len: 0, label: c.enzyme}))];
+  const feats = st.rc ? [] : [...ann.features, ...(st.orfs || []).map(o => ({...o, type: 'ORF', label: `ORF ${o.aa} aa`, orf: true})),
+    ...psites.map(p => ({start: p.start, end: p.end, strand: p.strand, type: 'primer_bind', label: `Primer ${p.strand == 1 ? '→' : '←'}`, primer: true}))];
   const map = (ann.circular ? ringMap : lineMap)({seq: shown, name: st.name, features: feats, hits});
   el.innerHTML = `<div class="seqbar"><b>🧬 ${esc(st.code)} ${esc(st.name)}</b><span class="sub">${bp(seq.length)} · ${ann.circular ? 'ringförmig' : 'linear'} · GC ${Calc.fmt(Bio.gc(seq))} % · ${ann.features.length} Feature(s)${ann.source ? ` · aus ${esc(ann.source)}` : ''}</span>
       ${ann.stale ? '<span class="wbadge warn" title="Die Sequenz wurde nach dem Import geändert">Features veraltet</span>' : ''}</div>
@@ -150,12 +156,43 @@ function drawSeqPanel(el) {
       <select data-svframe><option value="0">ohne Übersetzung</option>${[1, 2, 3].map(f => `<option value="${f}" ${st.frame == f ? 'selected' : ''}>Rahmen +${f}</option>`).join('')}</select>
       <button class="btn ${st.rc ? 'on' : ''}" data-svrc>Revers-Komplement</button>
       <button class="btn" data-svexp="fasta">FASTA</button><button class="btn" data-svexp="gb">GenBank</button></div>
+    <div class="seqtools"><span>✂</span><input data-svenz list="enzlist" value="${esc(st.enz.join(', '))}" placeholder="Enzyme, z. B. EcoRI, HindIII" autocomplete="off" spellcheck="false">
+      <datalist id="enzlist">${Object.keys(Bio.ENZYMES).map(n => `<option value="${n}">`).join('')}</datalist>
+      <button class="btn" data-svsingle>Einzelschneider</button>
+      <span>Primer</span><input data-svprimer value="${esc(st.primer)}" placeholder="5'→3', z. B. GTAAAACGACGGCCAGT" autocomplete="off" spellcheck="false"></div>
+    ${st.singles ? `<div class="sub enzchips">Schneiden genau einmal: ${st.singles.length ? st.singles.map(n => `<button class="chip" data-svaddenz="${n}">${n}</button>`).join(' ') : 'keins der bekannten Enzyme'}</div>` : ''}
+    ${enzErr ? `<p class="bad">${esc(enzErr)}</p>` : ''}
+    ${pinfo ? `<div class="primerbox"><b>${pinfo.length} nt · Tm ${Calc.fmt(pinfo.tm)} °C · GC ${Calc.fmt(pinfo.gc)} %</b> <span class="sub">(Nearest-Neighbor, 50 mM Na⁺, 1,5 mM Mg²⁺, 50 nM)</span>
+      · ${psites.length ? psites.map(p => `bindet ${p.start}–${p.end} (${p.strand == 1 ? '+' : '−'})${p.overhang ? `, ${p.overhang} nt Überhang` : ''}`).join('; ') : 'bindet nicht (mind. 15 nt am 3\'-Ende)'}
+      ${pinfo.notes.length ? `<br><span class="wbadge warn">Hinweis</span> ${esc(pinfo.notes.join(' · '))}` : ''}
+      ${psites.length ? ' <button class="btn" data-svkeepprimer>als Feature übernehmen</button>' : ''}</div>` : primErr ? `<p class="bad">${esc(primErr)}</p>` : ''}
     <div class="seqmapbox">${map}</div>
     ${feats.length ? `<table class="feattab"><tr><th></th><th>Name</th><th>Typ</th><th>Bereich</th><th>Strang</th><th>Länge</th><th></th></tr>
       ${feats.map((f, i) => `<tr><td><span class="sw" style="background:${featColor(f)}"></span></td><td>${esc(f.label || '')}</td><td>${esc(f.type)}</td><td class="num">${f.start}–${f.end}</td>
         <td>${f.strand == -1 ? '−' : '+'}</td><td class="num">${bp(f.end >= f.start ? f.end - f.start + 1 : seq.length - f.start + 1 + f.end)}</td>
-        <td>${f.orf ? `<button class="btn" data-svkeep="${i - ann.features.length}">übernehmen</button>` : `<button class="x" data-svdel="${i}" title="Feature entfernen">×</button>`}</td></tr>`).join('')}</table>` : ''}
-    <pre class="seqtext">${seqText(shown, {hits, frame: st.frame})}</pre>`;
+        <td>${f.orf ? `<button class="btn" data-svkeep="${i - ann.features.length}">übernehmen</button>` : f.primer ? '' : `<button class="x" data-svdel="${i}" title="Feature entfernen">×</button>`}</td></tr>`).join('')}</table>` : ''}
+    ${frags.length && st.enz.length ? `<div class="digest"><div><b>Verdau ${esc(st.enz.join(' + '))}</b>
+        <p class="sub">${cuts.length ? cuts.map(c => `${esc(c.enzyme)} ${c.cut}`).join(' · ') : 'kein Schnitt'}</p>
+        <table class="feattab"><tr><th>Fragment</th><th>von</th><th>bis</th></tr>${frags.map(f => `<tr><td class="num"><b>${bp(f.size)}</b>${f.uncut ? ' <span class="sub">ungeschnitten</span>' : ''}</td><td class="num">${f.from}</td><td class="num">${f.to}</td></tr>`).join('')}</table></div>
+      ${gelSVG([{label: st.enz.join('+'), sizes: frags.map(f => f.size), uncut: frags[0].uncut && ann.circular}])}</div>` : ''}
+    <pre class="seqtext">${seqText(shown, {hits: hits.filter(h => h.len), frame: st.frame})}</pre>`;
+}
+
+/// Virtuelles Agarosegel mit Leiter (GeneRuler 1 kb); Laufstrecke ~ −log(Größe). Ungeschnittene Ringe laufen nicht wie lineare DNA (nur angedeutet).
+const LADDER = [10000, 8000, 6000, 5000, 4000, 3500, 3000, 2500, 2000, 1500, 1000, 750, 500, 250];
+const LADDER_LABELS = [10000, 6000, 4000, 3000, 2000, 1500, 1000, 750, 500, 250];  // nur so viele, dass sich nichts überdeckt
+function gelSVG(lanes) {
+  const top = 18, H = 250, lw = 54, gap = 14, left = 46, W = left + (lanes.length + 1) * (lw + gap) + 4;
+  const y = sz => top + (Math.log10(12000) - Math.log10(Math.max(sz, 80))) / (Math.log10(12000) - Math.log10(80)) * (H - top - 10);
+  const band = (x, sz, title, thick = 3) => `<rect x="${x}" y="${(y(sz) - thick / 2).toFixed(1)}" width="${lw}" height="${thick}" rx="1" class="band"><title>${esc(title)}</title></rect>`;
+  return `<svg class="gel" viewBox="0 0 ${W} ${H + 18}" role="img" aria-label="Virtuelles Gel">
+    <rect x="${left - 6}" y="4" width="${W - left + 4}" height="${H}" rx="6" class="gelbg"/>
+    ${LADDER.map(sz => `${LADDER_LABELS.includes(sz) ? `<text x="${left - 10}" y="${(y(sz) + 3).toFixed(1)}" text-anchor="end" class="tl">${sz >= 1000 ? Calc.fmt(sz / 1000) + ' kb' : sz}</text>` : ''}${band(left, sz, `Leiter ${sz} bp`, 1.5)}`).join('')}
+    ${lanes.map((l, i) => { const x = left + (i + 1) * (lw + gap);
+      return `${l.sizes.map(sz => band(x, l.uncut ? sz * 0.7 : sz, l.uncut ? `${sz} bp ungeschnitten (Ring, läuft anders)` : `${sz} bp`, l.uncut ? 4 : 3)).join('')}
+        <text x="${x + lw / 2}" y="${H + 14}" text-anchor="middle" class="tl">${esc(l.label.length > 12 ? l.label.slice(0, 11) + '…' : l.label)}</text>`; }).join('')}
+    <text x="${left + lw / 2}" y="${H + 14}" text-anchor="middle" class="tl">Leiter</text>
+  </svg>`;
 }
 
 async function saveAnn(el, patch) {
@@ -249,6 +286,15 @@ function initSeqView() {
     if (d.svorf !== undefined) { st.orfs = st.orfs ? null : Bio.orfs(st.seq, {minAa: 100, circular: st.ann.circular}).slice(0, 20); return drawSeqPanel(el); }
     if (d.svrc !== undefined) { st.rc = !st.rc; return drawSeqPanel(el); }
     if (d.svexp) return exportSeq(el, d.svexp);
+    if (d.svsingle !== undefined) {
+      st.singles = st.singles ? null : Object.keys(Bio.ENZYMES).filter(n => Bio.cutSites(st.seq, [n], {circular: st.ann.circular}).length == 1);
+      return drawSeqPanel(el);
+    }
+    if (d.svaddenz) { if (!st.enz.includes(d.svaddenz)) st.enz = [...st.enz, d.svaddenz]; return drawSeqPanel(el); }
+    if (d.svkeepprimer !== undefined) {
+      const sites = Bio.primerSites(st.seq, st.primer, {circular: st.ann.circular});
+      return saveAnn(el, {features: [...st.ann.features, ...sites.map(p => ({type: 'primer_bind', label: `Primer ${st.primer.slice(0, 10)}…`, start: p.start, end: p.end, strand: p.strand}))]});
+    }
     if (d.svdel) return saveAnn(el, {features: st.ann.features.filter((_, i) => i != +d.svdel)});
     if (d.svkeep) { const o = st.orfs[+d.svkeep]; st.orfs = st.orfs.filter(x => x != o); return saveAnn(el, {features: [...st.ann.features, {type: 'CDS', label: `ORF ${o.aa} aa`, start: o.start, end: o.end, strand: o.strand}]}); }
   });
@@ -259,9 +305,17 @@ function initSeqView() {
     if (e.target.dataset.svframe !== undefined) { st.frame = +e.target.value; drawSeqPanel(el); }
   });
   $('#reg').addEventListener('input', e => {
-    if (e.target.dataset.svmotif === undefined) return;
-    const el = e.target.closest('.seqpanel'), st = SEQ_STATE.get(el);
+    const k = ['svmotif', 'svenz', 'svprimer'].find(x => e.target.dataset[x] !== undefined);
+    if (!k) return;
+    const el = e.target.closest('.seqpanel'), st = SEQ_STATE.get(el), v = e.target.value;
     clearTimeout(st.t);
-    st.t = setTimeout(() => { st.motif = e.target.value.trim(); drawSeqPanel(el); const i = el.querySelector('[data-svmotif]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 200);
+    st.t = setTimeout(() => {
+      if (k == 'svmotif') st.motif = v.trim();
+      if (k == 'svprimer') st.primer = v.trim();
+      if (k == 'svenz') { const names = v.split(/[\s,+]+/).filter(Boolean), byLow = Object.fromEntries(Object.keys(Bio.ENZYMES).map(n => [n.toLowerCase(), n]));
+        st.enz = names.map(n => byLow[n.toLowerCase()]).filter(Boolean); }
+      drawSeqPanel(el);
+      const i = el.querySelector(`[data-${k}]`); i.focus(); i.value = v; i.setSelectionRange(v.length, v.length);
+    }, 250);
   });
 }
