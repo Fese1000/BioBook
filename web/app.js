@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode,
   ];
 }
 
@@ -178,7 +178,7 @@ function collectRefs(doc) {
     (n.content || []).forEach(walk);
   };
   walk(doc);
-  return {links: [...links], files: [...files], entities: [...entities]};
+  return {links: [...links], files: [...files], entities: [...entities], results: collectResults(doc)};
 }
 
 /// Verweis-Beschriftungen auf die aktuellen Titel bringen (Titel können sich geändert haben)
@@ -217,6 +217,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
+  ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
   ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
@@ -924,6 +925,36 @@ async function selfTest() {
   changed(); await flush();
   ok((await call('search', {q: 'B1'})).some(r => r.id == plEntry) || editor.getText().includes('A1–A3'), 'Belegung steht im Text des Eintrags');
   ok(editor.getHTML().includes('class="platetab"'), 'Platte erscheint im HTML/PDF als Tabelle');
+
+  // M11: Ergebnisse und Auswertung
+  await loadResultSchemas();
+  const prep = RESULT_SCHEMAS.find(x => x.name == 'Plasmid-Präp');
+  const preps = [[250, 50], [310, 50], [180, 40]];
+  for (const [i, [konz, vol]] of preps.entries()) {
+    const id = await call('create', {title: `Plasmid-Präp ${i + 1}`}); await refreshList(id);
+    editor.commands.setContent(''); editor.commands.insertContent([{type: 'results', attrs: {schema: prep.id, rows: [{}]}}, {type: 'paragraph'}]); await sleep(80);
+    const rb = document.querySelector('.results');
+    const put = (k, v) => { const inp = rb.querySelector(`[data-k="${k}"]`); inp.focus(); inp.value = v; inp.dispatchEvent(new Event('input', {bubbles: true})); };
+    put('probe', `Klon ${i + 1}`); put('konz', String(konz)); put('volumen', String(vol));
+    if (i == 0) ok(rb.querySelector('[data-fk="ausbeute"]').textContent == '12,5', 'Formel rechnet live: 250 ng/µl × 50 µl = 12,5 µg');
+    $('#title').focus(); await sleep(50);
+    changed(); await flush();
+  }
+  const rowsDB = await call('resultRows', {schema: prep.id});
+  ok(rowsDB.length == 3 && JSON.parse(rowsDB[0].values_json).ausbeute == 12.5, 'Ergebniszeilen samt Ausbeute gespeichert');
+  AN.schema = prep.id; AN.y = 'ausbeute'; AN.x = 'date';
+  await showAnalysis(); await sleep(100);
+  const tileMean = [...document.querySelectorAll('#analysis .tile')].find(t => t.textContent.startsWith('Mittelwert'))?.querySelector('b').textContent;
+  ok(document.querySelectorAll('#analysis .antable tr').length == 4 && document.querySelectorAll('#analysis svg.chart circle.pt').length == 3, 'Auswertung: Tabelle mit 3 Präps und 3 Punkte im Diagramm');
+  ok(tileMean == '11,73 µg', `Mittelwert der Ausbeute über Einträge: (12,5 + 15,5 + 7,2) / 3 = ${tileMean}`);
+  document.querySelector('#analysis circle.hit').dispatchEvent(new MouseEvent('mouseover', {bubbles: true})); await sleep(30);
+  ok(!$('#analysis .ctip').hidden && /µg/.test($('#analysis .ctip').textContent), 'Tooltip beim Darüberfahren');
+  AN.x = 'konz'; await renderAnalysis();
+  ok(document.querySelectorAll('#analysis svg.chart circle.pt').length == 3 && !document.querySelector('#analysis polyline'), 'Streudiagramm Ausbeute gegen Konzentration');
+  const csvOut = await analysisCSV();
+  const csvText = csvOut ? await call('testReadText', {path: csvOut.path.split('/').pop()}) : '';
+  ok(csvText.includes('Ausbeute (µg)') && csvText.includes('12,5'), 'CSV-Export mit Einheiten und Komma');
+  showView('doc');
   return out;
 }
 
@@ -1022,6 +1053,8 @@ async function start() {
   initRegistry();
   initStock();
   initLabels();
+  initResults();
+  await loadResultSchemas();
   refreshStockBadge().then(n => { if (n) status(`${n} Charge(n) im Bestand abgelaufen, bald ablaufend oder knapp`); });
   await loadTypes();
   await refreshList();

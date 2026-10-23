@@ -14,7 +14,7 @@
   <div id="tagsec" hidden><div class="sec"><span>Tags</span></div><div id="tags"></div></div>
   <div class="sec"><span>Registry</span><button id="newType" class="link" title="Neuer Typ">+ Typ</button></div>
   <ul id="types"></ul>
-  <ul id="stockNav"><li data-stock="lots"><span class="n">📦 Bestand</span><span class="badge" id="stockBadge" hidden></span></li></ul>
+  <ul id="stockNav"><li data-stock="lots"><span class="n">📦 Bestand</span><span class="badge" id="stockBadge" hidden></span></li><li data-stock="analysis"><span class="n">📊 Auswertung</span></li></ul>
   <div id="tplsec" hidden><div class="sec"><span>Vorlagen</span></div><ul id="templates"></ul></div>
   <div class="sec"><span id="listTitle">Einträge</span></div>
   <ul id="list"></ul>
@@ -45,6 +45,7 @@
   </div>
   <section id="reg" hidden></section>
   <section id="stock" hidden></section>
+  <section id="analysis" hidden></section>
   <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
 <section id="run" hidden></section>
@@ -66,5 +67,6 @@
 <script src="stock.js"></script>
 <script src="labels.js"></script>
 <script src="plate.js"></script>
+<script src="results.js"></script>
 <script src="app.js"></script>
 </body></html>

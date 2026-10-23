@@ -89,3 +89,26 @@ test('Zahlen lesen und anzeigen', () => {
   assert.equal(C.fmt(29.22), '29,22'); assert.equal(C.fmt(605.7), '605,7'); assert.equal(C.fmt(0.1234567), '0,1235');
   assert.equal(C.fmt(1500), '1500'); assert.equal(C.fmt(0.00001), '1e-5');
 });
+
+test('Formeln für berechnete Felder', () => {
+  near(C.formula('konz * volumen / 1000', {konz: '250', volumen: '50'}), 12.5, 'Ausbeute in µg');
+  near(C.formula('2 ^ 3 + (1 - 4) * 2', {}), 2, 'Potenz und Klammern');
+  near(C.formula('konz*verd', {konz: '1,5', verd: '10'}), 15, 'Komma-Zahlen aus Feldern');
+  near(C.formula('round(sqrt(x), 2)', {x: '2'}), 1.41, 'Funktionen');
+  near(C.formula('-x + 2**2', {x: 1}), 3, 'Vorzeichen und **');
+  assert.equal(C.formula('a / b', {a: '1', b: '0'}), null, 'Division durch null: leer');
+  assert.equal(C.formula('a * 2', {a: ''}), null, 'Leeres Feld: leer');
+  assert.throws(() => C.formula('a * c', {a: 1}), /Unbekanntes Feld c/);
+  assert.throws(() => C.formula('alert(1)', {}), /Unbekannte Funktion/);
+  assert.throws(() => C.formula('constructor', {}), /Unbekanntes Feld/);
+  assert.throws(() => C.formula('1 +', {}), /zu früh/);
+  assert.throws(() => C.formula('1 ; 2', {}), /unverständlich/);
+});
+
+test('Kennzahlen einer Reihe', () => {
+  const s = C.stats(['10', '12', '', '14', 'x', '16']);
+  assert.equal(s.n, 4); near(s.mean, 13, 'Mittelwert'); near(s.median, 13, 'Median');
+  near(s.sd, Math.sqrt(20 / 3), 'Standardabweichung (n−1)'); assert.equal(s.min, 10); assert.equal(s.max, 16);
+  assert.equal(C.stats([]).n, 0);
+  assert.equal(C.stats(['5']).sd, null);
+});

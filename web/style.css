@@ -254,3 +254,29 @@ dialog#locdlg::backdrop{background:rgba(0,0,0,.25)}dialog#locdlg h3{margin:0 0 1
 .ps small{color:var(--mut)}.ps .x{border:0;background:none;color:var(--mut);cursor:pointer}
 .sw{width:14px;height:14px;border-radius:50%;flex:none}.sw.erase{border:1.5px dashed var(--mut)}
 .psum{margin-top:8px;font-size:12px;color:var(--mut)}
+/* Ergebnisse und Auswertung */
+.results{border:1px solid var(--line);border-left:3px solid #2a78d6;border-radius:8px;margin:12px 0;padding:10px 12px;background:var(--side);font-size:13px;overflow-x:auto}
+.results.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.rshead{font-weight:600;margin-bottom:6px}
+.rstab{border-collapse:collapse;width:100%}
+.ProseMirror .rstab td,.ProseMirror .rstab th{border:0;border-bottom:1px solid var(--line);padding:3px 5px;background:none}
+.rstab th{font-size:12px;color:var(--mut);text-align:left;font-weight:600}.rstab th small{font-weight:400}
+.rstab input,.rstab select{width:100%;min-width:60px;font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:3px 5px}
+.rstab .num,.antable .num{text-align:right;font-variant-numeric:tabular-nums}.rstab td.calcd{font-weight:600;color:var(--acc)}
+.rstab .x{border:0;background:none;color:var(--mut);cursor:pointer}
+#analysis{flex:1;overflow:auto;padding:22px 32px 60px}
+.anfilters{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:14px;font-size:13px;color:var(--mut)}
+.anfilters select,.anfilters input{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px;margin-left:4px}
+.tiles{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-width:96px}.tile span{display:block;font-size:11.5px;color:var(--mut)}.tile b{font:600 17px var(--mono)}
+.chartbox{position:relative;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:16px;
+  --series-1:#2a78d6;--grid:#e6e3dc;--ticktext:#77716a;--surface:var(--bg)}
+@media(prefers-color-scheme:dark){.chartbox{--series-1:#3987e5;--grid:#2e3034;--ticktext:#9a958d}}
+.charttitle{font-weight:600;font-size:13px;margin-bottom:4px}
+svg.chart{width:100%;height:auto;display:block}
+svg.chart .grid{stroke:var(--grid);stroke-width:1}svg.chart .axis{stroke:var(--ticktext);stroke-width:1}
+svg.chart .tick{fill:var(--ticktext);font:11px -apple-system,system-ui}
+svg.chart .line{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:round}
+svg.chart .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
+svg.chart .hit{fill:transparent;cursor:pointer}svg.chart .hit:hover+*{}
+.ctip{position:absolute;pointer-events:none;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 6px 18px rgba(0,0,0,.15);white-space:nowrap}

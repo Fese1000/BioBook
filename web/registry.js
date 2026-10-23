@@ -23,7 +23,8 @@ async function loadTypes() {
 function showView(v) {
   $('#reg').hidden = v != 'reg';
   $('#stock').hidden = v != 'stock';
-  if (v != 'stock') document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
+  $('#analysis').hidden = v != 'analysis';
+  if (v != 'stock' && v != 'analysis') document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
   $('#doc').hidden = v != 'doc' || !cur;
   $('#empty').hidden = v != 'doc' || !!cur;
   $('#status').hidden = v != 'doc';

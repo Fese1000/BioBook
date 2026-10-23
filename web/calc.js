@@ -112,6 +112,62 @@
     return Math.round(v * (/^(h|std|stunde)/.test(u) ? 3600 : /^min/.test(u) ? 60 : 1));
   }
 
-  const Calc = {UNITS, CONC_UNITS, dimOf, num, fmt, dilution, molarity, mastermix, convert, duration, CalcError};
+  /// Formel für berechnete Felder: Zahlen, Feldnamen, + − * / ^ und Klammern, Funktionen sqrt/log10/ln/abs/min/max/round.
+  /// Eigener Parser statt eval, damit Formeln aus Vorlagen nie Code ausführen.
+  function formula(expr, vars) {
+    const src = String(expr), toks = [];
+    const re = /\s*(?:(\d+(?:[.,]\d+)?(?:e[-+]?\d+)?)|([a-zA-Z_][a-zA-Z0-9_]*)|(\*\*|[-+*/^(),]))/gy;
+    let m, last = 0;
+    while (last < src.length) {
+      re.lastIndex = last;
+      if (!(m = re.exec(src))) { if (/^\s*$/.test(src.slice(last))) break; fail(`Formel unverständlich bei „${src.slice(last).trim().slice(0, 10)}“`); }
+      last = re.lastIndex;
+      toks.push(m[1] ? {n: parseFloat(m[1].replace(',', '.'))} : m[2] ? {id: m[2]} : {op: m[3] == '**' ? '^' : m[3]});
+    }
+    let i = 0;
+    const peek = () => toks[i], eat = op => { if (toks[i]?.op == op) { i++; return true; } return false; };
+    const FN = {sqrt: Math.sqrt, log10: Math.log10, ln: Math.log, abs: Math.abs, round: (x, d = 0) => Math.round(x * 10 ** d) / 10 ** d, min: Math.min, max: Math.max};
+    function atom() {
+      const t = toks[i++];
+      if (!t) fail('Formel endet zu früh');
+      if (t.n != null) return t.n;
+      if (t.op == '(') { const v = sum(); if (!eat(')')) fail('Klammer fehlt'); return v; }
+      if (t.op == '-') return -power();
+      if (t.op == '+') return power();
+      if (t.id) {
+        if (eat('(')) {
+          if (!Object.hasOwn(FN, t.id)) fail(`Unbekannte Funktion ${t.id}`);
+          const args = [];
+          if (!eat(')')) { do { args.push(sum()); } while (eat(',')); if (!eat(')')) fail('Klammer fehlt'); }
+          return FN[t.id](...args);
+        }
+        if (!Object.hasOwn(vars, t.id)) fail(`Unbekanntes Feld ${t.id}`);  // nur eigene Felder, keine geerbten (constructor …)
+        const v = num(vars[t.id]);
+        if (v == null || Number.isNaN(v)) return NaN;  // leeres Feld: Ergebnis leer
+        return v;
+      }
+      fail('Formel unverständlich');
+    }
+    function power() { const b = atom(); return eat('^') ? b ** power() : b; }
+    function product() { let v = power(); for (;;) { if (eat('*')) v *= power(); else if (eat('/')) v /= power(); else return v; } }
+    function sum() { let v = product(); for (;;) { if (eat('+')) v += product(); else if (eat('-')) v -= product(); else return v; } }
+    if (!toks.length) fail('Formel ist leer');
+    const v = sum();
+    if (i < toks.length) fail('Formel unverständlich');
+    return Number.isFinite(v) ? v : null;
+  }
+
+  /// Kennzahlen einer Zahlenreihe (leere Werte zählen nicht)
+  function stats(values) {
+    const xs = values.map(num).filter(v => v != null && !Number.isNaN(v)).sort((a, b) => a - b);
+    const n = xs.length;
+    if (!n) return {n: 0};
+    const mean = xs.reduce((a, b) => a + b, 0) / n;
+    const sd = n > 1 ? Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)) : null;
+    const median = n % 2 ? xs[(n - 1) / 2] : (xs[n / 2 - 1] + xs[n / 2]) / 2;
+    return {n, mean, sd, median, min: xs[0], max: xs[n - 1], cv: sd != null && mean ? sd / Math.abs(mean) * 100 : null};
+  }
+
+  const Calc = {UNITS, CONC_UNITS, dimOf, num, fmt, dilution, molarity, mastermix, convert, duration, formula, stats, CalcError};
   if (typeof module != 'undefined' && module.exports) module.exports = Calc; else root.Calc = Calc;
 })(this);

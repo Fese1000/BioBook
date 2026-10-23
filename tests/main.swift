@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -315,6 +315,28 @@ var sdb2: OpaquePointer?
 sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &sdb2)
 check(sqlite3_exec(sdb2, "UPDATE lot_move SET delta = 0", nil, nil, nil) != SQLITE_OK, "Bewegungen sind unveränderlich")
 sqlite3_close(sdb2)
+
+// M11: Strukturierte Ergebnisse
+let schemas = try s.resultSchemas()
+check(schemas.count == 3 && schemas.contains { $0["name"] as? String == "Plasmid-Präp" }, "Drei Ergebnisvorlagen angelegt")
+let prep = schemas.first { $0["name"] as? String == "Plasmid-Präp" }!["id"] as! Int
+let res1 = try s.create(title: "Präp 1"), res2 = try s.create(title: "Präp 2")
+_ = try s.saveDraft(id: res1, title: "Präp 1", json: "{}", text: "", results: [["schema": prep, "rows": [["probe": "Klon 1", "konz": "250", "volumen": "50", "ausbeute": 12.5], ["probe": "", "konz": ""]]]])
+_ = try s.saveDraft(id: res2, title: "Präp 2", json: "{}", text: "", results: [["schema": prep, "rows": [["probe": "Klon 2", "konz": "310", "volumen": "50", "ausbeute": 15.5]]], ["schema": 9999, "rows": [["x": 1]]]])
+let rr = try s.resultRows(schema: prep)
+check(rr.count == 2 && rr.map { $0["entry_id"] as! Int } == [res1, res2], "Zeilen über Einträge, leere Zeile und unbekannte Vorlage ignoriert")
+_ = try s.saveDraft(id: res1, title: "Präp 1", json: "{}", text: "", results: [])
+check((try s.resultRows(schema: prep)).count == 1, "Zeilen werden beim Speichern ersetzt")
+try s.trashEntry(id: res2)
+check((try s.resultRows(schema: prep)).isEmpty, "Papierkorb zählt nicht mit")
+try s.restoreEntry(id: res2)
+let futureRows = try s.resultRows(schema: prep, from: "2099-01-01"), pastRows = try s.resultRows(schema: prep, from: "2000-01-01")
+check(futureRows.isEmpty && pastRows.count == 1, "Filter nach Zeitraum")
+let mySchema = try s.saveResultSchema(id: nil, name: "Zellzählung", fields: [["key": "lebend", "label": "Lebend", "type": "number", "unit": "Zellen/ml"],
+    ["key": "tot", "label": "Tot", "type": "number"], ["key": "viab", "label": "Viabilität", "type": "formula", "unit": "%", "expr": "lebend / (lebend + tot) * 100"]])
+check(mySchema > 0, "Eigene Vorlage mit Formel")
+check((try? s.saveResultSchema(id: nil, name: "Kaputt", fields: [["key": "a", "type": "formula", "expr": "a + b"]])) == nil, "Formel mit unbekanntem Feld abgelehnt")
+check((try? s.saveResultSchema(id: nil, name: "Leer", fields: [])) == nil, "Vorlage ohne Felder abgelehnt")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

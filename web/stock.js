@@ -23,7 +23,7 @@ async function showStock(tab = stockTab) {
   await flush();
   stockTab = tab; stockLot = null;
   showView('stock');
-  document.querySelectorAll('#stockNav li').forEach(li => li.classList.add('cur'));
+  document.querySelectorAll('#stockNav li').forEach(li => li.classList.toggle('cur', li.dataset.stock == 'lots'));
   stockLocs = await call('locations');
   if (tab == 'locations') return renderLocations();
   return renderLots();
@@ -266,7 +266,7 @@ function insertUsage() { editor.chain().focus().insertContent([{type: 'usage'}, 
 
 // ---------- Ereignisse ----------
 function initStock() {
-  $('#stockNav').addEventListener('click', () => showStock('lots'));
+  $('#stockNav').addEventListener('click', e => { const li = e.target.closest('li'); if (li?.dataset.stock == 'analysis') showAnalysis(); else showStock('lots'); });
   $('#stock').addEventListener('click', async e => {
     const d = e.target.dataset;
     if (d.stab) return showStock(d.stab);

@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 8
+    static let schemaVersion = 9
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -172,6 +172,20 @@ final class Store {
                 CREATE TRIGGER lot_move_ro_u BEFORE UPDATE ON lot_move BEGIN SELECT RAISE(ABORT, 'Bewegungen sind unveränderlich'); END;
                 CREATE TRIGGER lot_move_ro_d BEFORE DELETE ON lot_move BEGIN SELECT RAISE(ABORT, 'Bewegungen sind unveränderlich'); END;
                 """)
+            }
+            if v < 9 {
+                // Strukturierte Ergebnisse: Vorlagen und je Eintrag ein Abbild der Ergebniszeilen
+                try exec("""
+                CREATE TABLE result_schema(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, fields_json TEXT NOT NULL,
+                  created TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE result_row(entry_id INTEGER NOT NULL REFERENCES entry(id), schema_id INTEGER NOT NULL REFERENCES result_schema(id),
+                  row_no INTEGER NOT NULL, values_json TEXT NOT NULL, PRIMARY KEY(entry_id, row_no));
+                CREATE INDEX result_row_schema ON result_row(schema_id);
+                """)
+                for (name, fields) in Store.defaultResultSchemas {
+                    let json = String(data: try JSONSerialization.data(withJSONObject: fields), encoding: .utf8)!
+                    try query("INSERT INTO result_schema(name, fields_json, created) VALUES(?, ?, ?)", [name, json, Store.now()])
+                }
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
@@ -461,7 +475,7 @@ final class Store {
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
-    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = []) throws -> [String: Any] {
+    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = [], results: [[String: Any]] = []) throws -> [String: Any] {
         if try isTrashed(id) { throw StoreError.invalid("Der Eintrag liegt im Papierkorb. Erst wiederherstellen.") }
         if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
@@ -478,6 +492,7 @@ final class Store {
             }
             try refreshFileText(entry: id)
             try setEntryEntities(entry: id, entities)
+            try setEntryResults(entry: id, results)
         }
         return ["updated": t]
     }
@@ -567,7 +582,7 @@ final class Store {
         guard try isTrashed(id) else { throw StoreError.invalid("Nur Einträge aus dem Papierkorb lassen sich endgültig löschen") }
         if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen") }
         try transaction {
-            for t in ["revision", "entry_file", "entry_tag", "entry_entity"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
+            for t in ["revision", "entry_file", "entry_tag", "entry_entity", "result_row"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
             try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
             try query("DELETE FROM run_step WHERE run_id IN (SELECT id FROM run WHERE entry_id = ?)", [id])
             try query("DELETE FROM run WHERE entry_id = ?", [id])
@@ -627,6 +642,8 @@ final class Store {
             "registry": try query("SELECT e.id, t.prefix || '-' || substr('0000' || e.no, -4) AS code, e.type_id, e.name, e.fields_json, e.created, e.updated, e.archived FROM entity e JOIN rtype t ON t.id = e.type_id ORDER BY e.id"),
             "registry_history": try query("SELECT entity_id, changed, name, fields_json, author FROM entity_history ORDER BY id"),
             "entry_registry": try query("SELECT entry_id, entity_id FROM entry_entity"),
+            "result_schemas": try query("SELECT id, name, fields_json FROM result_schema ORDER BY id"),
+            "results": try query("SELECT entry_id, schema_id, row_no, values_json FROM result_row ORDER BY entry_id, row_no"),
         ]
     }
 

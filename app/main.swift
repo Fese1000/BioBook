@@ -530,6 +530,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 guard testMode, let d = Data(base64Encoded: try str("base64")), let img = NSImage(data: d),
                       let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { throw StoreError.invalid("Nur im Testmodus / Bild unlesbar") }
                 replyHandler(QR.detect(in: cg), nil)
+            case "resultSchemas": replyHandler(try s.resultSchemas(), nil)
+            case "saveResultSchema": replyHandler(try s.saveResultSchema(id: a["id"] as? Int, name: try str("name"), fields: a["fields"] as? [[String: Any]] ?? []), nil)
+            case "resultRows":
+                replyHandler(try s.resultRows(schema: try int("schema"), project: a["project"] as? Int, from: a["from"] as? String, to: a["to"] as? String), nil)
+            case "saveText":  // z. B. CSV aus der Auswertung
+                let name = URL(fileURLWithPath: try str("name")).lastPathComponent, data = Data(try str("text").utf8)
+                if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], testMode {
+                    let u = URL(fileURLWithPath: dir).appendingPathComponent(name); try data.write(to: u); return replyHandler(["path": u.path], nil)
+                }
+                let p = NSSavePanel(); p.nameFieldStringValue = name
+                p.beginSheetModal(for: window) { r in
+                    guard r == .OK, let u = p.url else { return replyHandler(NSNull(), nil) }
+                    do { try data.write(to: u); replyHandler(["path": u.path], nil) } catch { replyHandler(nil, "\(error)") }
+                }
             case "locations": replyHandler(try s.locations().map { l in var l = l; l["path"] = try s.locationPath(l["id"] as? Int); return l }, nil)
             case "saveLocation":
                 replyHandler(try s.saveLocation(id: a["id"] as? Int, parent: a["parent"] as? Int, name: try str("name"), kind: (a["kind"] as? String) ?? "ort",
@@ -587,7 +601,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "save":
                 let id = try int("id")
                 replyHandler(try s.saveDraft(id: id, title: try str("title"), json: try str("json"), text: try str("text"),
-                                             links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? [], entities: a["entities"] as? [Int] ?? []), nil)
+                                             links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? [], entities: a["entities"] as? [Int] ?? [],
+                                             results: a["results"] as? [[String: Any]] ?? []), nil)
                 broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
                 if !testMode { Spotlight.update(s, id: id) }
                 scheduleQuickLook()
