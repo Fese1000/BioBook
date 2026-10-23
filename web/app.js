@@ -219,6 +219,8 @@ const TOOLS = [
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
   ['📚 Quelle', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
+  ['✨ Zusammenfassen', 'Eintrag von Claude zusammenfassen lassen (eigener Schlüssel; vorher siehst du, was gesendet wird)', () => aiSummary(), null, () => AI_ON],
+  ['✨ Protokoll', 'Aus Stichpunkten (markiert oder ganzer Eintrag) ein Protokoll entwerfen lassen', () => aiProtocol(), null, () => AI_ON],
   ['⚗️ Struktur', 'Strukturformel aus SMILES mit Summenformel und Molmasse (→ Einwaage-Rechner)', () => insertChem()],
   ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
@@ -1322,6 +1324,46 @@ async function selfTest() {
   const svcMsg = await call('testService', {text: 'Notiz aus Safari\nmit zweiter Zeile'}); await sleep(500);
   ok(!svcMsg && $('#title').value == 'Notiz aus Safari' && editor.getText().includes('mit zweiter Zeile'), 'Dienst „Neuer Laborbuch-Eintrag“ übernimmt markierten Text');
   showView('doc');
+
+  // M23: KI-Assistent (Antworten im Test hinterlegt, kein Netz, nie der echte Schlüsselbund)
+  await refreshAI();
+  ok(!AI_ON && !$('#toolbar').textContent.includes('✨') && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Ohne Schlüssel ist der Assistent unsichtbar');
+  let keyErr = ''; try { await call('aiSetKey', {key: 'geheim'}); } catch (e) { keyErr = e.message; }
+  await call('aiSetKey', {key: 'sk-ant-test-0000'}); await refreshAI();
+  ok(/sk-ant-/.test(keyErr) && AI_ON && $('#toolbar').textContent.includes('✨ Zusammenfassen') && !document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Mit Schlüssel erscheinen Zusammenfassen, Protokoll und „Fragen“');
+  const reply = text => call('testAiReply', {reply: {model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: {input_tokens: 120, output_tokens: 40},
+    content: [{type: 'thinking', thinking: ''}, {type: 'text', text}]}});
+  const prepEntries = await call('search', {q: 'Plasmid-Präp'});
+  await open(prepEntries[0].id); await sleep(200);
+  await reply('- Ziel: Plasmid isolieren\n- Ausbeute **12,5 µg**');
+  await aiSummary(); await sleep(100);
+  const sumReq = await call('testAiLastRequest');
+  ok(!$('#aibox').hidden && $('#aibox .aibody').innerHTML.includes('<b>12,5 µg</b>') && !$('#aibox').textContent.includes('thinking'), 'Zusammenfassung erscheint unter dem Eintrag (nur Text, ohne Denkblock)');
+  ok(sumReq.model == 'claude-opus-5-5' && sumReq.fallbacks == 'default' && sumReq.output_config.effort == 'medium' && sumReq.user === undefined && sumReq.messages[0].content.startsWith(`Titel: ${$('#title').value}`),
+    'Anfrage: claude-opus-5-5, Fallback bei Ablehnung, nur dieser Eintrag');
+  window.AI_CONFIRM = false; await reply('sollte nicht kommen'); const canon = v => JSON.stringify(v, (k, x) => x && typeof x == 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(n => [n, x[n]])) : x);  // Reihenfolge der Schlüssel egal
+  const reqBefore = canon(await call('testAiLastRequest'));
+  await aiSummary();
+  ok(canon(await call('testAiLastRequest')) == reqBefore, 'Ohne Bestätigung in der Vorschau wird nichts gesendet');
+  window.AI_CONFIRM = true;
+  await reply('- Ziel: Plasmid isolieren\n- Ausbeute **12,5 µg**'); await aiSummary(); await sleep(50);
+  document.querySelector('#aibox [data-aiinsert]').click(); await sleep(100);
+  ok(/KI-Zusammenfassung \(Claude, .*\) – bitte prüfen/.test(editor.getText()) && editor.getText().includes('Ausbeute 12,5 µg'), 'Zusammenfassung lässt sich als markierter Abschnitt übernehmen');
+  editor.commands.undo(); await flush();
+  const srcId = prepEntries[0].id;
+  await reply(`Die Ausbeute lag bei 12,5 µg [E${srcId}]; [E999999] gibt es nicht.`);
+  await showAsk(); $('#askq').value = 'Plasmid-Präp Ausbeute';
+  await aiAsk($('#askq').value); await sleep(100);
+  const askReq = await call('testAiLastRequest');
+  ok(document.querySelector(`#aianswer a.aicite[data-entry="${srcId}"]`) && !document.querySelector('#aianswer a[data-entry="999999"]') && /Quellen: /.test($('#aianswer').textContent),
+    'Frage an das Laborbuch: Antwort mit Verweis auf den Eintrag, erfundene Kennung kein Link');
+  ok((askReq.messages[0].content.match(/<eintrag id="E/g) || []).length <= 8 && askReq.messages[0].content.includes(`id="E${srcId}"`), 'Mitgesendet: höchstens 8 gefundene Einträge');
+  await call('testAiReply', {reply: {model: 'claude-opus-5-5', stop_reason: 'refusal', content: [], usage: {}}});
+  let aiRefused = ''; try { await call('aiAsk', {system: 'x', user: 'y'}); } catch (e) { aiRefused = e.message; }
+  ok(/abgelehnt/.test(aiRefused), 'Ablehnung durch Claude wird verständlich gemeldet');
+  await call('aiSetKey', {key: null}); await refreshAI();
+  ok(!AI_ON && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Schlüssel entfernt: Assistent wieder unsichtbar');
+  showView('doc');
   return out;
 }
 
@@ -1428,6 +1470,7 @@ async function start() {
   initDbLinks();
   initLiterature();
   initAgenda();
+  initAssistant();
   refreshAgendaBadge();
   refreshOrderBadge();
   await loadResultSchemas();

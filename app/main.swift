@@ -654,6 +654,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 newEntryFromService(pb, userData: "", error: &msg)
                 pb.releaseGlobally()
                 replyHandler(msg as String, nil)
+            case "aiStatus": replyHandler(["configured": Assistant.key(test: testMode) != nil, "model": Assistant.model], nil)
+            case "aiSetKey": try Assistant.setKey(a["key"] as? String, test: testMode); replyHandler(true, nil)
+            case "aiAsk":
+                Assistant.ask(system: try str("system"), user: try str("user"), maxTokens: (a["maxTokens"] as? Int) ?? 4000, test: testMode) { r in
+                    switch r { case .success(let v): replyHandler(v, nil); case .failure(let e): replyHandler(nil, "\(e)") }
+                }
+            case "testAiReply":
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                Assistant.testReply = a["reply"] as? [String: Any]; replyHandler(true, nil)
+            case "testAiLastRequest":
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                replyHandler(Assistant.lastRequest ?? NSNull(), nil)
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)

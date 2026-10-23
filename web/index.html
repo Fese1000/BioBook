@@ -14,7 +14,7 @@
   <div id="tagsec" hidden><div class="sec"><span>Tags</span></div><div id="tags"></div></div>
   <div class="sec"><span>Registry</span><button id="newType" class="link" title="Neuer Typ">+ Typ</button></div>
   <ul id="types"></ul>
-  <ul id="stockNav"><li data-stock="agenda"><span class="n">📅 Fällig</span><span class="badge" id="agendaBadge" hidden></span></li><li data-stock="lots"><span class="n">📦 Bestand</span><span class="badge" id="stockBadge" hidden></span></li><li data-stock="orders"><span class="n">🛒 Bestellungen</span><span class="badge" id="orderBadge" hidden></span></li><li data-stock="cult"><span class="n">🧫 Zellkultur</span><span class="badge" id="cultBadge" hidden></span></li><li data-stock="dev"><span class="n">🔧 Geräte</span><span class="badge" id="devBadge" hidden></span></li><li data-stock="lit"><span class="n">📚 Literatur</span></li><li data-stock="analysis"><span class="n">📊 Auswertung</span></li></ul>
+  <ul id="stockNav"><li data-stock="agenda"><span class="n">📅 Fällig</span><span class="badge" id="agendaBadge" hidden></span></li><li data-stock="lots"><span class="n">📦 Bestand</span><span class="badge" id="stockBadge" hidden></span></li><li data-stock="orders"><span class="n">🛒 Bestellungen</span><span class="badge" id="orderBadge" hidden></span></li><li data-stock="cult"><span class="n">🧫 Zellkultur</span><span class="badge" id="cultBadge" hidden></span></li><li data-stock="dev"><span class="n">🔧 Geräte</span><span class="badge" id="devBadge" hidden></span></li><li data-stock="lit"><span class="n">📚 Literatur</span></li><li data-stock="ask" class="aionly" hidden><span class="n">✨ Fragen</span></li><li data-stock="analysis"><span class="n">📊 Auswertung</span></li></ul>
   <div id="tplsec" hidden><div class="sec"><span>Vorlagen</span></div><ul id="templates"></ul></div>
   <div class="sec"><span id="listTitle">Einträge</span></div>
   <ul id="list"></ul>
@@ -41,6 +41,7 @@
     </div>
     <div id="toolbar"></div>
     <div id="editor"></div>
+    <div id="aibox" hidden></div>
     <div id="backlinks" hidden></div>
     <div id="dbrefs" hidden></div>
     <div id="citebox" hidden></div>
@@ -53,6 +54,7 @@
   <section id="orders" hidden></section>
   <section id="lit" hidden></section>
   <section id="agenda" hidden></section>
+  <section id="ask" hidden></section>
   <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
 <section id="run" hidden></section>
@@ -72,6 +74,7 @@
 <script src="agenda.js"></script>
 <script src="devfiles.js"></script>
 <script src="chem.js"></script>
+<script src="assistant.js"></script>
 <script src="calcblock.js"></script>
 <script src="run.js"></script>
 <script src="sign.js"></script>

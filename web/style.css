@@ -361,3 +361,10 @@ section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
 .chembody{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.chempic{background:#fff;border-radius:8px;min-height:20px}.chempic svg{display:block}
 @media(prefers-color-scheme:dark){.chempic{background:var(--bg)}}
 .chemfacts p{margin:2px 0}.chemfacts .hill{font-size:17px;font-weight:600}.chem-print svg{max-width:60mm;height:auto}
+/* KI-Assistent */
+#aibox{border:1px solid var(--line);border-left:3px solid #8e5bd0;border-radius:8px;margin:18px 0;padding:10px 14px;background:var(--side);font-size:13.5px}
+.aihead{display:flex;gap:10px;align-items:baseline}.aihead .sub{flex:1}.aihead .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px}
+.aibody p{margin:6px 0}.aibody ul,.aibody ol{margin:6px 0;padding-left:20px}.aiacts{margin-top:8px}
+.askform{display:flex;gap:8px;margin-bottom:6px}.askform input{flex:1;font:14px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
+#aianswer{font-size:14px;line-height:1.55;max-width:760px}#aianswer a.aicite{font-weight:600;text-decoration:none}
+ul.aisend{font-size:13px;max-height:240px;overflow:auto}

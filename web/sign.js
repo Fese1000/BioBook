@@ -28,7 +28,7 @@ async function renderSignInfo() {
 
 async function signEntry() {
   if (!cur || curSigned) return;
-  const s = await call('settings');
+  const s = {...await call('settings'), ai: (await call('aiStatus')).configured};
   if (!s.author?.trim()) { alert('Bitte zuerst in den Einstellungen deinen Namen für Signaturen eintragen.'); return showSettings(); }
   if (!confirm(`Eintrag abschließen und als „${s.author}“ signieren?\n\nDanach lässt er sich nicht mehr ändern; Ergänzungen kommen in einen Nachtrag. Signiert wird mit deinem persönlichen Schlüssel aus dem Schlüsselbund.`)) return;
   await flush();
@@ -118,6 +118,9 @@ async function showSettings() {
     <p class="row"><b>Sicherung</b></p>
     <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
     <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
+    <p class="row"><b>KI-Assistent</b></p>
+    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „✨ Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
+    <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
     <p class="row"><b>Updates</b></p>
     <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
     <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
@@ -136,6 +139,11 @@ async function showSettings() {
     $('#upGo').disabled = true;
     try { await call('updateInstall'); } catch (e) { $('#upMsg').textContent = 'Update fehlgeschlagen: ' + e.message; $('#upGo').disabled = false; }
   };
+  $('#aiSave').onclick = async () => {
+    try { await call('aiSetKey', {key: $('#aiKey').value}); $('#aiKey').value = ''; await refreshAI(); $('#aiState').textContent = AI_ON ? 'Eingerichtet – Schlüssel im Schlüsselbund.' : 'Aus.'; }
+    catch (e) { $('#aiState').textContent = e.message; }
+  };
+  if ($('#aiDel')) $('#aiDel').onclick = async () => { await call('aiSetKey', {key: null}); await refreshAI(); $('#aiState').textContent = 'Aus – Schlüssel entfernt.'; $('#aiDel').remove(); };
   $('#bkChoose').onclick = async () => { const p = await call('chooseBackupDir'); if (p) $('#bkDir').textContent = (await call('settings')).backupDir; };
   $('#bkNow').onclick = async () => { const r = await backupNow(); if (r) $('#bkLast').textContent = when(new Date().toISOString()); };
   dlg.onclose = async () => {
