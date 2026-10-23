@@ -97,7 +97,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
-**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) und Phase 3 (M14–M17) abgeschlossen; Phase 4 (M18–M24) geplant.**
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13), Phase 3 (M14–M17) und Phase 4 (M18–M24) abgeschlossen. Phase 5 nur bei Bedarf.**
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ Netz nur auf Klick und nur zu festen Adressen (Crossref, PubMed, Anthropic); Sch
 | M21 ✅ | Chemie: SMILES eingeben oder zeichnen → Strukturformel, Summenformel, Molmasse; Verknüpfung mit Chemikalien in der Registry und dem Einwaage-Rechner | SMILES von Tris ergibt C4H11NO3, 121,14 g/mol und ein Strukturbild; Einwaage-Rechner übernimmt die Molmasse. **Erledigt 2026-10-23:** eigener SMILES-Parser (13 Stoffe gegen Literaturwerte), Bild mit SmilesDrawer (MIT); Zeichnen per Maus noch nicht – Eingabe als SMILES (z. B. aus PubChem) |
 | M22 ✅ | Kurzbefehle und AppleScript: `laborbuch://`-Aktionen (neuer Eintrag, Text anhängen, suchen), AppleScript-Wörterbuch (Einträge lesen/anlegen), Dienste-Menü „Ins Laborbuch“ | Kurzbefehl legt Eintrag mit Text an; AppleScript legt Einträge an. **Erledigt 2026-10-23:** eigene Befehle `create entry`, `append text`, `find entries`, `entry text` statt `make new entry` (ohne Objektmodell); per Apple Event in der App getestet. Offen: die lesbaren Befehlsnamen einmal im Skripteditor mit der installierten App prüfen (Xcode-Werkzeuge fehlen hier) |
 | M23 ✅ | KI-Assistent mit eigenem Schlüssel: Eintrag zusammenfassen, Fragen an das Laborbuch (Suche + Antwort mit Quellen), Protokoll aus Stichpunkten; nur auf Klick, zeigt vorher, was gesendet wird | Ohne Schlüssel unsichtbar; mit Schlüssel Zusammenfassung eines Eintrags mit Verweisen; Schlüssel nur im Schlüsselbund. **Erledigt 2026-10-23:** Claude Opus 5.5 über die Messages API (roh per HTTP, Fallback bei Ablehnung), Vorschau vor dem Senden, Verweise [E…] als Links; im Test mit hinterlegten Antworten. Offen: einmal mit echtem Schlüssel ausprobieren |
-| M24 | Erweiterungen: eigene Blöcke/Rechner als JavaScript-Dateien im Ordner „Erweiterungen“ mit begrenzter Schnittstelle (kein Dateisystem, kein Netz), ein- und ausschaltbar | Beispiel-Erweiterung (Zellzahl-Rechner) erscheint als Block; Fehler in einer Erweiterung stören die App nicht |
+| M24 ✅ | Erweiterungen: eigene Blöcke/Rechner als JavaScript-Dateien im Ordner „Erweiterungen“ mit begrenzter Schnittstelle (kein Dateisystem, kein Netz), ein- und ausschaltbar | Beispiel-Erweiterung (Zellzahl-Rechner) erscheint als Block; Fehler in einer Erweiterung stören die App nicht. **Erledigt 2026-10-23:** Worker in Sandbox-Rahmen (CSP ohne Netz), App-Brücke nur für die Hauptseite; getestet mit Syntaxfehler, Endlosschleife, Netz- und Brückenzugriff |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).

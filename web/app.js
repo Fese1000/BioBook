@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, DbLinks, DueDates,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, ExtNode, DbLinks, DueDates,
   ];
 }
 
@@ -221,6 +221,7 @@ const TOOLS = [
   ['📚 Quelle', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
   ['✨ Zusammenfassen', 'Eintrag von Claude zusammenfassen lassen (eigener Schlüssel; vorher siehst du, was gesendet wird)', () => aiSummary(), null, () => AI_ON],
   ['✨ Protokoll', 'Aus Stichpunkten (markiert oder ganzer Eintrag) ein Protokoll entwerfen lassen', () => aiProtocol(), null, () => AI_ON],
+  ['🧩 Erweiterung', 'Block aus einer Erweiterung einfügen', (e, btn) => extMenu(btn), null, () => extBlocks().length > 0],
   ['⚗️ Struktur', 'Strukturformel aus SMILES mit Summenformel und Molmasse (→ Einwaage-Rechner)', () => insertChem()],
   ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
@@ -1364,6 +1365,50 @@ async function selfTest() {
   await call('aiSetKey', {key: null}); await refreshAI();
   ok(!AI_ON && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Schlüssel entfernt: Assistent wieder unsichtbar');
   showView('doc');
+
+  // M24: Erweiterungen (abgeschottet im Worker eines Sandbox-Rahmens)
+  const inst = await call('installExampleExtensions');
+  await loadExtensions();
+  ok(inst.includes('Zellzahl.js') && EXT.has('zellzahl') && $('#toolbar').textContent.includes('🧩 Erweiterung'), 'Beispiel-Erweiterung (Zellzahl) installiert und geladen');
+  const exEntry = await call('create', {title: 'Zellen zählen'}); await refreshList(exEntry);
+  editor.commands.setContent(''); insertExtBlock('zellzahl', 'neubauer'); await sleep(300);
+  const xb = document.querySelector('.extblock');
+  const setX = (k, v) => { const i = xb.querySelector(`[data-xk="${k}"]`); i.focus(); i.value = v; i.dispatchEvent(new Event('input', {bubbles: true})); };
+  setX('lebend', '150'); setX('tot', '20'); setX('volumen', '10'); await sleep(300);
+  $('#title').focus(); await sleep(400);
+  const xr = editor.getJSON().content.find(n => n.type == 'extblock')?.attrs.result || [];
+  ok(xr[0]?.value == 750000 && Math.abs(xr[1]?.value - 88.235) < 0.01 && xr[2]?.value == 7.5e6 && /7,50 × 10⁶\s*Zellen/.test(document.querySelector('.extblock').textContent),
+    'Zellzahl: 150 Zellen in 4 Quadraten × 2 → 7,50 × 10⁵/ml, Viabilität 88,2 %, gesamt 7,50 × 10⁶');
+  changed(); await flush();
+  ok(editor.getText().includes('Lebende Zellen: 7,50 × 10⁵ Zellen/ml'), 'Ergebnis steht im Text des Eintrags');
+  await call('testWriteExtension', {file: 'kaputt.js', code: 'laborbuch.register({id: "kaputt", blocks: [}'});
+  await call('testWriteExtension', {file: 'schleife.js', code: 'laborbuch.register({id: "schleife", name: "Schleife", blocks: [{id: "b", title: "Hängt", fields: [], compute() { while (true) {} }}]});'});
+  await call('testWriteExtension', {file: 'netz.js', code: 'fetch("lab://app/index.html").then(() => laborbuch.register({id: "netz", blocks: []}));'});
+  await call('testWriteExtension', {file: 'bruecke.js', code: 'webkit.messageHandlers.lab.postMessage({cmd: "list"}).then(() => laborbuch.register({id: "bruecke", blocks: []}));'});
+  await loadExtensions(); await sleep(300);
+  ok(EXT_ERRORS.some(e => e.file == 'kaputt.js') && EXT.has('zellzahl') && EXT.has('schleife') && !EXT.has('netz') && !EXT.has('bruecke'),
+    'Kaputte Erweiterung gemeldet; Netz und App-Brücke sind für Erweiterungen nicht erreichbar');
+  let ticks = 0; const tick = setInterval(() => ticks++, 50);
+  const t0 = Date.now(); let loopErr = '';
+  try { await extCompute('schleife', 'b', {}); } catch (e) { loopErr = e.message; }
+  clearInterval(tick);
+  // Im verborgenen Testfenster drosselt WebKit Zeitgeber (~250 ms); dass der Abbruch-Zeitgeber pünktlich feuert, zeigt schon: der Hauptfaden blieb frei
+  ok(/zu lange/.test(loopErr) && Date.now() - t0 < 2500 && ticks >= 3, `Endlosschleife wird nach ${Date.now() - t0} ms abgebrochen, die App blieb bedienbar (${ticks} Takte)`);
+  ok((await extCompute('zellzahl', 'neubauer', {lebend: '100', quadrate: '4', verd: '1'}))[0].value == 250000, 'Andere Erweiterungen rechnen danach weiter');
+  const guard = await new Promise(res => {
+    const f = document.createElement('iframe'); f.setAttribute('sandbox', 'allow-scripts'); f.hidden = true;
+    f.srcdoc = `<script>try { window.webkit.messageHandlers.lab.postMessage({cmd: "list"}).then(r => parent.postMessage({leak: true}, "*"), e => parent.postMessage({err: String(e)}, "*")); } catch (e) { parent.postMessage({err: String(e)}, "*"); }<\/script>`;
+    const on = e => { if (e.source === f.contentWindow) { removeEventListener('message', on); f.remove(); res(e.data); } };
+    addEventListener('message', on); document.body.appendChild(f); setTimeout(() => res({timeout: true}), 2000);
+  });
+  ok(!guard.leak && (guard.err || guard.timeout), `Eingebettete Rahmen erreichen die App-Brücke nicht (${guard.err || 'keine Antwort'})`);
+  await call('setExtensionEnabled', {file: 'Zellzahl.js', enabled: false}); await loadExtensions();
+  showView('doc'); cur = null; await open(exEntry); await sleep(200);
+  ok(!EXT.has('zellzahl') && /Erweiterung fehlt/.test(document.querySelector('.extblock').textContent) && /7,50 × 10⁶/.test(document.querySelector('.extblock').textContent),
+    'Ausgeschaltet: Block zeigt das gespeicherte Ergebnis weiter');
+  await call('setExtensionEnabled', {file: 'Zellzahl.js', enabled: true}); await loadExtensions();
+  await call('testSnapshot', {name: 'm24-erweiterung.png'}).catch(() => {});
+  showView('doc');
   return out;
 }
 
@@ -1471,6 +1516,7 @@ async function start() {
   initLiterature();
   initAgenda();
   initAssistant();
+  await loadExtensions();
   refreshAgendaBadge();
   refreshOrderBadge();
   await loadResultSchemas();

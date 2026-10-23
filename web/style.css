@@ -368,3 +368,8 @@ section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
 .askform{display:flex;gap:8px;margin-bottom:6px}.askform input{flex:1;font:14px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px}
 #aianswer{font-size:14px;line-height:1.55;max-width:760px}#aianswer a.aicite{font-weight:600;text-decoration:none}
 ul.aisend{font-size:13px;max-height:240px;overflow:auto}
+/* Erweiterungen */
+.extblock{border:1px solid var(--line);border-left:3px solid #76b7b2;border-radius:8px;margin:12px 0;padding:10px 12px;background:var(--side);font-size:13px}
+.extblock.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.extfields{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:6px}.extfields label{display:flex;flex-direction:column;gap:2px;font-size:11.5px;color:var(--mut)}
+.extfields input{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px;width:150px}

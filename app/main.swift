@@ -281,6 +281,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // MARK: Brücke – feste Befehlsliste, jede Eingabe wird geprüft
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage, replyHandler: @escaping (Any?, String?) -> Void) {
+        // Nur die Seite selbst darf die Brücke benutzen – nie ein eingebetteter Rahmen (z. B. eine Erweiterung)
+        guard m.frameInfo.isMainFrame else { return replyHandler(nil, "Nicht erlaubt") }
         guard let msg = m.body as? [String: Any], let cmd = msg["cmd"] as? String, let s = store else { return replyHandler(nil, "Ungültige Anfrage") }
         let a = msg["args"] as? [String: Any] ?? [:]
         func int(_ k: String) throws -> Int { guard let v = a[k] as? Int else { throw StoreError.invalid("\(k) fehlt") }; return v }
@@ -666,6 +668,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "testAiLastRequest":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 replyHandler(Assistant.lastRequest ?? NSNull(), nil)
+            case "extensions": replyHandler(try Extensions.list(test: testMode), nil)
+            case "setExtensionEnabled": Extensions.setEnabled(try str("file"), a["enabled"] as? Bool ?? true, test: testMode); replyHandler(true, nil)
+            case "installExampleExtensions": replyHandler(try Extensions.installExamples(test: testMode), nil)
+            case "openExtensionsFolder": Extensions.openFolder(test: testMode); replyHandler(Extensions.folder(test: testMode).path, nil)
+            case "testWriteExtension":  // Testmodus: Erweiterung in den Testordner legen
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                let dir = Extensions.folder(test: true); try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                try Data(try str("code").utf8).write(to: try FileExport.safe(try str("file"), in: dir)); replyHandler(true, nil)
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)

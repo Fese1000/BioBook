@@ -13,6 +13,7 @@ build() {  # $1 = arm64|x86_64
   rm -rf "$stage"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   cp -R "$SRC/web" "$app/Contents/Resources/"
   cp "$SRC/app/AppIcon.icns" "$SRC/app/Laborbuch.sdef" "$app/Contents/Resources/"
+  cp -R "$SRC/app/Erweiterungen" "$app/Contents/Resources/"
   swiftc -O -target "$arch-apple-macos13" "$SRC"/app/*.swift -o "$app/Contents/MacOS/Laborbuch"
   cat > "$app/Contents/Info.plist" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
