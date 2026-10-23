@@ -394,8 +394,11 @@ async function refreshList(selectId) {
     : q ? await call('search', {q}) : await call('list', filter);
   if (q && project != null && project != 'trash') rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
   if (q && tag != null) { const n = tags.find(t => t.id == tag)?.name.toLowerCase(); rows = rows.filter(r => (r.tags || '').toLowerCase().split(', ').includes(n)); }
-  $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''}">
-    <div class="t">${esc(r.title || 'Ohne Titel')}</div>
+  if (project != 'trash') rows = Manage.filterSort(rows, q && LISTF.sort == 'updated' ? {...LISTF, sort: 'none'} : LISTF);  // Suche: Trefferreihenfolge bleibt
+  if (LIST_SELECT) for (const id of [...LIST_SELECT]) if (!rows.some(r => r.id == id)) LIST_SELECT.delete(id);
+  renderListBar();
+  $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''} ${LIST_SELECT?.has(r.id) ? 'picked' : ''}">
+    <div class="t">${LIST_SELECT ? `<input type="checkbox" class="lpick" ${LIST_SELECT.has(r.id) ? 'checked' : ''}> ` : ''}${r.pinned ? '📌 ' : ''}${statusDot(r.status)}${esc(r.title || 'Ohne Titel')}</div>
     <div class="m">${KINDS[r.kind] || ''} · ${r.day_first ? `📅 ${Days.rangeLabel(r.day_first, r.day_last)}` : when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
     ${r.tags ? `<div class="m">${r.tags.split(', ').map(t => '#' + esc(t)).join(' ')}</div>` : ''}
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
@@ -442,7 +445,9 @@ async function open(id, {find} = {}) {
   checkLinks();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
-  if (SIDE == e.id) closeSide();
+  if (SIDE == e.id || SIDE < 0) closeSide();  // negativ: Versionsvergleich des vorigen Eintrags
+  call('touchOpened', {id: e.id}).catch(() => {});
+  renderEntryFlags();
   if (ETAB != 'notes') showEntryTab('notes'); else renderEntryTabs();
   if (find && jumpToText(find)) return;
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
@@ -521,7 +526,7 @@ function setPreview(r) {
   $('#meta').hidden = !!r;
   $('#preview').hidden = !r;
   if (r) $('#preview').innerHTML = `<span class="grow"><b>Revision ${r.no}</b> vom ${when(r.created)} · nur lesen</span>
-    <button class="btn on" data-restore>Diese Fassung wiederherstellen</button><button class="btn" data-back>Zurück zum aktuellen Stand</button>`;
+    <button class="btn" data-diff="${r.no}">Änderungen zum aktuellen Stand</button><button class="btn on" data-restore>Diese Fassung wiederherstellen</button><button class="btn" data-back>Zurück zum aktuellen Stand</button>`;
   document.querySelectorAll('#revlist li').forEach(li => li.classList.toggle('cur', r && li.value == r.no));
 }
 
@@ -1534,6 +1539,51 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm27-editor.png'}).catch(() => {});
   changed(); await flush();
   showView('doc');
+
+  // M28: Einträge verwalten
+  await open(lbId); await sleep(150);
+  $('#metaStatus').value = 'fehlgeschlagen'; $('#metaStatus').dispatchEvent(new Event('change')); await sleep(200);
+  $('#pinBtn').click(); await sleep(300);
+  const firstLi = document.querySelector('#list li');
+  ok(firstLi?.dataset.id == lbId && firstLi.querySelector('.stdot') && /📌/.test(firstLi.textContent), 'Status mit Farbe und Anheften (oben in der Liste)');
+  Object.assign(LISTF, {status: 'fehlgeschlagen'}); await refreshList();
+  ok([...document.querySelectorAll('#list li')].map(l => +l.dataset.id).join() == String(lbId) && /Filter ●/.test($('#listbar').textContent), 'Filter „fehlgeschlagen“');
+  const keepPrompt28 = window.prompt; window.prompt = () => 'Fehlgeschlagen';
+  await saveCurrentSearch(); window.prompt = keepPrompt28;
+  Object.assign(LISTF, {status: ''}); await refreshList(); await sleep(100);
+  document.querySelector('#savedlist [data-ss] .n').click(); await sleep(200);
+  ok(!$('#savedsec').hidden && LISTF.status == 'fehlgeschlagen' && document.querySelectorAll('#list li').length == 1, 'Gespeicherte Suche stellt den Filter wieder her');
+  Object.assign(LISTF, {status: '', sort: 'title'}); await refreshList();
+  const titles = [...document.querySelectorAll('#list li')].filter(l => !/📌/.test(l.textContent)).map(l => l.querySelector('.t').textContent.trim());
+  ok(titles.length > 3 && titles.every((t, i) => !i || titles[i - 1].localeCompare(t, 'de', {numeric: true}) <= 0), 'Sortieren nach Titel');
+  LISTF.sort = 'updated'; await refreshList();
+  await open(useEntry); await sleep(150);
+  const lotBefore = (await call('lot', {id: lotA.id})).amount;
+  const dupId = await duplicateEntry(); await sleep(200);
+  const dupUsage = editor.getJSON().content.find(n => n.type == 'usage');
+  ok(cur == dupId && /\(Kopie\)$/.test($('#title').value) && dupUsage && !dupUsage.attrs.move && (await call('lot', {id: lotA.id})).amount == lotBefore,
+    'Duplikat: Verbrauch darin noch nicht verbucht, Bestand unverändert');
+  window.PREFLIGHT_GO = false;
+  await signEntry(); await sleep(150);
+  ok(!curSigned && (window.PREFLIGHT_SEEN || []).some(n => /Verbrauch-Block/.test(n.text)), 'Vor dem Abschließen: Hinweis auf unverbuchten Verbrauch, Abschließen abgebrochen');
+  window.PREFLIGHT_GO = undefined;
+  await open(lbId); await sleep(100);
+  editor.commands.focus('end'); editor.commands.insertContent(' Neue Kolonie gepickt.'); changed(); await flush();
+  const revs28 = await call('history', {id: lbId});
+  await showRevision(revs28[revs28.length - 1].no); await sleep(150);
+  document.querySelector('#preview [data-diff]').click(); await sleep(300);
+  ok(!$('#sidepane').hidden && [...document.querySelectorAll('#sidepane ins')].some(x => /Kolonie gepickt/.test(x.textContent)), 'Versionsvergleich zeigt den neuen Satz als eingefügt');
+  await call('testSnapshot', {name: 'm28-vergleich.png'}).catch(() => {});
+  closeSide(); await leavePreview(false); await sleep(100);
+  LIST_SELECT = new Set([lbId, dupId]); await refreshList();
+  const keepPrompt28b = window.prompt; window.prompt = () => '2';
+  await bulkAction('status'); window.prompt = keepPrompt28b; await sleep(150);
+  ok((await call('load', {id: dupId})).status == 'fertig' && (await call('load', {id: lbId})).status == 'fertig' && LIST_SELECT.size == 0, 'Mehrfachauswahl: Status für zwei Einträge auf einmal');
+  LIST_SELECT = null; await refreshList();
+  await call('aiSetKey', {key: 'sk-ant-test-0000'}); await showSettings(); await sleep(150);
+  ok(/Eingerichtet/.test($('#aiState').textContent), 'Einstellungen zeigen den eingerichteten KI-Assistenten');
+  $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
+  showView('doc');
   return out;
 }
 
@@ -1546,6 +1596,7 @@ $('#toolbar').addEventListener('mousedown', e => {
 $('#list').addEventListener('click', e => {
   if (e.target.dataset.emptytrash !== undefined) return emptyTrash();
   const li = e.target.closest('li'); if (!li || !li.dataset.id) return;
+  if (LIST_SELECT) { const id = +li.dataset.id; LIST_SELECT.has(id) ? LIST_SELECT.delete(id) : LIST_SELECT.add(id); return refreshList(); }
   if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; }
   const q = $('#search').value.trim().replace(/["*()]/g, ' ').split(/\s+/).find(w => w.length >= 3);  // bei Suche: zum Treffer springen
   if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id, {find: q});  // ⌘-Klick: in neuem Tab
@@ -1642,6 +1693,7 @@ async function start() {
   initLiterature();
   initAgenda();
   initEntryTabs();
+  initManage();
   initAssistant();
   await loadExtensions();
   refreshAgendaBadge();

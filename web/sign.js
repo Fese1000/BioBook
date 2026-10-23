@@ -28,9 +28,10 @@ async function renderSignInfo() {
 
 async function signEntry() {
   if (!cur || curSigned) return;
-  const s = {...await call('settings'), ai: (await call('aiStatus')).configured};
+  const s = await call('settings');
   if (!s.author?.trim()) { alert('Bitte zuerst in den Einstellungen deinen Namen für Signaturen eintragen.'); return showSettings(); }
-  if (!confirm(`Eintrag abschließen und als „${s.author}“ signieren?\n\nDanach lässt er sich nicht mehr ändern; Ergänzungen kommen in einen Nachtrag. Signiert wird mit deinem persönlichen Schlüssel aus dem Schlüsselbund.`)) return;
+  if (!await preflightConfirm()) return;  // Hinweise: unverbuchter Verbrauch, leere Ergebnisse, offene Aufgaben …
+  if (!window.TESTING && !confirm(`Eintrag abschließen und als „${s.author}“ signieren?\n\nDanach lässt er sich nicht mehr ändern; Ergänzungen kommen in einen Nachtrag. Signiert wird mit deinem persönlichen Schlüssel aus dem Schlüsselbund.`)) return;
   await flush();
   try {
     const r = await call('signEntry', {id: cur});
@@ -108,7 +109,7 @@ async function attachWitness(testPath) {
 
 // ---------- Einstellungen ----------
 async function showSettings() {
-  const s = await call('settings');
+  const s = {...await call('settings'), ai: (await call('aiStatus')).configured};
   const dlg = $('#settings');
   dlg.innerHTML = `<form method="dialog"><h3>Einstellungen</h3>
     <label class="row">Name für Signaturen <input id="setAuthor" value="${esc(s.author)}" autocomplete="off"></label>

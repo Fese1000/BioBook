@@ -42,7 +42,7 @@ extension Store {
         }
         guard fields.count <= 50 else { throw StoreError.invalid("Höchstens 50 Felder") }
         if fields.contains(where: { $0["k"]!.isEmpty }) { throw StoreError.invalid("Jedes Feld braucht eine Bezeichnung") }
-        let json = String(data: try JSONSerialization.data(withJSONObject: fields), encoding: .utf8)!
+        let json = String(data: try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]), encoding: .utf8)!  // feste Reihenfolge der Schlüssel
         try queryRows("UPDATE entry SET meta_json = ?, updated = ? WHERE id = ?", [json, Store.now(), id])
         return fields
     }

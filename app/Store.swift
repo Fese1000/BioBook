@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 17
+    static let schemaVersion = 18
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -275,6 +275,15 @@ final class Store {
                 ALTER TABLE entry ADD COLUMN meta_json TEXT NOT NULL DEFAULT '[]';
                 """)
             }
+            if v < 18 {
+                // Eintragsverwaltung: Status, Anheften, zuletzt geöffnet; gespeicherte Suchen
+                try exec("""
+                ALTER TABLE entry ADD COLUMN status TEXT NOT NULL DEFAULT '';
+                ALTER TABLE entry ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE entry ADD COLUMN opened TEXT;
+                CREATE TABLE saved_search(id INTEGER PRIMARY KEY, name TEXT NOT NULL, query_json TEXT NOT NULL, created TEXT NOT NULL);
+                """)
+            }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
     }
@@ -387,7 +396,8 @@ final class Store {
         if let p = project { if p == 0 { conds.append("e.project_id IS NULL") } else { conds.append("e.project_id = ?"); args.append(p) } }
         if let t = tag { conds.append("e.id IN (SELECT entry_id FROM entry_tag WHERE tag_id = ?)"); args.append(t) }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, e.day_first, e.day_last, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions,
+        SELECT e.id, e.title, e.created, e.updated, e.kind, e.project_id, e.day_first, e.day_last, e.status, e.pinned, e.opened, e.signed_no,
+          (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM entry e \(conds.isEmpty ? "" : "WHERE " + conds.joined(separator: " AND ")) ORDER BY e.updated DESC
         """, args)
@@ -551,7 +561,7 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no, deleted, meta_json FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no, deleted, meta_json, status, pinned FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         e["tags"] = try entryTags(id)
@@ -831,7 +841,7 @@ final class Store {
         let terms = q.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
         if terms.isEmpty { return [] }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, e.day_first, e.day_last, snippet(search, -1, '[', ']', '…', 12) AS snippet,
+        SELECT e.id, e.title, e.created, e.updated, e.kind, e.project_id, e.day_first, e.day_last, e.status, e.pinned, e.opened, e.signed_no, snippet(search, -1, '[', ']', '…', 12) AS snippet,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? AND e.deleted IS NULL ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])

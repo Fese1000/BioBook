@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -515,6 +515,26 @@ let rel26 = try s.related(entry: lb26)
 check(try (rel26["links"] as! [[String: Any]]).count == 2 && (try s.related(entry: protoGG)["backlinks"] as! [[String: Any]]).count == 1, "Verknüpft: Verweise hin und zurück")
 let relPCR = try s.related(entry: pEntry)
 check(try (relPCR["cultures"] as! [[String: Any]]).first?["code"] as? String == Store.cultureCode(kid), "Verknüpft: Kultur mit Passage aus dem Eintrag")
+
+// M28: Einträge verwalten
+try s.setEntryFlags(id: lb26, status: "fehlgeschlagen", pinned: true)
+let row28 = try s.list().first { $0["id"] as? Int == lb26 }!
+check(try row28["status"] as? String == "fehlgeschlagen" && row28["pinned"] as? Int == 1, "Status und Anheften")
+check(try (try? s.setEntryFlags(id: lb26, status: "gelb", pinned: nil)) == nil, "Unbekannter Status abgelehnt")
+try s.touchOpened(id: lb26)
+check(try (try s.list().first { $0["id"] as? Int == lb26 }!["opened"] as? String) != nil, "Zuletzt geöffnet gemerkt")
+_ = try s.setTags(id: lb26, names: ["Hefe"])
+let dup = try s.duplicate(id: lb26)
+let dupE = try s.load(id: dup), dupRow = try s.list().first { $0["id"] as? Int == dup }!
+check(try dupE["title"] as? String == "Laborbuch 26 (Kopie)" && dupE["signed_no"] as? Int == nil && dupRow["revisions"] as? Int == 0 && dupRow["status"] as? String == ""
+      && (dupE["tags"] as? [String]) == ["Hefe"] && (dupE["meta_json"] as? String)?.contains("BY4741") == true,
+      "Duplikat: Inhalt, Tags, Metadaten; ohne Revisionen, Signatur, Status")
+let signedDup = try s.duplicate(id: se)
+check(try (try s.load(id: signedDup))["signed_no"] as? Int == nil, "Duplikat eines abgeschlossenen Eintrags ist bearbeitbar")
+let ssId = try s.saveSearch(name: "Fehlgeschlagen", query: ["status": "fehlgeschlagen", "q": ""])
+check(try (try s.savedSearches()).first { $0["id"] as? Int == ssId }?["query_json"] as? String == "{\"q\":\"\",\"status\":\"fehlgeschlagen\"}", "Gespeicherte Suche")
+try s.deleteSavedSearch(id: ssId)
+check(try (try s.savedSearches()).isEmpty, "Gespeicherte Suche gelöscht")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

@@ -682,6 +682,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "setEntryMeta": replyHandler(try s.setEntryMeta(entry: try int("id"), fields: a["fields"] as? [[String: Any]] ?? []), nil)
             case "metaKeys": replyHandler(try s.metaKeys(), nil)
             case "related": replyHandler(try s.related(entry: try int("id")), nil)
+            case "setEntryFlags":
+                try s.setEntryFlags(id: try int("id"), status: a["status"] as? String, pinned: a["pinned"] as? Bool); replyHandler(true, nil)
+            case "touchOpened": try s.touchOpened(id: try int("id")); replyHandler(true, nil)
+            case "duplicateEntry": replyHandler(try s.duplicate(id: try int("id")), nil)
+            case "savedSearches": replyHandler(try s.savedSearches(), nil)
+            case "saveSearch": replyHandler(try s.saveSearch(name: try str("name"), query: a["query"] as? [String: Any] ?? [:]), nil)
+            case "deleteSavedSearch": try s.deleteSavedSearch(id: try int("id")); replyHandler(true, nil)
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)
