@@ -97,7 +97,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
-**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon.**
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) abgeschlossen; Phase 3 (M14–M17) geplant.**
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
@@ -119,6 +119,16 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 | M11 ✅ | Strukturierte Ergebnisse: Ergebnistabellen mit festen Feldern und Einheiten; Auswertung über viele Einträge mit Diagramm | „Ausbeute aller Plasmid-Präps“ als Tabelle und Diagramm über Einträge hinweg **Erledigt 2026-10-23:** Formelfelder rechnen live, Auswertung mit Kennzahlen, Zeit- und Streudiagramm, CSV-Export |
 | M12 ✅ | Zellkultur (Passagen, Mycoplasma-Tests, Einfrierlisten) und Gerätebuch (Wartung, Kalibrierung, fällige Termine) | Passage 12 → 13 verbucht; fällige Kalibrierung wird gemeldet. **Erledigt 2026-10-23:** Passage im Eintrag gebucht, Einfrieren als Bestandscharge, Auftauen, Mycoplasma- und Gerätewarnungen in der Seitenleiste; Einträge mit Buchungen bleiben im Papierkorb statt endgültig gelöscht zu werden |
 | M13 ✅ | Bestellliste aus knappen Chargen, Bestellstatus, Wareneingang legt Charge an | Knappes Reagenz auf Bestellliste, Eingang verbucht neue Charge. **Erledigt 2026-10-23:** Vorschläge, Status mit Verlauf, Eingang mit Chargennr./Ablauf/Standort, CSV; „knapp“ über alle gleichartigen Chargen |
+
+## 10c. Meilensteine Phase 3 (Bio und Auswertung)
+Alles läuft lokal und offline; nur M16 fragt auf Klick bei NCBI/UniProt an. Rechenkerne als reine Funktionen in `web/bio.js` bzw. `web/stats.js`, getestet gegen Referenzwerte (node --test).
+
+| M | Inhalt | Fertig, wenn … |
+| --- | --- | --- |
+| M14 | Sequenzen: GenBank/FASTA importieren und exportieren, Sequenz-Viewer (lineare und Ring-Karte mit Features, Basen mit Übersetzung, GC-Gehalt, Länge), Motivsuche auf beiden Strängen, Revers-Komplement; Sequenz-Block im Eintrag und am Registry-Objekt | pUC19 als GenBank importiert: 2686 bp, Features (bla, lacZα, ori) auf der Karte; Motivsuche findet GAATTC einmal; Export als FASTA/GenBank wieder einlesbar |
+| M15 | Primer und Restriktion: Primer-Rechner (Tm nach Nearest-Neighbor, GC, Länge, Selbstkomplementarität), Primer auf der Vorlage finden; Restriktionsenzyme (häufige Enzyme mit Erkennungsstelle), Schnittstellen auf der Karte, virtueller Verdau mit Fragmentgrößen und virtuellem Gel | Tm stimmt auf ±1 °C mit Referenzwerten; pUC19 × EcoRI + HindIII ergibt 2635 + 51 bp |
+| M16 | Datenbank-Verweise: Kennungen (GenBank/RefSeq, UniProt, PubMed, Addgene) im Text werden Links; auf Klick Sequenz bzw. Eintrag von NCBI/UniProt holen und als Registry-Objekt anlegen | „NM_000546“ im Text wird Link; Abruf von L09137 legt ein Plasmid mit Sequenz an (ohne Netz: verständliche Meldung) |
+| M17 | Diagramme und Statistik: Diagramm-Block aus einer Tabelle im Eintrag (Punkte, Linie, Balken mit Fehlerbalken), Standardkurve mit linearer Regression und Berechnung unbekannter Proben, Kennzahlen, t-Test | Bradford-Standardkurve mit R², unbekannte Proben gegen Handrechnung; t-Test-p-Wert stimmt mit Referenz |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
