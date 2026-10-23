@@ -143,6 +143,17 @@ Netz nur auf Klick und nur zu festen Adressen (Crossref, PubMed, Anthropic); Sch
 | M23 ✅ | KI-Assistent mit eigenem Schlüssel: Eintrag zusammenfassen, Fragen an das Laborbuch (Suche + Antwort mit Quellen), Protokoll aus Stichpunkten; nur auf Klick, zeigt vorher, was gesendet wird | Ohne Schlüssel unsichtbar; mit Schlüssel Zusammenfassung eines Eintrags mit Verweisen; Schlüssel nur im Schlüsselbund. **Erledigt 2026-10-23:** Claude Opus 5.5 über die Messages API (roh per HTTP, Fallback bei Ablehnung), Vorschau vor dem Senden, Verweise [E…] als Links; im Test mit hinterlegten Antworten. Offen: einmal mit echtem Schlüssel ausprobieren |
 | M24 ✅ | Erweiterungen: eigene Blöcke/Rechner als JavaScript-Dateien im Ordner „Erweiterungen“ mit begrenzter Schnittstelle (kein Dateisystem, kein Netz), ein- und ausschaltbar | Beispiel-Erweiterung (Zellzahl-Rechner) erscheint als Block; Fehler in einer Erweiterung stören die App nicht. **Erledigt 2026-10-23:** Worker in Sandbox-Rahmen (CSP ohne Netz), App-Brücke nur für die Hauptseite; getestet mit Syntaxfehler, Endlosschleife, Netz- und Brückenzugriff |
 
+## 10e. Meilensteine Phase 4b (Abgleich mit Benchling und anderen Laborbüchern, 2026-10-23)
+Ergebnis des Vergleichs: Die großen Bereiche sind da; es fehlen die Arbeitsweise „ein laufendes Laborbuch mit Tagen“, angehängte Protokolle, Editor-Standards, Eintragsverwaltung und Benchlings Molekularbiologie-Werkzeuge.
+
+| M | Inhalt | Fertig, wenn … |
+| --- | --- | --- |
+| M25 | Laufendes Laborbuch: Tagesabschnitte im Eintrag (einklappbar), „+ Heute“, Zeitraum des Eintrags in der Liste, Suche und „Fällig“ springen zur Stelle | Eintrag mit drei Tagen; „+ Heute“ legt den Tag einmal an; Liste zeigt „30.06.–15.10.2026“; Suchtreffer im dritten Tag wird angesprungen |
+| M26 | Protokolle am Eintrag: Vorlagen als Reiter anhängen, im Text verweisen, Eintrag und Protokoll nebeneinander; Reiter „Verknüpft“ (Objekte, Chargen, Sequenzen, Einträge); eigene Felder je Eintrag | Golden-Gate-Protokoll hängt am Eintrag, öffnet sich daneben; „Verknüpft“ listet Plasmid und Charge; Metadaten bleiben beim Speichern |
+| M27 | Editor-Standards: Hoch-/Tiefstellen, Unterstreichen, Link, Textfarbe/Textmarker, Trennlinie, Formeln (LaTeX), Suchen & Ersetzen, Einfügemenü und „/“-Befehle, Excel als Tabelle, Tastenkürzel-Übersicht | H₂O und 10⁶ im Text und im PDF; Formel wird gesetzt; „/“ fügt Blöcke ein; .xlsx wird Tabelle |
+| M28 | Einträge verwalten: duplizieren, Status mit Farbe, anheften, zuletzt geöffnet, sortieren/filtern, gespeicherte Suchen, Versionen vergleichen, mehrere Einträge auf einmal, Prüfung vor dem Abschließen | Duplikat ohne Signatur; Filter „fehlgeschlagen“; Vergleich zeigt eingefügte und gelöschte Stellen |
+| M29 | Molekularbiologie: Sequenz bearbeiten und Features setzen, Sanger-Ergebnis (.ab1) gegen Referenz ausrichten, Klonierung simulieren (Restriktion/Ligation, Gibson, Golden Gate) mit neuem Plasmid in der Registry | Golden Gate aus drei Teilen ergibt das erwartete Konstrukt; .ab1-Lesung zeigt Mutation an der richtigen Stelle |
+
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
 
