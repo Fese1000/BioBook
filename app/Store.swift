@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 13
+    static let schemaVersion = 14
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -244,6 +244,14 @@ final class Store {
                   title TEXT NOT NULL DEFAULT '', year TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL);
                 CREATE INDEX reference_doi ON reference(doi COLLATE NOCASE);
                 CREATE INDEX reference_pmid ON reference(pmid);
+                """)
+            }
+            if v < 14 {
+                // Aufgaben mit Fälligkeit aus Checklisten der Einträge (Abbild beim Speichern, wie die Ergebniszeilen)
+                try exec("""
+                CREATE TABLE entry_task(entry_id INTEGER NOT NULL REFERENCES entry(id), idx INTEGER NOT NULL, text TEXT NOT NULL, due TEXT NOT NULL,
+                  done INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(entry_id, idx));
+                CREATE INDEX entry_task_due ON entry_task(due);
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -538,7 +546,7 @@ final class Store {
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
-    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = [], results: [[String: Any]] = []) throws -> [String: Any] {
+    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = [], results: [[String: Any]] = [], tasks: [[String: Any]] = []) throws -> [String: Any] {
         if try isTrashed(id) { throw StoreError.invalid("Der Eintrag liegt im Papierkorb. Erst wiederherstellen.") }
         if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
@@ -556,6 +564,7 @@ final class Store {
             try refreshFileText(entry: id)
             try setEntryEntities(entry: id, entities)
             try setEntryResults(entry: id, results)
+            try setEntryTasks(entry: id, tasks)
         }
         return ["updated": t]
     }
@@ -646,7 +655,7 @@ final class Store {
         if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen") }
         if try hasBookings(id) { throw StoreError.invalid("Auf diesen Eintrag verweisen Buchungen (Bestand, Zellkultur oder Gerätebuch); er bleibt deshalb im Papierkorb.") }
         try transaction {
-            for t in ["revision", "entry_file", "entry_tag", "entry_entity", "result_row"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
+            for t in ["revision", "entry_file", "entry_tag", "entry_entity", "result_row", "entry_task"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
             try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
             try query("DELETE FROM run_step WHERE run_id IN (SELECT id FROM run WHERE entry_id = ?)", [id])
             try query("DELETE FROM run WHERE entry_id = ?", [id])

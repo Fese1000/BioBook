@@ -346,3 +346,8 @@ span.cite{color:var(--acc);cursor:help;white-space:nowrap}span.cite.ProseMirror-
 section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
 @media(max-width:1000px){.litwrap{grid-template-columns:1fr}}
 #lit a[data-ext],#dbrefs a,.regside a[data-ext]{color:var(--acc)}#litq{width:220px}
+/* Fälligkeiten */
+.duedate{border-radius:3px;padding:0 2px;background:var(--sel)}.duedate.overdue{background:#c0392b;color:#fff}.duedate.today{background:#e6a23c;color:#2b1d00}.duedate.done{background:none;text-decoration:line-through}
+#agendaBadge.soft{background:#e6a23c;color:#2b1d00}
+.aglist{display:flex;flex-direction:column;gap:2px}.agrow{display:grid;grid-template-columns:28px 92px 1fr;gap:10px;align-items:center;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+.agrow:hover{background:var(--sel)}.agrow.overdue .agdate{color:#c0392b;font-weight:600}.agicon{font-size:16px;text-align:center}

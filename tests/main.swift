@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -461,6 +461,19 @@ let rid = ref1["id"] as! Int
 _ = try s.saveDraft(id: citing, title: "Sequenzierung", json: "{\"type\":\"doc\",\"content\":[{\"type\":\"cite\",\"attrs\":{\"short\":\"Sanger et al. 1977\",\"refid\":\(rid)}}]}", text: "")
 check(try ((try s.reference(id: rid))["cited_in"] as! [[String: Any]]).count == 1, "Zitiert in: der Eintrag")
 check(try (try? s.deleteReference(id: rid)) == nil, "Zitierte Quelle lässt sich nicht löschen")
+
+// M19: Fälligkeiten
+let today = Store.isoDay(Date())
+let agEntry = try s.create(title: "Planung")
+_ = try s.saveDraft(id: agEntry, title: "Planung", json: "{}", text: "", tasks: [["text": "Antikörper bestellen bis morgen", "due": Store.addDays(today, 1), "done": false],
+                                                                                 ["text": "Erledigt", "due": today, "done": true], ["text": "kaputtes Datum", "due": "31.02."]])
+let ag = try s.agenda(until: Store.addDays(today, 30), today: today)
+check(try ag.contains { $0["kind"] as? String == "task" && $0["title"] as? String == "Antikörper bestellen bis morgen" } && !ag.contains { $0["title"] as? String == "Erledigt" }, "Offene Aufgabe mit Datum in der Übersicht, erledigte nicht")
+check(try ag.contains { $0["kind"] as? String == "device" } && ag.contains { $0["kind"] as? String == "myco" }, "Geräteaufgaben und Mycoplasma-Tests in der Übersicht")
+check(try ag.map { $0["due"] as! String } == ag.map { $0["due"] as! String }.sorted(), "Nach Datum sortiert")
+try s.trashEntry(id: agEntry)
+check(try !(try s.agenda(until: Store.addDays(today, 30), today: today)).contains { $0["kind"] as? String == "task" && $0["id"] as? Int == agEntry }, "Papierkorb zählt nicht")
+try s.restoreEntry(id: agEntry)
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

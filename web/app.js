@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, DbLinks,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, DbLinks, DueDates,
   ];
 }
 
@@ -179,7 +179,7 @@ function collectRefs(doc) {
     (n.content || []).forEach(walk);
   };
   walk(doc);
-  return {links: [...links], files: [...files], entities: [...entities], results: collectResults(doc)};
+  return {links: [...links], files: [...files], entities: [...entities], results: collectResults(doc), tasks: collectTasks(doc)};
 }
 
 /// Verweis-Beschriftungen auf die aktuellen Titel bringen (Titel können sich geändert haben)
@@ -555,7 +555,7 @@ function changed() {
   updateCounts();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 600);
-  clearTimeout(dbRefTimer); dbRefTimer = setTimeout(() => { refreshDbRefs(); refreshCiteBox(); }, 800);
+  clearTimeout(dbRefTimer); dbRefTimer = setTimeout(() => { refreshDbRefs(); refreshCiteBox(); refreshAgendaBadge(); }, 800);
 }
 let dbRefTimer;
 
@@ -1209,6 +1209,32 @@ async function selfTest() {
   ok(bibOut.length == 4 && bibOut.some(r => r.doi == doi), 'Bibliothek als BibTeX exportiert und wieder lesbar');
   await call('testSnapshot', {name: 'm18-literatur.png'}).catch(() => {});
   showView('doc');
+
+  // M19: Aufgaben und Termine
+  const tday = Agenda.iso(new Date());
+  const ti = (text, checked = false) => ({type: 'taskItem', attrs: {checked}, content: [{type: 'paragraph', content: [{type: 'text', text}]}]});
+  const agEntry = await call('create', {title: 'Wochenplan'}); await refreshList(agEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'taskList', content: [ti('Antikörper bestellen bis morgen'), ti('Gel vom 2026-01-01 auswerten'), ti('Puffer ohne Datum'), ti('Erledigt heute', true)]}]});
+  changed(); await flush(); await sleep(900);
+  const dds = [...document.querySelectorAll('#editor .duedate')];
+  ok(dds.length == 3 && dds[1].classList.contains('overdue') && dds[0].textContent == 'morgen' && dds[2].classList.contains('done'), 'Termine in der Checkliste markiert (überfällig rot, erledigt durchgestrichen)');
+  const zentDev = (await call('devices', {})).find(d => d.name.startsWith('Zentrifuge'));
+  await call('saveDeviceTask', {device: zentDev.id, values: {kind: 'wartung', interval: '90', next_due: Agenda.addDays(tday, 3)}});
+  await call('saveLot', {values: {name: 'Ampicillin-Stock', amount: '5', unit: 'ml', expiry: Agenda.addDays(tday, 5)}});
+  await showAgenda(); await sleep(150);
+  const agText = $('#agenda').textContent, overdueText = document.querySelector('#agenda .aglist')?.textContent || '';
+  ok(/Antikörper bestellen bis morgen/.test(agText) && /Wartung: Zentrifuge/.test(agText) && /Läuft ab: Ampicillin-Stock/.test(agText) && !/Puffer ohne Datum|Erledigt heute/.test(agText),
+    'Übersicht: Aufgabe, fällige Wartung und ablaufende Charge; ohne Datum und Erledigtes nicht');
+  ok(/Gel vom 2026-01-01 auswerten/.test(overdueText) && /Mycoplasma-Test: CHO alt/.test(overdueText) && /Läuft ab: Alter Puffer/.test(overdueText), 'Überfällig: alte Aufgabe, Mycoplasma-Test, abgelaufene Charge');
+  ok(!$('#agendaBadge').hidden && +$('#agendaBadge').textContent >= 3, `Seitenleiste meldet ${$('#agendaBadge').textContent} fällige Punkte`);
+  await call('testSnapshot', {name: 'm19-faellig.png'}).catch(() => {});
+  const icsOut = await agendaICS();
+  const icsText = await call('testReadText', {path: icsOut.path.split('/').pop()});
+  ok((icsText.match(/BEGIN:VEVENT/g) || []).length >= 6 && icsText.includes('SUMMARY:Antikörper bestellen bis morgen') && icsText.includes(`DTSTART;VALUE=DATE:${Agenda.addDays(tday, 1).replace(/-/g, '')}`),
+    'Kalenderdatei (.ics) mit allen Terminen');
+  [...document.querySelectorAll('#agenda .agrow')].find(r => r.textContent.includes('Antikörper')).click(); await sleep(300);
+  ok(cur == agEntry && !$('#doc').hidden, 'Klick auf die Aufgabe öffnet den Eintrag');
+  showView('doc');
   return out;
 }
 
@@ -1313,6 +1339,8 @@ async function start() {
   initSeqView();
   initDbLinks();
   initLiterature();
+  initAgenda();
+  refreshAgendaBadge();
   refreshOrderBadge();
   await loadResultSchemas();
   refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);

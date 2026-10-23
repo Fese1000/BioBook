@@ -634,6 +634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "saveReference": replyHandler(try s.saveReference(id: a["id"] as? Int, data: a["data"] as? [String: Any] ?? [:], source: (a["source"] as? String) ?? ""), nil)
             case "importReferences": replyHandler(try s.importReferences(a["list"] as? [[String: Any]] ?? [], source: (a["source"] as? String) ?? ""), nil)
             case "deleteReference": try s.deleteReference(id: try int("id")); replyHandler(true, nil)
+            case "agenda": replyHandler(try s.agenda(until: try str("until"), today: try str("today")), nil)
             case "seqAnnotation": replyHandler(try s.seqAnnotation(entity: try int("entity"), field: try str("field")), nil)
             case "setSeqAnnotation":
                 replyHandler(try s.setSeqAnnotation(entity: try int("entity"), field: try str("field"), circular: a["circular"] as? Bool ?? false,
@@ -685,7 +686,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let id = try int("id")
                 replyHandler(try s.saveDraft(id: id, title: try str("title"), json: try str("json"), text: try str("text"),
                                              links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? [], entities: a["entities"] as? [Int] ?? [],
-                                             results: a["results"] as? [[String: Any]] ?? []), nil)
+                                             results: a["results"] as? [[String: Any]] ?? [], tasks: a["tasks"] as? [[String: Any]] ?? []), nil)
                 broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
                 if !testMode { Spotlight.update(s, id: id) }
                 scheduleQuickLook()
