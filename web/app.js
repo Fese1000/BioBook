@@ -450,6 +450,8 @@ async function open(id, {find} = {}) {
   checkLinks();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
+  if (SIDE == e.id) closeSide();
+  if (ETAB != 'notes') showEntryTab('notes'); else renderEntryTabs();
   if (find && jumpToText(find)) return;
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
 }
@@ -1443,6 +1445,38 @@ async function selfTest() {
   ok(lbHTML.includes('<section data-day="2026-06-30" class="day"><h3 class="dayhead">Dienstag, 30.6.2026</h3>') && lbMD.includes('## Mittwoch, 1.7.2026\n\nTrafo E. coli'), 'Tage im PDF/HTML und im Markdown-Export');
   await call('testSnapshot', {name: 'm25-tage.png'}).catch(() => {});
   showView('doc');
+
+  // M26: Protokolle am Eintrag, Metadaten, Verknüpft
+  const ggId = await call('create', {title: 'Golden Gate Assembly', kind: 'protocol'});
+  await open(ggId); editor.commands.setContent({type: 'doc', content: [{type: 'orderedList', content: ['BsaI 1 µl', '30 Zyklen 37 °C / 16 °C'].map(t => ({type: 'listItem', content: [para(t)]}))}]});
+  changed(); await flush();
+  await open(lbId); await sleep(150);
+  ok([...document.querySelectorAll('#etabs .etab')].map(t => t.textContent.trim()).slice(0, 3).join('|') == 'Notizen|Metadaten|Verknüpft', 'Reiter Notizen, Metadaten, Verknüpft am Eintrag');
+  addToday(); await attachProtocol(ggId, {inline: true}); await sleep(200);
+  const ptab = document.querySelector(`#etabs [data-eside="${ggId}"]`);
+  ok(ptab && /Golden Gate Assembly/.test(ptab.textContent) && /Midi-Präp nach \[\[Golden Gate Assembly\]\]/.test(editor.getText()), 'Protokoll angehängt: eigener Reiter und Verweis im Text');
+  ptab.click(); await sleep(300);
+  ok(!$('#sidepane').hidden && /30 Zyklen 37 °C/.test($('#sidepane .sidebody').textContent) && !$('#editor').hidden && $('#history').hidden, 'Protokoll öffnet sich rechts neben dem Eintrag (statt des Verlaufs)');
+  await call('testSnapshot', {name: 'm26-daneben.png'}).catch(() => {});
+  document.querySelector('#sidepane [data-sideclose]').click(); await sleep(100);
+  showEntryTab('meta'); await sleep(200);
+  const mr = document.querySelector('#mrows .mrow');
+  mr.querySelector('[data-mk]').value = 'Organismus'; mr.querySelector('[data-mv]').value = 'S. cerevisiae';
+  document.querySelector('#metapanel [data-madd]').click();
+  const mr2 = [...document.querySelectorAll('#mrows .mrow')][1]; mr2.querySelector('[data-mk]').value = 'Stamm'; mr2.querySelector('[data-mv]').value = 'BY4741';
+  document.querySelector('#metapanel [data-msave]').click(); await sleep(300);
+  ok(parseJSON((await call('load', {id: lbId})).meta_json, []).length == 2 && /Metadaten\s*2/.test($('#etabs').textContent) && $('#editor').hidden, 'Eigene Felder gesichert (Reiter zeigt 2)');
+  editor.commands.focus('end'); editor.commands.insertContent([{type: 'mention', attrs: {id: `ent:${plasmid.id}`, label: plasmid.code, mentionSuggestionChar: '@'}}]); changed(); await flush();
+  showEntryTab('rel'); await sleep(300);
+  const relTxt = $('#relpanel').textContent;
+  ok(relTxt.includes(plasmid.code) && /Verweist auf/.test(relTxt) && relTxt.includes('Golden Gate Assembly'), 'Verknüpft listet Plasmid und Protokoll');
+  showEntryTab('notes');
+  await open(useEntry); showEntryTab('rel'); await sleep(300);
+  ok(/Chargen \(Verbrauch\)/.test($('#relpanel').textContent) && $('#relpanel').textContent.includes('Taq-Polymerase'), 'Verknüpft listet die verbrauchte Charge');
+  showEntryTab('notes');
+  await open(signedOne.id); await sleep(150);
+  ok(!document.querySelector('#etabs [data-eadd]'), 'Abgeschlossener Eintrag: keine Protokolle anhängen');
+  showView('doc');
   return out;
 }
 
@@ -1465,7 +1499,7 @@ $('#search').addEventListener('input', () => { clearTimeout(searchTimer); search
 $('#title').addEventListener('input', changed);
 $('#title').addEventListener('keydown', e => { if (e.key == 'Enter') { e.preventDefault(); editor.commands.focus('start'); } });
 $('#filepick').addEventListener('change', e => { insertFiles([...e.target.files]); e.target.value = ''; });
-$('#histBtn').onclick = () => { const h = $('#history'); h.hidden = !h.hidden; if (!h.hidden) showHistory(); };
+$('#histBtn').onclick = () => { const h = $('#history'); h.hidden = !h.hidden; if (!h.hidden) { if (SIDE) closeSide(); showHistory(); } };  // rechts nur ein Fenster
 $('#revlist').addEventListener('click', e => { const li = e.target.closest('li'); if (li && cur) showRevision(li.value); });
 $('#preview').addEventListener('click', e => {
   if (e.target.dataset.restore !== undefined && confirm(`Fassung von Revision ${preview.no} als aktuellen Stand übernehmen? Alle Revisionen bleiben erhalten.`)) leavePreview(true);
@@ -1550,6 +1584,7 @@ async function start() {
   initDbLinks();
   initLiterature();
   initAgenda();
+  initEntryTabs();
   initAssistant();
   await loadExtensions();
   refreshAgendaBadge();

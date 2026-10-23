@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -496,6 +496,25 @@ _ = try s.saveDraft(id: lab, title: "Nanoreactor Lab Book", json: "{}", text: "G
 let labRow = try s.list().first { $0["id"] as? Int == lab }!
 check(try labRow["day_first"] as? String == "2026-06-30" && labRow["day_last"] as? String == "2026-10-15", "Zeitraum aus den Tagen (ungültige ignoriert)")
 check(try (try s.search("Golden")).first { $0["id"] as? Int == lab }?["day_last"] as? String == "2026-10-15", "Suche liefert den Zeitraum mit")
+
+// M26: Protokolle am Eintrag, Metadaten, Verknüpft
+let protoGG = try s.create(title: "Golden Gate Assembly", kind: "protocol"), protoTrafo = try s.create(title: "E. coli Transformation", kind: "protocol")
+let lb26 = try s.create(title: "Laborbuch 26")
+try s.attach(entry: lb26, other: protoGG)
+_ = try s.saveDraft(id: lb26, title: "Laborbuch 26", json: "{\"type\":\"doc\",\"content\":[]}", text: "", links: [protoTrafo, protoGG])
+let att26 = try s.attachments(entry: lb26)
+check(try att26.map { $0["title"] as! String } == ["Golden Gate Assembly", "E. coli Transformation"] && att26.map { $0["explicit"] as! Int } == [1, 0], "Angehängtes und im Text verlinktes Protokoll als Reiter")
+check(try (try? s.attach(entry: lb26, other: lb26)) == nil, "Nicht an sich selbst")
+try s.detach(entry: lb26, other: protoGG)
+check(try (try s.attachments(entry: lb26)).count == 2, "Abhängen: im Text verlinkt bleibt es sichtbar")
+let meta26 = try s.setEntryMeta(entry: lb26, fields: [["k": "Organismus", "v": "S. cerevisiae"], ["k": "", "v": ""], ["k": "Stamm", "v": "BY4741"]])
+check(try meta26.count == 2 && (try s.load(id: lb26))["meta_json"] as? String == "[{\"k\":\"Organismus\",\"v\":\"S. cerevisiae\"},{\"k\":\"Stamm\",\"v\":\"BY4741\"}]", "Eigene Felder gespeichert, leere Zeilen weg")
+check(try (try? s.setEntryMeta(entry: lb26, fields: [["k": "", "v": "ohne Namen"]])) == nil, "Feld ohne Bezeichnung abgelehnt")
+check(try (try s.metaKeys()).contains("Organismus"), "Feldbezeichnungen als Vorschläge")
+let rel26 = try s.related(entry: lb26)
+check(try (rel26["links"] as! [[String: Any]]).count == 2 && (try s.related(entry: protoGG)["backlinks"] as! [[String: Any]]).count == 1, "Verknüpft: Verweise hin und zurück")
+let relPCR = try s.related(entry: pEntry)
+check(try (relPCR["cultures"] as! [[String: Any]]).first?["code"] as? String == Store.cultureCode(kid), "Verknüpft: Kultur mit Passage aus dem Eintrag")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

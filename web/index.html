@@ -39,6 +39,9 @@
       <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
       <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
     </div>
+    <div id="etabs"></div>
+    <div id="metapanel" hidden></div>
+    <div id="relpanel" hidden></div>
     <div id="toolbar"></div>
     <div id="editor"></div>
     <div id="aibox" hidden></div>
@@ -59,6 +62,7 @@
 </main>
 <section id="run" hidden></section>
 <section id="annot" hidden></section>
+<section id="sidepane" hidden></section>
 <section id="history" hidden><h3>Verlauf</h3><div id="chain"></div><div id="sigs"></div><ol id="revlist"></ol></section>
 <dialog id="settings"></dialog>
 <dialog id="typedlg"></dialog>
@@ -68,6 +72,7 @@
 <script src="vendor/smiles-drawer.min.js"></script>
 <script src="calc.js"></script>
 <script src="days.js"></script>
+<script src="entrytabs.js"></script>
 <script src="bio.js"></script>
 <script src="stats.js"></script>
 <script src="dblinks.js"></script>

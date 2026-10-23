@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 16
+    static let schemaVersion = 17
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -266,6 +266,14 @@ final class Store {
             if v < 16 {
                 // Laufendes Laborbuch: Zeitraum der Tagesabschnitte (für die Liste)
                 try exec("ALTER TABLE entry ADD COLUMN day_first TEXT; ALTER TABLE entry ADD COLUMN day_last TEXT;")
+            }
+            if v < 17 {
+                // Angehängte Protokolle je Eintrag und eigene Felder (Metadaten) am Eintrag
+                try exec("""
+                CREATE TABLE entry_attach(entry_id INTEGER NOT NULL REFERENCES entry(id), other_id INTEGER NOT NULL REFERENCES entry(id), pos INTEGER NOT NULL DEFAULT 0,
+                  PRIMARY KEY(entry_id, other_id));
+                ALTER TABLE entry ADD COLUMN meta_json TEXT NOT NULL DEFAULT '[]';
+                """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
@@ -543,7 +551,7 @@ final class Store {
     }
 
     func load(id: Int) throws -> [String: Any] {
-        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no, deleted FROM entry WHERE id = ?", [id]).first else {
+        guard var e = try query("SELECT id, title, created, updated, draft_json, kind, project_id, template_id, template_version, signed_no, deleted, meta_json FROM entry WHERE id = ?", [id]).first else {
             throw StoreError.invalid("Eintrag \(id) gibt es nicht")
         }
         e["tags"] = try entryTags(id)
@@ -669,6 +677,7 @@ final class Store {
         if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen") }
         if try hasBookings(id) { throw StoreError.invalid("Auf diesen Eintrag verweisen Buchungen (Bestand, Zellkultur oder Gerätebuch); er bleibt deshalb im Papierkorb.") }
         try transaction {
+            try query("DELETE FROM entry_attach WHERE entry_id = ?1 OR other_id = ?1", [id])
             for t in ["revision", "entry_file", "entry_tag", "entry_entity", "result_row", "entry_task"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
             try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
             try query("DELETE FROM run_step WHERE run_id IN (SELECT id FROM run WHERE entry_id = ?)", [id])
@@ -715,7 +724,7 @@ final class Store {
             "projects": try query("SELECT id, name, archived, created FROM project ORDER BY id"),
             "entries": try query("""
             SELECT e.id, e.title, e.kind, e.created, e.updated, e.project_id, p.name AS project, e.template_id, e.template_version, e.signed_no,
-              e.draft_json, e.draft_text,
+              e.draft_json, e.draft_text, e.meta_json, e.day_first, e.day_last,
               (SELECT group_concat(t.name, ', ') FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id) AS tags,
               (SELECT hash FROM revision r WHERE r.entry_id = e.id ORDER BY no DESC LIMIT 1) AS last_hash,
               (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions

@@ -676,6 +676,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 let dir = Extensions.folder(test: true); try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 try Data(try str("code").utf8).write(to: try FileExport.safe(try str("file"), in: dir)); replyHandler(true, nil)
+            case "attachments": replyHandler(try s.attachments(entry: try int("id")), nil)
+            case "attachEntry": try s.attach(entry: try int("id"), other: try int("other")); replyHandler(true, nil)
+            case "detachEntry": try s.detach(entry: try int("id"), other: try int("other")); replyHandler(true, nil)
+            case "setEntryMeta": replyHandler(try s.setEntryMeta(entry: try int("id"), fields: a["fields"] as? [[String: Any]] ?? []), nil)
+            case "metaKeys": replyHandler(try s.metaKeys(), nil)
+            case "related": replyHandler(try s.related(entry: try int("id")), nil)
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)

@@ -381,3 +381,14 @@ section.day{border-top:1px solid var(--line);margin:18px 0 6px;padding-top:4px}
 section.day.collapsed .daybody{display:none}
 .ProseMirror .daybody>*:first-child{margin-top:4px}
 section.day h3.dayhead{font-size:13pt;border-bottom:1px solid #ccc}
+/* Reiter am Eintrag, Protokoll daneben */
+#etabs{display:flex;flex-wrap:wrap;gap:2px;border-bottom:1px solid var(--line);margin:6px auto 8px}
+.etab{border:0;border-bottom:2px solid transparent;background:none;color:var(--mut);font:600 12px -apple-system,system-ui;text-transform:uppercase;letter-spacing:.04em;padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.etab:hover{color:var(--ink)}.etab.on{color:var(--acc);border-bottom-color:var(--acc)}.etab.proto{text-transform:none;letter-spacing:0}.etab .x{border:0;background:none;color:var(--mut);cursor:pointer;padding:0 2px}
+.ecount{background:var(--sel);border-radius:8px;padding:0 6px;font-size:11px}
+#metapanel,#relpanel{padding-top:6px;font-size:13.5px}.mrow{display:flex;gap:8px;margin:6px 0}.mrow input{flex:1;font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:5px 8px}
+.mrow input[data-mk]{flex:0 0 220px;font-weight:600}.mrow .x{border:0;background:none;color:var(--mut);cursor:pointer}
+#relpanel h4{margin:14px 0 4px;font:600 12px -apple-system,system-ui;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}.rellist{margin:0;padding-left:18px}.rellist li{margin:3px 0}.rellist a{color:var(--ink)}
+#sidepane{width:min(46vw,620px);border-left:1px solid var(--line);background:var(--bg);overflow:auto;display:flex;flex-direction:column}
+.sidehead{position:sticky;top:0;display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--side)}.sidehead .grow{flex:1}.sidehead .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:16px}
+.sidebody{padding:10px 22px 40px;font-size:14.5px;line-height:1.6}
