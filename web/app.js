@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, DbLinks,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, DbLinks,
   ];
 }
 
@@ -218,6 +218,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
+  ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
   ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
@@ -1138,6 +1139,35 @@ async function selfTest() {
   const prot = await dbImport('uniprot', 'P04637');
   const protE = await call('entity', {id: prot.id});
   ok(protE.type_name == 'Protein' && parseJSON(protE.fields_json, {}).gene == 'TP53' && /p53/.test(protE.name), 'UniProt P04637 als Protein (Gen TP53) angelegt');
+  showView('doc');
+
+  // M17: Diagramme und Statistik
+  const cell = (t, h) => ({type: h ? 'tableHeader' : 'tableCell', content: [{type: 'paragraph', content: t === '' ? [] : [{type: 'text', text: String(t)}]}]});
+  const bsaRows = [['BSA µg/ml', 'A595'], [0, '0'], [125, '0,095'], [250, '0,185'], [500, '0,350'], [750, '0,520'], [1000, '0,665'], [1500, '0,910'], [2000, '1,130']];
+  const chEntry = await call('create', {title: 'Bradford'}); await refreshList(chEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'table', content: bsaRows.map((r, i) => ({type: 'tableRow', content: r.map(c => cell(c, i == 0))}))},
+    {type: 'chart', attrs: {mode: 'curve', title: 'Bradford', unit: 'µg/ml', xlabel: 'BSA (µg/ml)', ylabel: 'A595'}}, {type: 'paragraph'}]});
+  changed(); await flush(); await sleep(200);
+  document.querySelector('.chartblock [data-cfrom]').click(); await sleep(150);
+  const smpTa = document.querySelector('.chartblock [data-ck="samples"]');
+  smpTa.focus(); smpTa.value = 'Probe A\t0,400\nProbe B\t0,512\t2'; smpTa.dispatchEvent(new Event('input', {bubbles: true}));
+  $('#title').focus(); await sleep(150);
+  const fitRef = Stats.linreg(bsaRows.slice(1).map(r => [r[0], r[1]]));
+  const ctab = [...document.querySelectorAll('.chartblock .ctab tr')].map(tr => tr.textContent);
+  ok(document.querySelectorAll('.chartblock svg.chart .pt').length == 8 && document.querySelectorAll('.chartblock svg.chart .smp').length == 2, 'Standardkurve aus der Tabelle darüber: 8 Standards, 2 Proben im Diagramm');
+  ok(ctab[1].includes(Calc.fmt((0.4 - fitRef.intercept) / fitRef.slope)) && ctab[2].includes(Calc.fmt((0.512 - fitRef.intercept) / fitRef.slope * 2)) && /R² = 0,9904/.test(document.querySelector('.chartblock .chartout').textContent),
+    `Unbekannte Proben gegen Handrechnung: A = ${Calc.fmt((0.4 - fitRef.intercept) / fitRef.slope)}, B = ${Calc.fmt((0.512 - fitRef.intercept) / fitRef.slope * 2)} µg/ml; R² = 0,9904`);
+  await flush();
+  ok(editor.getText().includes('R² = 0,9904') && editor.getHTML().includes('svg class="chart"'), 'Ergebnis steht im Text (Suche) und das Diagramm im Export');
+  editor.chain().focus('end').insertContent([{type: 'chart', attrs: {mode: 'groups', title: 'Behandlung', unit: 'mg', data: 'Kontrolle\tBehandelt\n5,1\t6,2\n4,9\t6,8\n5,6\t6,1\n5,8\t7,0\n6,0\t6,6\n5,3\t'}}, {type: 'paragraph'}]).run();
+  await sleep(200);
+  const gBlock = [...document.querySelectorAll('.chartblock')].at(-1);
+  ok(gBlock.querySelectorAll('svg.chart .bar').length == 2 && /p = 0,0016/.test(gBlock.textContent) && /\*\*/.test(gBlock.querySelector('.sig').textContent), 't-Test nach Welch: p = 0,0016 (wie scipy), Balken mit Fehlerbalken und Sternchen');
+  gBlock.querySelector('svg').scrollIntoView(); await sleep(50);
+  await call('testSnapshot', {name: 'm17-diagramm.png'}).catch(() => {});
+  document.querySelector('.chartblock svg').scrollIntoView(); await sleep(50);
+  await call('testSnapshot', {name: 'm17-kurve.png'}).catch(() => {});
+  changed(); await flush();
   showView('doc');
   return out;
 }

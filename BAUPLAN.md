@@ -97,7 +97,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
-**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) abgeschlossen; Phase 3 (M14–M17) geplant.**
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13) und Phase 3 (M14–M17) abgeschlossen.**
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
@@ -128,7 +128,7 @@ Alles läuft lokal und offline; nur M16 fragt auf Klick bei NCBI/UniProt an. Rec
 | M14 ✅ | Sequenzen: GenBank/FASTA importieren und exportieren, Sequenz-Viewer (lineare und Ring-Karte mit Features, Basen mit Übersetzung, GC-Gehalt, Länge), Motivsuche auf beiden Strängen, Revers-Komplement, ORF-Suche; Sequenz-Block im Eintrag und am Registry-Objekt | pUC19 (NCBI L09137) eingelesen: 2686 bp, ringförmig; ORF-Suche findet bla (286 aa); Motivsuche findet GAATTC einmal; Features aus GenBank (complement, join) auf der Karte; Export als FASTA/GenBank wieder einlesbar. **Erledigt 2026-10-23:** L09137 enthält selbst keine Features, daher Feature-Test mit eigener GenBank-Datei; 7 Sequenz-Tests (node), 8 Speicher-Tests, 9 Selbsttests |
 | M15 ✅ | Primer und Restriktion: Primer-Rechner (Tm nach Nearest-Neighbor, GC, Länge, Selbstkomplementarität), Primer auf der Vorlage finden; Restriktionsenzyme (häufige Enzyme mit Erkennungsstelle), Schnittstellen auf der Karte, virtueller Verdau mit Fragmentgrößen und virtuellem Gel | Tm stimmt auf ±1 °C mit Referenzwerten; pUC19 × EcoRI + HindIII ergibt 2635 + 51 bp. **Erledigt 2026-10-23:** Tm auf 0,05 °C gleich Primer3 (primer3-py, mit und ohne Mg²⁺); pUC19: EcoRI + HindIII 2635 + 51, PvuII 2364 + 322; Typ IIS in beiden Richtungen; Gel und Einzelschneider in der App |
 | M16 ✅ | Datenbank-Verweise: Kennungen (GenBank/RefSeq, UniProt, PubMed, Addgene) im Text werden Links; auf Klick Sequenz bzw. Eintrag von NCBI/UniProt holen und als Registry-Objekt anlegen | „NM_000546“ im Text wird Link; Abruf von L09137 legt ein Plasmid mit Sequenz an (ohne Netz: verständliche Meldung). **Erledigt 2026-10-23:** Selbsttest mit hinterlegten Antworten; echte Abfragen geprüft: NM_000546 (69 Features, CDS übersetzt zu p53 mit 393 aa) und UniProt P04637 (TP53, 393 aa); Editor-Bündel exportiert dafür zusätzlich Extension/Plugin/Decoration |
-| M17 | Diagramme und Statistik: Diagramm-Block aus einer Tabelle im Eintrag (Punkte, Linie, Balken mit Fehlerbalken), Standardkurve mit linearer Regression und Berechnung unbekannter Proben, Kennzahlen, t-Test | Bradford-Standardkurve mit R², unbekannte Proben gegen Handrechnung; t-Test-p-Wert stimmt mit Referenz |
+| M17 ✅ | Diagramme und Statistik: Diagramm-Block aus einer Tabelle im Eintrag (Punkte, Linie, Balken mit Fehlerbalken), Standardkurve mit linearer Regression und Berechnung unbekannter Proben, Kennzahlen, t-Test | Bradford-Standardkurve mit R², unbekannte Proben gegen Handrechnung; t-Test-p-Wert stimmt mit Referenz. **Erledigt 2026-10-23:** Regression und t-Tests (Welch, Student, gepaart) auf ~1e−12 gleich scipy 1.17; Standardkurve „aus Tabelle darüber“, Proben mit Verdünnung, Diagramm im Export |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).
