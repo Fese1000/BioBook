@@ -27,7 +27,7 @@ async function exportBook() {
   // HTML eines Eintrags mit Pfaden relativ zur Seite (prefix: Weg zurück zur Wurzel)
   const entryHTML = (json, prefix) => {
     H.commands.setContent(json, {emitUpdate: false});
-    const doc = new DOMParser().parseFromString(`<body>${H.getHTML()}</body>`, 'text/html');
+    const doc = new DOMParser().parseFromString(`<body>${withBibliography(H.getHTML())}</body>`, 'text/html');
     doc.querySelectorAll('img').forEach(img => {
       const m = /^lab:\/\/files\/([0-9a-f]{64})$/.exec(img.getAttribute('src') || '');
       if (m && att.has(m[1])) img.setAttribute('src', prefix + fileName(att.get(m[1])));
@@ -125,7 +125,7 @@ async function exportEntryPDF(pdfa) {
     <div class="head"><b>Laborbuch „${esc(book.name)}“</b> · Eintrag Nr. ${cur}${last ? ` · Revision ${last.no}` : ''} · gedruckt ${when(new Date().toISOString())}
     ${last ? `<br>Revisions-Hash (SHA-256): <span class="hash">${last.hash}</span>` : '<br>Noch keine Revision gesichert'}
     ${sig ? `<br>Abgeschlossen und signiert von <b>${esc(sig.name)}</b> am ${when(sig.signed_at)}` : ''}</div>
-    <h1>${esc($('#title').value)}</h1>${editor.getHTML()}</body></html>`;
+    <h1>${esc($('#title').value)}</h1>${withBibliography(editor.getHTML())}</body></html>`;
   status(pdfa ? 'PDF/A wird erstellt …' : 'PDF wird erstellt …');
   try {
     const r = await call('entryPDF', {html, pdfa, hash: last?.hash || '', name: `${$('#title').value || 'Eintrag'}${pdfa ? ' (PDF-A)' : ''}.pdf`});

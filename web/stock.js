@@ -268,7 +268,7 @@ function insertUsage() { editor.chain().focus().insertContent([{type: 'usage'}, 
 function initStock() {
   $('#stockNav').addEventListener('click', e => {
     const k = e.target.closest('li')?.dataset.stock;
-    if (k == 'analysis') showAnalysis(); else if (k == 'orders') showOrders(); else if (k == 'cult') showCultures('list'); else if (k == 'dev') showDevices(); else showStock('lots');
+    if (k == 'analysis') showAnalysis(); else if (k == 'orders') showOrders(); else if (k == 'lit') showLiterature(null); else if (k == 'cult') showCultures('list'); else if (k == 'dev') showDevices(); else showStock('lots');
   });
   $('#stock').addEventListener('click', async e => {
     const d = e.target.dataset;

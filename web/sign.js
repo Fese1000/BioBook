@@ -77,7 +77,7 @@ function witnessHTML(r, book) {
       Abgeschlossen und signiert von <b>${esc(r.name)}</b> am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})<br>
       Revisions-Hash (SHA-256): <span class="hash">${r.hash}</span></div>
     <h1>${esc($('#title').value)}</h1>
-    ${editor.getHTML()}
+    ${withBibliography(editor.getHTML())}
     <div class="sign"><b>Gegenzeichnung</b><br>Ich habe den oben stehenden Eintrag gelesen und verstanden.<br>
       Er gehört zur Revision mit dem SHA-256-Hash <span class="hash">${r.hash}</span>.
       <div class="line"><div>Name des Zeugen</div><div>Datum</div><div>Unterschrift</div></div></div>

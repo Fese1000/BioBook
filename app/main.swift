@@ -591,7 +591,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "purchaseCounts": replyHandler(try s.purchaseCounts(), nil)
             case "fetchRemote":  // nur auf Klick, nur zu festen Adressen bei NCBI und UniProt
                 let src = try str("source"), id = try str("id")
-                guard id.range(of: "^[A-Za-z0-9_.]{3,30}$", options: .regularExpression) != nil else { throw StoreError.invalid("Ungültige Kennung") }
+                let pattern = ["crossref": "^10\\.\\d{4,9}/\\S{1,200}$", "pubmed": "^\\d{1,9}$", "zotero": "^.{1,100}$"][src] ?? "^[A-Za-z0-9_.]{3,30}$"
+                guard id.range(of: pattern, options: .regularExpression) != nil else { throw StoreError.invalid("Ungültige Kennung") }
                 if testMode {
                     guard let t = testNet["\(src):\(id)"] else { throw StoreError.invalid("Keine Verbindung zum Server (Testmodus, \(id))") }
                     return replyHandler(t, nil)
@@ -600,6 +601,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 switch src {
                 case "ncbi-nuccore": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gbwithparts&retmode=text&tool=Laborbuch&id=\(id)")!
                 case "uniprot": url = URL(string: "https://rest.uniprot.org/uniprotkb/\(id).json")!
+                case "crossref":
+                    var allowed = CharacterSet.alphanumerics; allowed.insert(charactersIn: "-._~")
+                    url = URL(string: "https://api.crossref.org/works/\(id.addingPercentEncoding(withAllowedCharacters: allowed)!)")!
+                case "pubmed": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&tool=Laborbuch&id=\(id)")!
+                case "zotero":  // lokale Schnittstelle der Zotero-App (nur auf diesem Mac)
+                    url = URL(string: "http://localhost:23119/api/users/0/items?format=csljson&limit=25&q=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)")!
                 default: throw StoreError.invalid("Unbekannte Quelle")
                 }
                 var req = URLRequest(url: url, timeoutInterval: 25)
@@ -607,6 +614,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 URLSession.shared.dataTask(with: req) { data, resp, err in
                     DispatchQueue.main.async {
                         if let e = err as? URLError {
+                            if src == "zotero" { return replyHandler(nil, "Zotero antwortet nicht. Zotero starten und unter Einstellungen › Erweitert „Anderen Anwendungen auf diesem Computer erlauben, mit Zotero zu kommunizieren“ einschalten.") }
                             return replyHandler(nil, [.notConnectedToInternet, .networkConnectionLost, .cannotFindHost, .timedOut].contains(e.code)
                                                 ? "Keine Verbindung zu \(url.host ?? "dem Server"). Bitte Internet prüfen." : e.localizedDescription)
                         }
@@ -621,6 +629,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)
+            case "references": replyHandler(try s.references(q: (a["q"] as? String) ?? ""), nil)
+            case "reference": replyHandler(try s.reference(id: try int("id")), nil)
+            case "saveReference": replyHandler(try s.saveReference(id: a["id"] as? Int, data: a["data"] as? [String: Any] ?? [:], source: (a["source"] as? String) ?? ""), nil)
+            case "importReferences": replyHandler(try s.importReferences(a["list"] as? [[String: Any]] ?? [], source: (a["source"] as? String) ?? ""), nil)
+            case "deleteReference": try s.deleteReference(id: try int("id")); replyHandler(true, nil)
             case "seqAnnotation": replyHandler(try s.seqAnnotation(entity: try int("entity"), field: try str("field")), nil)
             case "setSeqAnnotation":
                 replyHandler(try s.setSeqAnnotation(entity: try int("entity"), field: try str("field"), circular: a["circular"] as? Bool ?? false,

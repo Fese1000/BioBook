@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -445,6 +445,22 @@ _ = try s.updateEntity(id: plId, name: "pTest", values: ["sequence": "ATGAAACCCG
 let staleA = try s.seqAnnotation(entity: plId, field: "sequence")
 check(try staleA["stale"] as? Bool == true && (staleA["features"] as! [Any]).isEmpty && staleA["length"] as? Int == 31, "Sequenz geändert: Features gelten als veraltet")
 check(try (try s.sequenceObjects()).contains { $0["entity"] as? Int == plId && $0["length"] as? Int == 31 }, "Objekte mit Sequenz für die Auswahl")
+
+// M18: Literatur
+let sanger: [String: Any] = ["key": "Sanger1977", "title": "DNA sequencing with chain-terminating inhibitors", "authors": [["family": "Sanger", "given": "F."]], "year": "1977", "doi": "10.1073/pnas.74.12.5463"]
+let ref1 = try s.saveReference(id: nil, data: sanger, source: "test.bib")
+check(try ref1["key"] as? String == "Sanger1977" && ref1["existing"] == nil, "Quelle gespeichert")
+let dupe = try s.saveReference(id: nil, data: ["key": "x", "title": "Anders", "doi": "10.1073/PNAS.74.12.5463"], source: "")
+check(try dupe["existing"] as? Bool == true && dupe["id"] as? Int == ref1["id"] as? Int, "Gleiche DOI (Groß/klein egal) wird erkannt")
+let imp = try s.importReferences([["key": "Sanger1977", "title": "Andere Arbeit", "year": "1977", "authors": [["family": "Sanger"]]], ["title": "Ohne Schlüssel"]], source: "x.ris")
+check(try imp["added"] as? Int == 2 && (try s.references()).count == 3, "Import: zwei neue")
+check(try (try s.references()).contains { $0["key"] as? String == "Sanger1977a" }, "Schlüssel bleibt eindeutig (Sanger1977a)")
+check(try (try? s.saveReference(id: nil, data: ["year": "2000"], source: "")) == nil, "Quelle ohne Titel und Autoren abgelehnt")
+let citing = try s.create(title: "Sequenzierung")
+let rid = ref1["id"] as! Int
+_ = try s.saveDraft(id: citing, title: "Sequenzierung", json: "{\"type\":\"doc\",\"content\":[{\"type\":\"cite\",\"attrs\":{\"short\":\"Sanger et al. 1977\",\"refid\":\(rid)}}]}", text: "")
+check(try ((try s.reference(id: rid))["cited_in"] as! [[String: Any]]).count == 1, "Zitiert in: der Eintrag")
+check(try (try? s.deleteReference(id: rid)) == nil, "Zitierte Quelle lässt sich nicht löschen")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

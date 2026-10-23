@@ -1,0 +1,51 @@
+{
+ "result": {
+  "uids": [
+   "2985470"
+  ],
+  "2985470": {
+   "uid": "2985470",
+   "title": "Improved M13 phage cloning vectors and host strains: nucleotide sequences of the M13mp18 and pUC19 vectors.",
+   "authors": [
+    {
+     "name": "Yanisch-Perron C",
+     "authtype": "Author",
+     "clusterid": ""
+    },
+    {
+     "name": "Vieira J",
+     "authtype": "Author",
+     "clusterid": ""
+    },
+    {
+     "name": "Messing J",
+     "authtype": "Author",
+     "clusterid": ""
+    }
+   ],
+   "source": "Gene",
+   "fulljournalname": "Gene",
+   "pubdate": "1985",
+   "volume": "33",
+   "issue": "1",
+   "pages": "103-19",
+   "articleids": [
+    {
+     "idtype": "pubmed",
+     "idtypen": 1,
+     "value": "2985470"
+    },
+    {
+     "idtype": "doi",
+     "idtypen": 3,
+     "value": "10.1016/0378-1119(85)90120-9"
+    },
+    {
+     "idtype": "pii",
+     "idtypen": 4,
+     "value": "0378-1119(85)90120-9"
+    }
+   ]
+  }
+ }
+}

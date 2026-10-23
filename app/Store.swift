@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 12
+    static let schemaVersion = 13
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -235,6 +235,15 @@ final class Store {
                 try exec("""
                 CREATE TABLE seq_annot(entity_id INTEGER NOT NULL REFERENCES entity(id), field TEXT NOT NULL, circular INTEGER NOT NULL DEFAULT 0,
                   features_json TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', seq_sha TEXT NOT NULL, updated TEXT NOT NULL, PRIMARY KEY(entity_id, field));
+                """)
+            }
+            if v < 13 {
+                // Literatur: Quellen der Bibliothek (normalisiert als JSON), DOI/PMID zum Erkennen von Doppelten
+                try exec("""
+                CREATE TABLE reference(id INTEGER PRIMARY KEY, key TEXT NOT NULL UNIQUE COLLATE NOCASE, data_json TEXT NOT NULL, doi TEXT, pmid TEXT,
+                  title TEXT NOT NULL DEFAULT '', year TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE INDEX reference_doi ON reference(doi COLLATE NOCASE);
+                CREATE INDEX reference_pmid ON reference(pmid);
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -715,6 +724,7 @@ final class Store {
             "purchases": try query("SELECT * FROM purchase ORDER BY id"),
             "purchase_log": try query("SELECT * FROM purchase_log ORDER BY id"),
             "sequence_annotations": try query("SELECT * FROM seq_annot ORDER BY entity_id, field"),
+            "references": try query("SELECT id, key, data_json, source, created, updated FROM reference ORDER BY id"),
         ]
     }
 

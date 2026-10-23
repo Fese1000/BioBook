@@ -63,7 +63,8 @@ async function refreshDbRefs() {
   const seen = new Set(), ids = DbRef.findIds(editor.getText({blockSeparator: '\n'})).filter(h => !seen.has(h.kind + h.id) && seen.add(h.kind + h.id));
   box.hidden = !ids.length;
   box.innerHTML = `<h4>Datenbank-Verweise</h4>` + ids.map(h => `<span class="dbref"><a href="${esc(h.url)}" data-ext>${esc(h.id)}</a> <span class="sub">${esc(h.label)}</span>
-    ${h.fetch && editor.isEditable ? `<button class="btn" data-dbfetch="${esc(h.fetch)}" data-dbid="${esc(h.id)}" title="Holen und als Registry-Objekt anlegen">📥 in die Registry</button>` : ''}</span>`).join('');
+    ${h.fetch && editor.isEditable ? `<button class="btn" data-dbfetch="${esc(h.fetch)}" data-dbid="${esc(h.id)}" title="Holen und als Registry-Objekt anlegen">📥 in die Registry</button>` : ''}
+    ${(h.kind == 'doi' || h.kind == 'pubmed') ? `<button class="btn" data-dblit="${esc(h.id)}" title="Literaturangabe holen und in die Bibliothek legen">📚 in die Literatur</button>` : ''}</span>`).join('');
 }
 
 /// Sequenz von NCBI bzw. Protein von UniProt holen und als Registry-Objekt anlegen
@@ -133,5 +134,7 @@ function initDbLinks() {
   $('#dbrefs').addEventListener('click', e => {
     const a = e.target.closest('a[data-ext]'); if (a) { e.preventDefault(); return openExternal(a.href); }
     const b = e.target.closest('[data-dbfetch]'); if (b) dbFetchDialog(b.dataset.dbfetch, b.dataset.dbid);
+    const l = e.target.closest('[data-dblit]');
+    if (l) fetchReference(l.dataset.dblit).then(r => { status(r.existing ? 'War schon in der Bibliothek' : `In die Literatur: ${r.key}`); showLiterature(r.id); }).catch(err => alert(err.message));
   });
 }

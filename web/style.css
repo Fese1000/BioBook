@@ -335,3 +335,14 @@ svg.chart .bar{fill:var(--series-1);opacity:.85}svg.chart .err{fill:none;stroke:
 svg.chart .dot{fill:var(--surface);stroke:var(--ink);stroke-width:1.2}svg.chart .sig{fill:var(--ink);font-weight:600}
 svg.chart .line.fit{stroke-dasharray:6 4}
 .ctab{border-collapse:collapse;font-size:12.5px;margin:6px 0}.ctab td,.ctab th{padding:3px 10px;border-bottom:1px solid var(--line);text-align:left}.ctab th{color:var(--mut);font-weight:600}
+/* Literatur */
+span.cite{color:var(--acc);cursor:help;white-space:nowrap}span.cite.ProseMirror-selectednode{outline:2px solid var(--acc);border-radius:3px}
+#citebox{border-top:1px solid var(--line);margin-top:14px;padding-top:12px;font-size:13px}#citebox ol{margin:0;padding-left:22px}#citebox li{margin-bottom:4px}
+#citebox h4{margin:0 0 6px;font:600 12px -apple-system,system-ui;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}#citebox a{color:inherit}
+.litadd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.litadd input{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 7px}
+#litfetch{width:320px;font-family:var(--mono)}.litwrap{display:grid;grid-template-columns:1fr 320px;gap:18px}.litwrap tr.cur td{background:var(--sel)}
+.cilist{max-height:300px;overflow:auto;margin:8px 0}.cirow{padding:5px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}.cirow:hover{background:var(--sel)}
+.zotres{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin-bottom:12px}
+section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
+@media(max-width:1000px){.litwrap{grid-template-columns:1fr}}
+#lit a[data-ext],#dbrefs a,.regside a[data-ext]{color:var(--acc)}#litq{width:220px}

@@ -1,0 +1,41 @@
+{
+ "message": {
+  "DOI": "10.1016/0378-1119(85)90120-9",
+  "type": "journal-article",
+  "title": [
+   "Improved M13 phage cloning vectors and host strains: nucleotide sequences of the M13mpl8 and pUC19 vectors"
+  ],
+  "author": [
+   {
+    "given": "Celeste",
+    "family": "Yanisch-Perron"
+   },
+   {
+    "given": "Jeffrey",
+    "family": "Vieira"
+   },
+   {
+    "given": "Joachim",
+    "family": "Messing"
+   }
+  ],
+  "container-title": [
+   "Gene"
+  ],
+  "short-container-title": [
+   "Gene"
+  ],
+  "issued": {
+   "date-parts": [
+    [
+     1985,
+     1
+    ]
+   ]
+  },
+  "volume": "33",
+  "issue": "1",
+  "page": "103-119",
+  "URL": "https://doi.org/10.1016/0378-1119(85)90120-9"
+ }
+}

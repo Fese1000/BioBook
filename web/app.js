@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, DbLinks,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, DbLinks,
   ];
 }
 
@@ -218,6 +218,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
+  ['📚 Zitat', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
   ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
@@ -410,7 +411,7 @@ async function showBacklinks() {
   const b = await call('backlinks', {id: cur});
   $('#backlinks').hidden = !b.length;
   $('#backlinks').innerHTML = `<h4>Verweise auf diesen Eintrag</h4>` + b.map(r => `<a href="#" class="elink" data-entry="${r.id}">↗ ${esc(r.title || 'Ohne Titel')}</a>`).join(' ');
-  refreshDbRefs();
+  refreshDbRefs(); refreshCiteBox();
 }
 
 async function open(id) {
@@ -554,7 +555,7 @@ function changed() {
   updateCounts();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 600);
-  clearTimeout(dbRefTimer); dbRefTimer = setTimeout(refreshDbRefs, 800);
+  clearTimeout(dbRefTimer); dbRefTimer = setTimeout(() => { refreshDbRefs(); refreshCiteBox(); }, 800);
 }
 let dbRefTimer;
 
@@ -1169,6 +1170,45 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm17-kurve.png'}).catch(() => {});
   changed(); await flush();
   showView('doc');
+
+  // M18: Literatur (Crossref/PubMed-Antworten wie echt, gekürzt)
+  const doi = '10.1016/0378-1119(85)90120-9';
+  await call('testSetNet', {source: 'crossref', id: doi, text: JSON.stringify({message: {DOI: doi, type: 'journal-article', title: ['Improved M13 phage cloning vectors and host strains: nucleotide sequences of the M13mpl8 and pUC19 vectors'],
+    author: [{given: 'Celeste', family: 'Yanisch-Perron'}, {given: 'Jeffrey', family: 'Vieira'}, {given: 'Joachim', family: 'Messing'}], 'container-title': ['Gene'], issued: {'date-parts': [[1985, 1]]}, volume: '33', issue: '1', page: '103-119'}})});
+  await call('testSetNet', {source: 'pubmed', id: '2985470', text: JSON.stringify({result: {uids: ['2985470'], 2985470: {uid: '2985470', title: 'Improved M13 phage cloning vectors.', authors: [{name: 'Yanisch-Perron C', authtype: 'Author'}],
+    source: 'Gene', pubdate: '1985', volume: '33', issue: '1', pages: '103-19', articleids: [{idtype: 'doi', value: doi}]}}})});
+  const bib = '@article{Sanger1977, author = {Sanger, F. and Nicklen, S. and Coulson, A. R.}, title = {{DNA} sequencing with chain-terminating inhibitors}, journal = {Proc. Natl. Acad. Sci. USA}, year = 1977, volume = {74}, pages = {5463--5467}, doi = {10.1073/pnas.74.12.5463}}\n'
+    + '@article{mullis86, author = "Kary B. Mullis and Fred A. Faloona", title = "Specific synthesis of DNA in vitro", journal = {Methods Enzymol.}, year = {1987}, volume = {155}, pages = {335-350}}\n'
+    + '@book{Sambrook, author = {Sambrook, J. and Russell, D. W.}, title = {Molecular Cloning}, year = {2001}}';
+  const imp3 = await importReferenceText(bib, 'test.bib');
+  await showLiterature(null); await sleep(100);
+  ok(imp3.added == 3 && document.querySelectorAll('#lit tr[data-lit]').length == 3, 'BibTeX-Datei mit 3 Quellen importiert');
+  $('#litfetch').value = doi; document.querySelector('#lit [data-litfetch]').click(); await sleep(400);
+  const side = document.querySelector('#lit .regside')?.textContent || '';
+  ok(/Yanisch-Perron et al\. 1985/.test(side) && /Gene 33\(1\):103–119/.test(side), 'DOI ergibt „Yanisch-Perron et al. 1985, Gene 33(1):103–119“');
+  showView('doc');
+  const litEntry = await call('create', {title: 'Klonierung mit pUC19 (Literatur)'}); await refreshList(litEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'paragraph', content: [{type: 'text', text: 'Vektor wie beschrieben. Vgl. PMID: 2985470.'}]}]});
+  editor.commands.focus('end');
+  for (const q of ['Yanisch', 'Sanger']) {
+    citeDialog(); await sleep(150);
+    const qi = $('#ciQ'); qi.value = q; qi.dispatchEvent(new Event('input')); await sleep(150);
+    document.querySelector('#ciList [data-ci]').click(); await sleep(150);
+  }
+  changed(); await flush(); await sleep(900);
+  ok(editor.getText().includes('(Yanisch-Perron et al. 1985)') && editor.getText().includes('(Sanger et al. 1977)') && document.querySelectorAll('#citebox li').length == 2,
+    'Zitate im Text, Literaturliste unter dem Eintrag');
+  const bibHTML = withBibliography(editor.getHTML());
+  ok(/<h3>Literatur<\/h3><ol><li>Yanisch-Perron C, Vieira J, Messing J \(1985\)/.test(bibHTML) && /Sanger F, Nicklen S, Coulson AR \(1977\)/.test(bibHTML), 'Literaturliste im PDF/Export (Reihenfolge der Zitate)');
+  const yRef = (await call('references', {q: 'Yanisch'}))[0];
+  ok((await call('reference', {id: yRef.id})).cited_in.some(e => e.id == litEntry), 'Quelle kennt den zitierenden Eintrag');
+  document.querySelector('#dbrefs [data-dblit="2985470"]').click(); await sleep(500);
+  ok((await call('references')).length == 4 && /War schon in der Bibliothek/.test($('#status').textContent) && !$('#lit').hidden, 'PMID derselben Arbeit: als vorhanden erkannt (gleiche DOI)');
+  document.querySelector('#lit [data-litexport]').click(); await sleep(300);
+  const bibOut = Refs.parseBibTeX(await call('testReadText', {path: 'Literatur.bib'}));
+  ok(bibOut.length == 4 && bibOut.some(r => r.doi == doi), 'Bibliothek als BibTeX exportiert und wieder lesbar');
+  await call('testSnapshot', {name: 'm18-literatur.png'}).catch(() => {});
+  showView('doc');
   return out;
 }
 
@@ -1272,6 +1312,7 @@ async function start() {
   initOrders();
   initSeqView();
   initDbLinks();
+  initLiterature();
   refreshOrderBadge();
   await loadResultSchemas();
   refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);
