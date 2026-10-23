@@ -26,7 +26,8 @@ function showView(v) {
   $('#analysis').hidden = v != 'analysis';
   $('#cult').hidden = v != 'cult';
   $('#dev').hidden = v != 'dev';
-  if (!['stock', 'analysis', 'cult', 'dev'].includes(v)) document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
+  $('#orders').hidden = v != 'orders';
+  if (!['stock', 'analysis', 'cult', 'dev', 'orders'].includes(v)) document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
   $('#doc').hidden = v != 'doc' || !cur;
   $('#empty').hidden = v != 'doc' || !!cur;
   $('#status').hidden = v != 'doc';

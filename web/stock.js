@@ -63,7 +63,7 @@ async function showLot(id, preset = {}) {
   const ghs = (v.ghs || '').split(',');
   $('#stock').innerHTML = `<div class="reghead"><button class="btn" data-stab="lots">← Bestand</button>
       <h2>📦 ${l ? `<code>${l.code}</code> ${esc(l.name)}` : 'Neue Charge'}</h2>
-      ${l ? `<span class="amtbig">${esc(amt(l))}</span> ${badges(l.warnings)}<button class="btn" data-label="lot:${l.id}">🏷 Etikett</button>` : ''}</div>
+      ${l ? `<span class="amtbig">${esc(amt(l))}</span> ${badges(l.warnings)}<button class="btn" data-label="lot:${l.id}">🏷 Etikett</button><button class="btn" data-orderlot="${l.id}">🛒 Nachbestellen</button>` : ''}</div>
     <div class="regdetail"><form id="lotform" class="regform">
       <label class="rf"><span>Bezeichnung</span><input name="name" value="${esc(v.name || '')}" required autocomplete="off"></label>
       <label class="rf"><span>Registry-Objekt</span><div><input name="entity" list="entlist" value="${esc(curEnt ? entLabel(curEnt) : '')}" placeholder="optional, z. B. CH-0003" autocomplete="off">
@@ -268,7 +268,7 @@ function insertUsage() { editor.chain().focus().insertContent([{type: 'usage'}, 
 function initStock() {
   $('#stockNav').addEventListener('click', e => {
     const k = e.target.closest('li')?.dataset.stock;
-    if (k == 'analysis') showAnalysis(); else if (k == 'cult') showCultures('list'); else if (k == 'dev') showDevices(); else showStock('lots');
+    if (k == 'analysis') showAnalysis(); else if (k == 'orders') showOrders(); else if (k == 'cult') showCultures('list'); else if (k == 'dev') showDevices(); else showStock('lots');
   });
   $('#stock').addEventListener('click', async e => {
     const d = e.target.dataset;
@@ -276,6 +276,7 @@ function initStock() {
     if (d.sfilter) { stockFilter = d.sfilter; return renderLots(); }
     if (d.lotnew !== undefined) return showLot('new');
     if (d.lotmove) return bookLot(d.lotmove);
+    if (d.orderlot) return orderDialog({lot: +d.orderlot});
     if (d.locnew !== undefined) return locDialog(null);
     if (d.locedit) { e.stopPropagation(); return locDialog(stockLocs.find(l => l.id == d.locedit)); }
     if (d.newat) return showLot('new', {location: stockLoc, position: d.newat, unit: 'µl'});

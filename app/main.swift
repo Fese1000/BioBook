@@ -581,6 +581,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(try s.logDevice(id: try int("id"), task: a["task"] as? Int, kind: a["kind"] as? String, result: a["result"] as? String,
                                              values: a["values"] as? [String: Any] ?? [:], entry: a["entry"] as? Int, author: Settings.author), nil)
             case "careWarnings": replyHandler(try s.careWarnings(), nil)
+            case "purchaseSuggestions": replyHandler(try s.purchaseSuggestions(), nil)
+            case "purchases": replyHandler(try s.purchases(filter: (a["filter"] as? String) ?? "open"), nil)
+            case "purchase": replyHandler(try s.purchase(id: try int("id")), nil)
+            case "createPurchase": replyHandler(try s.createPurchase(values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "setPurchaseStatus": replyHandler(try s.setPurchaseStatus(id: try int("id"), status: try str("status"), note: (a["note"] as? String) ?? "", author: Settings.author), nil)
+            case "receivePurchase": replyHandler(try s.receivePurchase(id: try int("id"), values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "purchaseCounts": replyHandler(try s.purchaseCounts(), nil)
             case "types": replyHandler(try s.types(), nil)
             case "saveType":
                 replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",

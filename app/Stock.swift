@@ -170,7 +170,9 @@ extension Store {
         var l = l
         let id = l["id"] as! Int
         l["code"] = Store.lotCode(id)
-        l["warnings"] = Store.warnings(l, today: Store.isoDay(Date()))
+        var w = Store.warnings(l, today: Store.isoDay(Date()))
+        if w.contains("low"), let m = Store.number(l["min_amount"]), try stockTotal(l) > m { w.removeAll { $0 == "low" } }  // Nachschub liegt schon da
+        l["warnings"] = w
         l["location_path"] = try locationPath(l["location_id"] as? Int)
         if let e = l["entity_id"] as? Int, let ent = try queryRows("SELECT e.no, e.name, t.prefix FROM entity e JOIN rtype t ON t.id = e.type_id WHERE e.id = ?", [e]).first {
             l["entity_code"] = Store.code(prefix: ent["prefix"] as! String, no: ent["no"] as! Int)
@@ -200,6 +202,15 @@ extension Store {
         FROM lot_move m LEFT JOIN entry e ON e.id = m.entry_id WHERE m.lot_id = ? ORDER BY m.id DESC
         """, [id])
         return l
+    }
+
+    /// Gesamtmenge gleichartiger aktiver Chargen: gleiches Registry-Objekt (sonst gleicher Name) und gleiche Einheit
+    func stockTotal(_ l: [String: Any]) throws -> Double {
+        let r = try queryRows("""
+        SELECT COALESCE(SUM(amount), 0) AS s FROM lot WHERE status = 'active' AND unit = ?1
+          AND (CASE WHEN ?2 IS NULL THEN entity_id IS NULL AND lower(name) = lower(?3) ELSE entity_id = ?2 END)
+        """, [l["unit"], l["entity_id"], l["name"]]).first
+        return Store.number(r?["s"]) ?? 0
     }
 
     func warningCount() throws -> Int { try lots(filter: "warnings").count }

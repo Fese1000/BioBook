@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 10
+    static let schemaVersion = 11
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -214,6 +214,20 @@ final class Store {
                 CREATE INDEX device_log_d ON device_log(device_id);
                 CREATE TRIGGER device_log_ro_u BEFORE UPDATE ON device_log BEGIN SELECT RAISE(ABORT, 'Geräteprotokoll ist unveränderlich'); END;
                 CREATE TRIGGER device_log_ro_d BEFORE DELETE ON device_log BEGIN SELECT RAISE(ABORT, 'Geräteprotokoll ist unveränderlich'); END;
+                """)
+            }
+            if v < 11 {
+                // Bestellungen: aus knappen Chargen oder frei; Statusverlauf unveränderlich; Wareneingang legt eine neue Charge an
+                try exec("""
+                CREATE TABLE purchase(id INTEGER PRIMARY KEY, lot_id INTEGER REFERENCES lot(id), entity_id INTEGER REFERENCES entity(id), name TEXT NOT NULL,
+                  amount REAL, unit TEXT NOT NULL DEFAULT '', qty INTEGER NOT NULL DEFAULT 1, supplier TEXT NOT NULL DEFAULT '', catalog TEXT NOT NULL DEFAULT '',
+                  price TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'offen', new_lot INTEGER REFERENCES lot(id),
+                  created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE INDEX purchase_status ON purchase(status);
+                CREATE TABLE purchase_log(id INTEGER PRIMARY KEY, purchase_id INTEGER NOT NULL REFERENCES purchase(id), at TEXT NOT NULL, status TEXT NOT NULL,
+                  note TEXT NOT NULL DEFAULT '', author TEXT NOT NULL DEFAULT '');
+                CREATE TRIGGER purchase_log_ro_u BEFORE UPDATE ON purchase_log BEGIN SELECT RAISE(ABORT, 'Bestellverlauf ist unveränderlich'); END;
+                CREATE TRIGGER purchase_log_ro_d BEFORE DELETE ON purchase_log BEGIN SELECT RAISE(ABORT, 'Bestellverlauf ist unveränderlich'); END;
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -691,6 +705,8 @@ final class Store {
             "devices": try query("SELECT * FROM device ORDER BY id"),
             "device_tasks": try query("SELECT * FROM device_task ORDER BY id"),
             "device_log": try query("SELECT * FROM device_log ORDER BY id"),
+            "purchases": try query("SELECT * FROM purchase ORDER BY id"),
+            "purchase_log": try query("SELECT * FROM purchase_log ORDER BY id"),
         ]
     }
 

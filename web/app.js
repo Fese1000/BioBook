@@ -1021,6 +1021,35 @@ async function selfTest() {
   $('#search').value = ku13.code; $('#search').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); await sleep(300);
   ok(!$('#cult').hidden && $('#cult .reghead h2').textContent.includes(ku13.code), 'Handscanner: Kulturcode öffnet die Kultur');
   showView('doc');
+
+  // M13: Bestellungen und Wareneingang
+  const tryp = await call('saveLot', {values: {name: 'Trypsin-EDTA', amount: '10', unit: 'ml', min: '20', supplier: 'Gibco', catalog: '25300-054'}});
+  const oc0 = await refreshOrderBadge();
+  ok(oc0.suggestions >= 1 && !$('#orderBadge').hidden, `Knappe Chargen ohne Bestellung in der Seitenleiste (${oc0.suggestions})`);
+  await showOrders(); await sleep(100);
+  const sbtn = document.querySelector(`#orders [data-osugg="${tryp.id}"]`);
+  ok(!!sbtn, 'Trypsin steht unter „Knapp und nicht bestellt“');
+  sbtn.click(); await sleep(150);
+  $('#oQty').value = '2'; $('#oAmt').value = '100'; $('#oPrice').value = '38,50 €'; $('#oSave').click(); await sleep(300);
+  const orow = [...document.querySelectorAll('#orders tr[data-order]')].find(r => r.textContent.includes('Trypsin'));
+  ok(orow && /2 × 100 ml/.test(orow.textContent) && /offen/.test(orow.textContent) && !document.querySelector(`#orders [data-osugg="${tryp.id}"]`), 'Knappes Reagenz auf der Bestellliste (2 × 100 ml, offen)');
+  orow.querySelector('[data-ostat="bestellt"]').click(); await sleep(250);
+  const orow2 = [...document.querySelectorAll('#orders tr[data-order]')].find(r => r.textContent.includes('Trypsin'));
+  ok(/bestellt/.test(orow2.textContent), 'Status „bestellt“');
+  const ocsv = await ordersCSV();
+  const ocsvText = ocsv ? await call('testReadText', {path: ocsv.path.split('/').pop()}) : '';
+  ok(/Trypsin-EDTA;2;100;ml;Gibco;25300-054;38,50 €;bestellt/.test(ocsvText), 'Bestellliste als CSV');
+  orow2.querySelector('[data-orecv]').click(); await sleep(200);
+  ok($('#rAmt').value == '200', 'Eingang schlägt 200 ml vor');
+  $('#rLotNo').value = '2611A'; $('#rExp').value = '2027-06-30'; $('#rLoc').value = String(fr); $('#rSave').click(); await sleep(400);
+  const recvLot = (await call('lots', {q: 'Trypsin'})).find(l => l.lot_no == '2611A');
+  ok(recvLot && recvLot.amount == 200 && !$('#stock').hidden && $('#stock .reghead h2').textContent.includes(recvLot.code), 'Eingang verbucht neue Charge (200 ml, Ch. 2611A) und öffnet sie');
+  ok(!(await call('lot', {id: tryp.id})).warnings.includes('low') && !(await call('purchaseSuggestions')).some(x => x.name == 'Trypsin-EDTA'), 'Altes Trypsin nicht mehr knapp, kein Vorschlag mehr');
+  orderFilter = 'all'; await showOrders(); await sleep(100);
+  ok(/geliefert/.test([...document.querySelectorAll('#orders tr[data-order]')].find(r => r.textContent.includes('Trypsin')).textContent), 'Erledigte Bestellung mit Status „geliefert“ und neuer Charge');
+  await call('testSnapshot', {name: 'm13-bestellungen.png'}).catch(() => {});
+  orderFilter = 'open';
+  showView('doc');
   return out;
 }
 
@@ -1121,6 +1150,8 @@ async function start() {
   initLabels();
   initResults();
   initCulture();
+  initOrders();
+  refreshOrderBadge();
   await loadResultSchemas();
   refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);
     if (t.length) setTimeout(() => status(`Fällig: ${t.join(', ')} – siehe Zellkultur und Geräte`), 4000); });

@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -404,6 +404,31 @@ check(try repaired["status"] as? String == "ok" && (repaired["log"] as! [[String
 check(try (try? s.logDevice(id: pid, task: nil, kind: "notiz", result: nil, values: [:], entry: nil, author: "Test")) == nil, "Leere Notiz abgelehnt")
 let dumpAll = try s.dump()
 check(try (dumpAll["cultures"] as! [[String: Any]]).count == 3 && (dumpAll["device_log"] as! [[String: Any]]).count == 3 && (dumpAll["lots"] as! [[String: Any]]).count >= 1, "Export enthält Bestand, Kulturen und Gerätebuch")
+
+// M13: Bestellungen und Wareneingang
+let tryp = try s.saveLot(id: nil, values: ["name": "Trypsin-EDTA", "amount": "10", "unit": "ml", "min": "20", "supplier": "Gibco", "catalog": "25300-054", "ghs": ["GHS07"]], author: "Test")
+let trypId = tryp["id"] as! Int
+check(try (tryp["warnings"] as! [String]).contains("low"), "Trypsin knapp (10 ml, Mindestbestand 20 ml)")
+var sugg = try s.purchaseSuggestions()
+check(try sugg.contains { $0["lot_id"] as? Int == trypId }, "Knappes Reagenz erscheint als Bestellvorschlag")
+let order = try s.createPurchase(values: ["lot": trypId, "amount": "100", "qty": "2", "price": "38,50 €"], author: "Test")
+let oid = order["id"] as! Int
+check(try order["name"] as? String == "Trypsin-EDTA" && order["catalog"] as? String == "25300-054" && order["status"] as? String == "offen", "Bestellung übernimmt Name, Katalognr. und Lieferant")
+check(try !(try s.purchaseSuggestions()).contains { $0["lot_id"] as? Int == trypId }, "Bestelltes verschwindet aus den Vorschlägen")
+check(try (try? s.createPurchase(values: ["lot": trypId], author: "Test")) == nil, "Doppelte Bestellung abgelehnt")
+_ = try s.setPurchaseStatus(id: oid, status: "bestellt", note: "Bestell-Nr. 4711", author: "Test")
+check(try (try? s.setPurchaseStatus(id: oid, status: "geliefert", note: "", author: "Test")) == nil, "„Geliefert“ nur über den Wareneingang")
+let rec = try s.receivePurchase(id: oid, values: ["lot_no": "2611A", "expiry": "2027-06-30"], author: "Test")
+let newLot = rec["lot"] as! [String: Any]
+check(try newLot["amount"] as? Double == 200 && newLot["lot_no"] as? String == "2611A" && newLot["ghs"] as? String == "GHS07" && newLot["min_amount"] as? Double == 20,
+      "Wareneingang: neue Charge 2 × 100 ml mit Chargennr., Gefahren und Mindestbestand")
+let delivered = try s.purchase(id: oid)
+check(try delivered["status"] as? String == "geliefert" && (delivered["log"] as! [[String: Any]]).map { $0["status"] as! String } == ["offen", "bestellt", "geliefert"], "Statusverlauf offen → bestellt → geliefert")
+check(try !(try s.lot(id: trypId)["warnings"] as! [String]).contains("low"), "Alte Charge nicht mehr knapp, weil Nachschub da ist")
+check(try (try? s.receivePurchase(id: oid, values: [:], author: "Test")) == nil, "Zweiter Eingang abgelehnt")
+let free = try s.createPurchase(values: ["name": "Pipettenspitzen 200 µl", "qty": "5", "unit": "Packung"], author: "Test")
+_ = try s.setPurchaseStatus(id: free["id"] as! Int, status: "storniert", note: "doch noch da", author: "Test")
+check(try (try s.purchases()).isEmpty && (try s.purchases(filter: "all")).count == 2, "Stornierte und gelieferte nur unter „alle“")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

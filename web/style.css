@@ -286,3 +286,7 @@ svg.chart .hit{fill:transparent;cursor:pointer}svg.chart .hit:hover+*{}
 .lnk{cursor:pointer}.lnk:hover{color:var(--acc)}
 .task{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.task .grow{flex:1;min-width:0}
 .task .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:13px}.task .x:hover{color:var(--ink)}
+/* Bestellungen */
+.wbadge.ok{background:#3a8f5c;color:#fff}
+h3.osec{font:600 13px -apple-system,system-ui;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:18px 0 6px}
+.obtns{white-space:nowrap;text-align:right}.obtns .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px}
