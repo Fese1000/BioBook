@@ -1584,6 +1584,59 @@ async function selfTest() {
   ok(/Eingerichtet/.test($('#aiState').textContent), 'Einstellungen zeigen den eingerichteten KI-Assistenten');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
   showView('doc');
+
+  // M29: Molekularbiologie
+  const bb = 'TTGACAGCTAGCTCAGTCCTAGGTATAATGCTAGCTACTAGAGTCACACAGGAAAGTACTAGATGCGTAAAGGCGAAGAGCTGTTCACTGGTGTCGTCCCTATTCTGGTGGAACTGGATGGTGATGTCAACGGTCATAAGTTTTCCGTGCGTGGCGAGGGTGAAGGTGACGCAACTAATGGTAAACTGACGCTGAAGTTCATCTGTACTACTGGTAAACTGCCGGTTCCTTGGCCGACTCTGGTAACGACGCTGACTTATGGTGTTCAGTGCTTTGCTCGTTATCCGGACCATATGAAGCAGCATGACTTCTTCAAGTCCGCCATGCCGGAAGGCTATGTGCAGGAACGCACGATTTCCTTTAAGGATGACGGCACGTACAAAACGCGTGCGGAAGTGAAATTTGAAGGCGATACCCTGGTAAACCGCATTGAGCTGAAAGGCATTGACTTTAAAGAGGACGGCAATATCCTGGGCCATAAGCTGGAATACAATTTTAACAGCCACAATGTTTACATCACCGCCGATAAACAAAAAAATGGCATTAAAGCGAATTTTAAAATTCGCCACAACGTGGAGGATGGCAGCGTGCAGCTGGCTGATCACTACCAGCAAAACACTCCAATCGGTGATGGTCCTGTTCTGCTGCCAGACAATCACTATCTGAGCACGCAAAGCGTTCTGTCTAAAGATCCGAACGAGAAACGCGATCATATGGTTCTGCTGGAGTTCGTAACCGCAGCGGGCATCACGCATGGTATGGATGAACTGTACAAATAA';
+  const vecSeq = 'CCCC' + 'GAATTC' + 'A'.repeat(40) + 'AAGCTT' + bb;
+  const vecE = await call('createEntity', {type: plT.id, name: 'pVektor29', values: {sequence: vecSeq}});
+  await call('setSeqAnnotation', {entity: vecE.id, field: 'sequence', circular: true, features: [{type: 'CDS', label: 'gfp', start: 57 + 52, end: 56 + bb.length, strand: 1}], source: 'Test'});
+  const X29 = 'ATGGTGAGCAAGGGCGAGGAGGATAACATGGCCATCATCAAGGAGTTCATGCGCTAA';
+  const insE = await call('createEntity', {type: plT.id, name: 'Insert29', values: {sequence: 'TT' + 'GAATTC' + X29 + 'AAGCTT' + 'TT'}});
+  await showEntity(vecE.id); await sleep(300);
+  let panel29 = () => document.querySelector('#reg .seqpanel[data-seqent]');
+  panel29().querySelector('[data-mbedit]').click(); await sleep(100);
+  $('#seOp').value = 'insert'; $('#seOp').dispatchEvent(new Event('change')); $('#seAt').value = '1'; $('#seTxt').value = 'GGG'; $('#seOk').click(); await sleep(500);
+  const ann29 = await call('seqAnnotation', {entity: vecE.id, field: 'sequence'});
+  ok(ann29.length == vecSeq.length + 3 && ann29.features[0].start == 57 + 52 + 3 && !ann29.stale, 'Sequenz bearbeitet (3 Basen eingefügt), Feature wandert mit, nicht „veraltet“');
+  panel29().querySelector('[data-mbfeat]').click(); await sleep(100);
+  $('#ftName').value = 'MCS'; $('#ftFrom').value = '8'; $('#ftTo').value = '63'; $('#ftOk').click(); await sleep(300);
+  ok((await call('seqAnnotation', {entity: vecE.id, field: 'sequence'})).features.some(f => f.label == 'MCS' && f.start == 8 && f.end == 63), 'Feature von Hand gesetzt');
+  // kleine .ab1 im Speicher: Lesung = Stück der Referenz mit einer abweichenden Base
+  const refNow = 'GGG' + vecSeq, readSeq = refNow.slice(120, 520).split('');
+  const mutAt = 200; readSeq[mutAt] = readSeq[mutAt] == 'A' ? 'G' : 'A';
+  const abif = (bases, quals) => {
+    const n = bases.length, ploc = bases.map((_, i) => 10 + i * 12), traces = {};
+    for (const b of 'GATC') { traces[b] = new Array(n * 12 + 20).fill(0); bases.forEach((x, i) => { if (x == b) for (let d = -5; d <= 5; d++) traces[b][ploc[i] + d] = Math.round(800 * Math.exp(-d * d / 6)); }); }
+    const tags = [['PBAS', 2, 2, 1, bases.map(c => c.charCodeAt(0))], ['PCON', 2, 2, 1, quals], ['PLOC', 2, 4, 2, ploc], ['FWO_', 1, 2, 1, [...'GATC'].map(c => c.charCodeAt(0))],
+      ...[...'GATC'].map((b, i) => ['DATA', 9 + i, 4, 2, traces[b]]), ['SMPL', 1, 18, 1, [7, ...[...'Klon 29'].map(c => c.charCodeAt(0))]]];
+    let dataLen = 0; const placed = tags.map(t => { const size = t[4].length * t[3], off = 128 + dataLen; if (size > 4) dataLen += size; return {t, size, off}; });
+    const dirOff = 128 + dataLen, buf = new ArrayBuffer(dirOff + tags.length * 28), v = new DataView(buf), u8 = new Uint8Array(buf);
+    u8.set([65, 66, 73, 70]); v.setInt16(4, 101); v.setInt32(18, tags.length); v.setInt32(22, tags.length * 28); v.setInt32(26, dirOff);
+    placed.forEach(({t, size, off}, i) => {
+      const o = dirOff + i * 28; for (let k = 0; k < 4; k++) u8[o + k] = t[0].charCodeAt(k);
+      v.setInt32(o + 4, t[1]); v.setInt16(o + 8, t[2]); v.setInt16(o + 10, t[3]); v.setInt32(o + 12, t[4].length); v.setInt32(o + 16, size);
+      const at = size <= 4 ? o + 20 : off;
+      t[4].forEach((x, k) => t[3] == 2 ? v.setInt16(at + k * 2, x) : (u8[at + k] = x));
+      if (size > 4) v.setInt32(o + 20, off);
+    });
+    return buf;
+  };
+  const sres = sangerShow(panel29(), abif(readSeq, readSeq.map(() => 40)), 'klon29.ab1'); await sleep(100);
+  ok(sres.real.length == 1 && sres.real[0].refPos == 121 + mutAt && document.querySelector('#reg .sangerbox svg.chrom') && /Klon 29/.test(document.querySelector('#reg .sangerbox').textContent),
+    `Sanger-Lesung: eine Abweichung an Position ${121 + mutAt} mit Chromatogramm`);
+  await call('testSnapshot', {name: 'm29-sanger.png'}).catch(() => {});
+  panel29().querySelector('[data-mbclone]').click(); await sleep(200);
+  const insOpt = [...$('#clIns').options].find(o => /Insert29/.test(o.textContent));
+  $('#clIns').value = insOpt.value; $('#clE1').value = 'EcoRI'; $('#clE2').value = 'HindIII';
+  $('#clRun').click(); await sleep(300);
+  const outTxt = $('#clOut').textContent;
+  $('#clName').value = 'pVektor29-Insert'; $('#clSave').click(); await sleep(600);
+  const newPl = (await call('entities', {type: plT.id})).find(x => x.name == 'pVektor29-Insert');
+  const newAnn = newPl && await call('seqAnnotation', {entity: newPl.id, field: 'sequence'});
+  const expLen = refNow.length - 46 + 4 + X29.length + 2;  // Rückgrat ohne MCS-Stück, dazu Insert zwischen den Schnitten
+  ok(newPl && newAnn.length == expLen && newAnn.circular && newAnn.features.some(f => f.label == 'gfp') && /Rückgrat/.test(outTxt) && !$('#reg').hidden,
+    `Klonierung EcoRI/HindIII: neues Plasmid ${newAnn?.length} bp mit übernommenem gfp-Feature`);
+  showView('doc');
   return out;
 }
 
@@ -1694,6 +1747,7 @@ async function start() {
   initAgenda();
   initEntryTabs();
   initManage();
+  initMolBioUI();
   initAssistant();
   await loadExtensions();
   refreshAgendaBadge();

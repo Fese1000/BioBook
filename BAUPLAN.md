@@ -97,7 +97,7 @@ Formatversion steht in `meta.json`; Migrationen laufen beim Öffnen, vorher auto
 **5 (nur bei Bedarf):** Team-Sync über eigenen Server oder geteilten Ordner, Rollen, Workflows.
 
 ## 10. Meilensteine
-**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13), Phase 3 (M14–M17) und Phase 4 (M18–M24) abgeschlossen. Phase 5 nur bei Bedarf.**
+**Stand 2026-10-23: Phase 1 (M0–M7) abgeschlossen, Version 1.0, vorerst nur Apple Silicon. Phase 2 (M8–M13), Phase 3 (M14–M17) und Phase 4 (M18–M24) und Phase 4b (M25–M29) abgeschlossen. Phase 5 nur bei Bedarf.**
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
@@ -152,7 +152,7 @@ Ergebnis des Vergleichs: Die großen Bereiche sind da; es fehlen die Arbeitsweis
 | M26 ✅ | Protokolle am Eintrag: Vorlagen als Reiter anhängen, im Text verweisen, Eintrag und Protokoll nebeneinander; Reiter „Verknüpft“ (Objekte, Chargen, Sequenzen, Einträge); eigene Felder je Eintrag | Golden-Gate-Protokoll hängt am Eintrag, öffnet sich daneben; „Verknüpft“ listet Plasmid und Charge; Metadaten bleiben beim Speichern. **Erledigt 2026-10-23:** Protokolle sind Einträge der Art „Protokoll“; rechts ist immer nur ein Fenster offen (Protokoll oder Verlauf) |
 | M27 ✅ | Editor-Standards: Hoch-/Tiefstellen, Unterstreichen, Link, Textfarbe/Textmarker, Trennlinie, Formeln (LaTeX), Suchen & Ersetzen, Einfügemenü und „/“-Befehle, Excel als Tabelle, Tastenkürzel-Übersicht | H₂O und 10⁶ im Text und im PDF; Formel wird gesetzt; „/“ fügt Blöcke ein; .xlsx wird Tabelle. **Erledigt 2026-10-23:** offizielle TipTap-Erweiterungen und KaTeX ins Offline-Bündel; Formeln als MathML (keine Schriftdateien); eigener .xlsx-Leser, gegen openpyxl-Datei getestet; Werkzeugleiste von 7 auf 2 Zeilen |
 | M28 ✅ | Einträge verwalten: duplizieren, Status mit Farbe, anheften, zuletzt geöffnet, sortieren/filtern, gespeicherte Suchen, Versionen vergleichen, mehrere Einträge auf einmal, Prüfung vor dem Abschließen | Duplikat ohne Signatur; Filter „fehlgeschlagen“; Vergleich zeigt eingefügte und gelöschte Stellen. **Erledigt 2026-10-23:** Wort-Diff nach Myers (auch mit Zufallstexten getestet); dabei zwei Fehler behoben: KI-Status in den Einstellungen und eine doppelte Element-ID der Statuszeile |
-| M29 | Molekularbiologie: Sequenz bearbeiten und Features setzen, Sanger-Ergebnis (.ab1) gegen Referenz ausrichten, Klonierung simulieren (Restriktion/Ligation, Gibson, Golden Gate) mit neuem Plasmid in der Registry | Golden Gate aus drei Teilen ergibt das erwartete Konstrukt; .ab1-Lesung zeigt Mutation an der richtigen Stelle |
+| M29 ✅ | Molekularbiologie: Sequenz bearbeiten und Features setzen, Sanger-Ergebnis (.ab1) gegen Referenz ausrichten, Klonierung simulieren (Restriktion/Ligation, Gibson, Golden Gate) mit neuem Plasmid in der Registry | Golden Gate aus drei Teilen ergibt das erwartete Konstrukt; .ab1-Lesung zeigt Mutation an der richtigen Stelle. **Erledigt 2026-10-23:** .ab1-Leser gegen Biopython-Testdateien (3730, 310) geprüft; pUC19 × EcoRI/HindIII mit intaktem bla; CRISPR-Guides und Codon-Optimierung noch nicht |
 
 ## 11. Tests
 Unit-Tests für Hash-Kette, Migrationen, Rechner, Suche, Export; Gegenprobe mit großen Testdaten (10.000 Einträge, 2.000 Anhänge); Absturztest (Prozess während des Speicherns beenden → DB bleibt konsistent, SQLite WAL).

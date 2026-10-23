@@ -156,6 +156,8 @@ function drawSeqPanel(el) {
       <select data-svframe><option value="0">ohne Übersetzung</option>${[1, 2, 3].map(f => `<option value="${f}" ${st.frame == f ? 'selected' : ''}>Rahmen +${f}</option>`).join('')}</select>
       <button class="btn ${st.rc ? 'on' : ''}" data-svrc>Revers-Komplement</button>
       <button class="btn" data-svexp="fasta">FASTA</button><button class="btn" data-svexp="gb">GenBank</button></div>
+    <div class="seqtools"><button class="btn" data-mbedit>✎ Bearbeiten</button><button class="btn" data-mbfeat>+ Feature</button>
+      <button class="btn" data-mbsanger>Sanger (.ab1) ausrichten</button><button class="btn" data-mbclone>🧪 Klonierung</button></div>
     <div class="seqtools"><span>✂</span><input data-svenz list="enzlist" value="${esc(st.enz.join(', '))}" placeholder="Enzyme, z. B. EcoRI, HindIII" autocomplete="off" spellcheck="false">
       <datalist id="enzlist">${Object.keys(Bio.ENZYMES).map(n => `<option value="${n}">`).join('')}</datalist>
       <button class="btn" data-svsingle>Einzelschneider</button>
