@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode,
   ];
 }
 
@@ -174,6 +174,7 @@ function collectRefs(doc) {
   const walk = n => {
     if (n.type == 'mention' && n.attrs?.id) (String(n.attrs.id).startsWith('ent:') ? entities : links).add(+String(n.attrs.id).replace('ent:', ''));
     if (n.type == 'file' && n.attrs?.sha) files.add(n.attrs.sha);
+    if (n.type == 'seqref' && n.attrs?.entity) entities.add(+n.attrs.entity);
     if (n.type == 'image') { const m = /^lab:\/\/files\/([0-9a-f]{64})$/.exec(n.attrs?.src || ''); if (m) files.add(m[1]); }
     (n.content || []).forEach(walk);
   };
@@ -220,6 +221,7 @@ const TOOLS = [
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
   ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
+  ['🧬 Sequenz', 'Sequenzkarte eines Registry-Objekts einfügen', () => insertSequenceBlock()],
   ['↻ Passage', 'Zellkultur: Passage, Mediumwechsel oder Mycoplasma-Test verbuchen', () => insertCultureBlock()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
@@ -1050,6 +1052,44 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm13-bestellungen.png'}).catch(() => {});
   orderFilter = 'open';
   showView('doc');
+
+  // M14: Sequenzen
+  const plT = (await call('types')).find(t => t.prefix == 'PL');
+  const seqS = 'CCGAATTCGG' + 'ATGAAA' + 'GCT'.repeat(110) + 'TAA' + 'GGAAGCTTCC' + 'A'.repeat(200);
+  const gbText = Bio.toGenBank({name: 'pSelbst', seq: seqS, circular: true, features: [{type: 'CDS', label: 'testA', start: 11, end: 349, strand: 1},
+    {type: 'promoter', label: 'pRev', start: 400, end: 450, strand: -1}]});
+  regType = plT.id; await showEntity('new'); await sleep(100);
+  importSeqText('sequence', gbText, 'pSelbst.gb');
+  ok(document.querySelector('#entform [data-field="sequence"]').value.length == 559 && document.querySelector('#entform [data-name]').value == 'pSelbst'
+    && document.querySelector('#entform [data-field="size"]').value == '559' && /559 bp, ringförmig, 2 Feature/.test(document.querySelector('#entform .seqnote').textContent), 'GenBank-Import füllt Sequenz und Name (559 bp, ringförmig, 2 Features)');
+  const pSelbst = await saveEntityForm(); await sleep(200);
+  const panel = document.querySelector('#reg .seqpanel');
+  ok(panel && panel.querySelector('svg.ring') && panel.querySelectorAll('.feattab tr').length == 3 && /559 bp · ringförmig/.test(panel.querySelector('.seqbar').textContent),
+    'Ringkarte mit beiden Features nach dem Speichern');
+  const mi = panel.querySelector('[data-svmotif]'); mi.value = 'GAATTC'; mi.dispatchEvent(new Event('input', {bubbles: true})); await sleep(350);
+  ok(/1 Treffer: 3/.test(document.querySelector('#reg [data-svhits]').textContent) && document.querySelectorAll('#reg .seqmap .hit').length == 1 && document.querySelector('#reg pre.seqtext mark')?.textContent == 'GAATTC',
+    'Motivsuche: GAATTC einmal an Position 3, auf Karte und in den Basen markiert');
+  document.querySelector('#reg [data-svorf]').click(); await sleep(100);
+  ok(/ORF 112 aa/.test(document.querySelector('#reg .feattab').textContent), 'ORF-Suche findet das Leseraster (112 aa)');
+  document.querySelector('#reg [data-svkeep]').click(); await sleep(300);
+  ok((await call('seqAnnotation', {entity: pSelbst.id, field: 'sequence'})).features.length == 3, 'ORF als Feature übernommen');
+  const fr1 = document.querySelector('#reg [data-svframe]'); fr1.value = '2'; fr1.dispatchEvent(new Event('change', {bubbles: true})); await sleep(100);
+  ok((document.querySelector('#reg pre.seqtext .aa')?.textContent || '').replace(/\s/g, '').includes('MKAAA'), 'Übersetzung im Rahmen +2 (ORF ab Position 11: M K A …)');
+  document.querySelector('#reg .seqmapbox').scrollIntoView(); await sleep(50);
+  await call('testSnapshot', {name: 'm14-sequenz.png'}).catch(() => {});
+  const gbOut = await exportSeq(document.querySelector('#reg .seqpanel'), 'gb');
+  const reread = Bio.parseAny(await call('testReadText', {path: gbOut.path.split('/').pop()}))[0];
+  ok(reread.seq == seqS && reread.circular && reread.features.length == 3, 'GenBank-Export wieder eingelesen: gleiche Sequenz, Ring, 3 Features');
+  showView('doc');
+  const sqEntry = await call('create', {title: 'Klonierung pSelbst'}); await refreshList(sqEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'seqref', attrs: {entity: pSelbst.id, field: 'sequence', label: `${pSelbst.code} pSelbst`, length: 559}}, {type: 'paragraph'}]});
+  changed(); await flush(); await sleep(300);
+  ok(document.querySelector('.seqblock svg.ring') && (await call('entity', {id: pSelbst.id})).used_in.some(u => u.id == sqEntry), 'Sequenz-Block im Eintrag zeigt die Karte; Objekt kennt den Eintrag');
+  await showEntity(pSelbst.id); await sleep(100);
+  const sqTa = document.querySelector('#entform [data-field="sequence"]'); sqTa.value += 'A';
+  await saveEntityForm(); await sleep(200);
+  ok(/Features veraltet/.test(document.querySelector('#reg .seqpanel .seqbar').textContent), 'Sequenz geändert: Features als veraltet gemeldet');
+  showView('doc');
   return out;
 }
 
@@ -1151,6 +1191,7 @@ async function start() {
   initResults();
   initCulture();
   initOrders();
+  initSeqView();
   refreshOrderBadge();
   await loadResultSchemas();
   refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);

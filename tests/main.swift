@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -429,6 +429,22 @@ check(try (try? s.receivePurchase(id: oid, values: [:], author: "Test")) == nil,
 let free = try s.createPurchase(values: ["name": "Pipettenspitzen 200 µl", "qty": "5", "unit": "Packung"], author: "Test")
 _ = try s.setPurchaseStatus(id: free["id"] as! Int, status: "storniert", note: "doch noch da", author: "Test")
 check(try (try s.purchases()).isEmpty && (try s.purchases(filter: "all")).count == 2, "Stornierte und gelieferte nur unter „alle“")
+
+// M14: Sequenz-Anmerkungen
+let plType2 = try s.types().first { $0["prefix"] as? String == "PL" }!["id"] as! Int
+let pl = try s.createEntity(typeId: plType2, name: "pTest", values: ["sequence": "ATGAAACCCGGGTTTAAACCCGGGTTTAAA"], author: "Test")
+let plId = pl["id"] as! Int
+check(try (try s.seqAnnotation(entity: plId, field: "sequence"))["circular"] as? Bool == false, "Ohne Anmerkung: linear, keine Features")
+let ann = try s.setSeqAnnotation(entity: plId, field: "sequence", circular: true, features: [["start": 2, "end": 15, "strand": -1, "type": "CDS", "label": "abc", "parts": [[2, 7], [10, 15]]],
+                                                                                          ["start": 28, "end": 3, "strand": 1, "type": "rep_origin", "label": "ori"]], source: "test.gb")
+check(try (ann["features"] as! [[String: Any]]).count == 2 && ann["circular"] as? Bool == true, "Features und Ring gespeichert (auch über den Ursprung)")
+check(try (try? s.setSeqAnnotation(entity: plId, field: "sequence", circular: false, features: [["start": 28, "end": 3]], source: "")) == nil, "Über den Ursprung nur bei Ringen")
+check(try (try? s.setSeqAnnotation(entity: plId, field: "sequence", circular: true, features: [["start": 1, "end": 31]], source: "")) == nil, "Feature außerhalb abgelehnt")
+check(try (try? s.seqAnnotation(entity: plId, field: "name")) == nil, "Nur Sequenzfelder")
+_ = try s.updateEntity(id: plId, name: "pTest", values: ["sequence": "ATGAAACCCGGGTTTAAACCCGGGTTTAAAG"], author: "Test")
+let staleA = try s.seqAnnotation(entity: plId, field: "sequence")
+check(try staleA["stale"] as? Bool == true && (staleA["features"] as! [Any]).isEmpty && staleA["length"] as? Int == 31, "Sequenz geändert: Features gelten als veraltet")
+check(try (try s.sequenceObjects()).contains { $0["entity"] as? Int == plId && $0["length"] as? Int == 31 }, "Objekte mit Sequenz für die Auswahl")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

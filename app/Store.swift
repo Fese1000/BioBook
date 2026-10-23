@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 11
+    static let schemaVersion = 12
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -228,6 +228,13 @@ final class Store {
                   note TEXT NOT NULL DEFAULT '', author TEXT NOT NULL DEFAULT '');
                 CREATE TRIGGER purchase_log_ro_u BEFORE UPDATE ON purchase_log BEGIN SELECT RAISE(ABORT, 'Bestellverlauf ist unveränderlich'); END;
                 CREATE TRIGGER purchase_log_ro_d BEFORE DELETE ON purchase_log BEGIN SELECT RAISE(ABORT, 'Bestellverlauf ist unveränderlich'); END;
+                """)
+            }
+            if v < 12 {
+                // Sequenz-Anmerkungen je Registry-Objekt und Sequenzfeld: Ring/linear, Features; seq_sha erkennt, wenn die Sequenz danach geändert wurde
+                try exec("""
+                CREATE TABLE seq_annot(entity_id INTEGER NOT NULL REFERENCES entity(id), field TEXT NOT NULL, circular INTEGER NOT NULL DEFAULT 0,
+                  features_json TEXT NOT NULL DEFAULT '[]', source TEXT NOT NULL DEFAULT '', seq_sha TEXT NOT NULL, updated TEXT NOT NULL, PRIMARY KEY(entity_id, field));
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
@@ -707,6 +714,7 @@ final class Store {
             "device_log": try query("SELECT * FROM device_log ORDER BY id"),
             "purchases": try query("SELECT * FROM purchase ORDER BY id"),
             "purchase_log": try query("SELECT * FROM purchase_log ORDER BY id"),
+            "sequence_annotations": try query("SELECT * FROM seq_annot ORDER BY entity_id, field"),
         ]
     }
 

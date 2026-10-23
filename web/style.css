@@ -290,3 +290,22 @@ svg.chart .hit{fill:transparent;cursor:pointer}svg.chart .hit:hover+*{}
 .wbadge.ok{background:#3a8f5c;color:#fff}
 h3.osec{font:600 13px -apple-system,system-ui;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:18px 0 6px}
 .obtns{white-space:nowrap;text-align:right}.obtns .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px}
+/* Sequenzen */
+.seqpanel,.seqblock{border:1px solid var(--line);border-radius:10px;margin:16px 0;padding:12px 14px;background:var(--side)}
+.seqblock{border-left:3px solid #2a78d6;margin:10px 0;font-size:13px}.seqblock.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.seqblock select{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px}
+.seqbar{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+.seqtools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:13px}
+.seqtools input:not([type=checkbox]),.seqtools select{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px}
+.seqtools input[data-svmotif]{font-family:var(--mono);width:170px}
+.seqmapbox{display:flex;justify-content:center;background:var(--bg);border-radius:8px;padding:6px}
+.seqmap{width:100%;max-width:560px;height:auto}.seqmap.line{max-width:none}.seqmapbox.small .seqmap{max-width:420px}
+.seqmap .bb{fill:none;stroke:var(--mut);stroke-width:2}.seqmap .tick{stroke:var(--mut);stroke-width:1}
+.seqmap .tl{font:10px -apple-system,system-ui;fill:var(--mut)}.seqmap .flab{font:11px -apple-system,system-ui;fill:var(--ink)}
+.seqmap .lead{fill:none;stroke:var(--line);stroke-width:1}.seqmap .cname{font:600 14px -apple-system,system-ui;fill:var(--ink)}
+.seqmap .hit{stroke:#c0392b;stroke-width:2}
+.feattab{border-collapse:collapse;font-size:12.5px;margin:10px 0;width:100%}.feattab td,.feattab th{padding:3px 8px;border-bottom:1px solid var(--line);text-align:left}
+.feattab th{font-weight:600;color:var(--mut)}.feattab .x{border:0;background:none;color:var(--mut);cursor:pointer}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px}
+pre.seqtext{font:12px/1.55 var(--mono);background:var(--bg);border-radius:8px;padding:10px 12px;max-height:340px;overflow:auto;margin:8px 0 0;letter-spacing:.02em}
+pre.seqtext .pos{color:var(--mut)}pre.seqtext mark{background:#f3c27a;color:#2b1d00;border-radius:2px}pre.seqtext .aa{color:#2a78d6}

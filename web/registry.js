@@ -11,7 +11,7 @@ function seqStats(seq) {
   if (!s) return '';
   const gc = (s.match(/[GCS]/g) || []).length, at = (s.match(/[ATUW]/g) || []).length, n = s.length;
   const tm = n < 14 ? 2 * at + 4 * gc : 64.9 + 41 * (gc - 16.4) / n;
-  return `${n} nt · GC ${Math.round(gc / n * 100)} % · Tm ≈ ${tm.toFixed(1).replace('.', ',')} °C`;
+  return `${n} nt · GC ${Math.round(gc / n * 100)} %${n <= 60 ? ` · Tm ≈ ${tm.toFixed(1).replace('.', ',')} °C` : ''}`;  // Tm nur für Primer-Längen sinnvoll
 }
 
 async function loadTypes() {
@@ -63,6 +63,7 @@ async function renderTypeTable(q = $('#regq')?.value || '') {
 async function showEntity(id) {
   await flush();
   const e = id == 'new' ? null : await call('entity', {id});
+  for (const k in SEQ_PENDING) delete SEQ_PENDING[k];  // nicht gespeicherter Import gehört zum vorigen Formular
   if (e) regType = e.type_id;
   regEntity = id;
   showView('reg');
@@ -72,7 +73,8 @@ async function showEntity(id) {
   const input = f => {
     const val = v[f.key] ?? '', k = `data-field="${f.key}"`;
     if (f.type == 'longtext') return `<textarea ${k} rows="3">${esc(val)}</textarea>`;
-    if (f.type == 'sequence') return `<textarea ${k} rows="3" class="seq" spellcheck="false">${esc(val)}</textarea><div class="sub seqstat">${seqStats(val)}</div>`;
+    if (f.type == 'sequence') return `<textarea ${k} rows="3" class="seq" spellcheck="false">${esc(val)}</textarea><div class="sub seqstat">${seqStats(val)}</div>
+      <button type="button" class="btn" data-seqimport="${f.key}">📥 GenBank/FASTA importieren</button>`;
     if (f.type == 'select') return `<select ${k}><option value="">—</option>${(f.options || []).map(o => `<option ${o == val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
     if (f.type == 'bool') return `<input type="checkbox" ${k} ${val == 'ja' ? 'checked' : ''}>`;
     if (f.type == 'date') return `<input type="date" ${k} value="${esc(val)}">`;
@@ -97,7 +99,12 @@ async function showEntity(id) {
         <h4>Verlauf</h4><ol class="reghist">${hist.map((h, i) => `<li>${when(h.changed)}${h.author ? ` · ${esc(h.author)}` : ''}<br><span class="sub">${esc(diff(h, hist[i + 1]))}</span></li>`).join('')}</ol></aside>` : ''}
     </div>`;
   if (!e) $('#entform [data-name]').focus();
-  else { renderEntityLots(e.id); renderEntityCultures(e.id); }
+  else {
+    renderEntityLots(e.id); renderEntityCultures(e.id);
+    const sf = fields.filter(f => f.type == 'sequence' && v[f.key]);
+    $('#reg').insertAdjacentHTML('beforeend', sf.map(f => `<div class="seqpanel" data-seqent="${e.id}" data-seqfield="${f.key}"></div>`).join(''));
+    await Promise.all([...document.querySelectorAll('#reg .seqpanel')].map(renderSeqPanel));
+  }
 }
 
 async function saveEntityForm() {
@@ -106,6 +113,7 @@ async function saveEntityForm() {
   const name = form.querySelector('[data-name]').value;
   try {
     const e = regEntity == 'new' ? await call('createEntity', {type: regType, name, values}) : await call('updateEntity', {id: regEntity, name, values});
+    await savePendingSeq(e.id);
     await showEntity(e.id);
     $('#entmsg').textContent = 'Gespeichert';
     return e;

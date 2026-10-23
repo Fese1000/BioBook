@@ -588,6 +588,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "setPurchaseStatus": replyHandler(try s.setPurchaseStatus(id: try int("id"), status: try str("status"), note: (a["note"] as? String) ?? "", author: Settings.author), nil)
             case "receivePurchase": replyHandler(try s.receivePurchase(id: try int("id"), values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
             case "purchaseCounts": replyHandler(try s.purchaseCounts(), nil)
+            case "seqAnnotation": replyHandler(try s.seqAnnotation(entity: try int("entity"), field: try str("field")), nil)
+            case "setSeqAnnotation":
+                replyHandler(try s.setSeqAnnotation(entity: try int("entity"), field: try str("field"), circular: a["circular"] as? Bool ?? false,
+                                                    features: a["features"] as? [[String: Any]] ?? [], source: (a["source"] as? String) ?? ""), nil)
+            case "sequenceObjects": replyHandler(try s.sequenceObjects(), nil)
             case "types": replyHandler(try s.types(), nil)
             case "saveType":
                 replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",
