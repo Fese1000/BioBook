@@ -147,6 +147,7 @@ function editorExtensions(forUI = true) {
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
     FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, ExtNode, DayNode, DbLinks, DueDates,
+    ...MARKS, ...(forUI ? [FindReplace, SlashCommands, ExtraKeys] : []),
   ];
 }
 
@@ -197,9 +198,14 @@ async function refreshLinkLabels(doc) {
 }
 
 const TOOLS = [
-  ['B', 'Fett', e => e.chain().focus().toggleBold().run(), e => e.isActive('bold')],
-  ['I', 'Kursiv', e => e.chain().focus().toggleItalic().run(), e => e.isActive('italic')],
-  ['S', 'Durchgestrichen', e => e.chain().focus().toggleStrike().run(), e => e.isActive('strike')],
+  ['B', 'Fett (⌘B)', e => e.chain().focus().toggleBold().run(), e => e.isActive('bold')],
+  ['I', 'Kursiv (⌘I)', e => e.chain().focus().toggleItalic().run(), e => e.isActive('italic')],
+  ['U', 'Unterstrichen (⌘U)', e => e.chain().focus().toggleUnderline().run(), e => e.isActive('underline')],
+  ['S', 'Durchgestrichen (⇧⌘S)', e => e.chain().focus().toggleStrike().run(), e => e.isActive('strike')],
+  ['X²', 'Hochgestellt (⌘.)', e => e.chain().focus().toggleSuperscript().run(), e => e.isActive('superscript')],
+  ['X₂', 'Tiefgestellt (⌘,)', e => e.chain().focus().toggleSubscript().run(), e => e.isActive('subscript')],
+  ['🎨', 'Textfarbe und Textmarker', (e, btn) => colorMenu(btn)],
+  ['🔗', 'Link (⌘K)', () => linkDialog(), e => e.isActive('link')],
   ['|'],
   ['📅 Heute', 'Tagesabschnitt für heute anlegen oder hinspringen (⇧⌘D)', () => addToday()],
   ['|'],
@@ -207,36 +213,22 @@ const TOOLS = [
   ['H2', 'Überschrift 2', e => e.chain().focus().toggleHeading({level: 2}).run(), e => e.isActive('heading', {level: 2})],
   ['H3', 'Überschrift 3', e => e.chain().focus().toggleHeading({level: 3}).run(), e => e.isActive('heading', {level: 3})],
   ['|'],
-  ['• Liste', 'Aufzählung', e => e.chain().focus().toggleBulletList().run(), e => e.isActive('bulletList')],
-  ['1. Liste', 'Nummerierte Liste', e => e.chain().focus().toggleOrderedList().run(), e => e.isActive('orderedList')],
-  ['☑ Checkliste', 'Checkliste', e => e.chain().focus().toggleTaskList().run(), e => e.isActive('taskList')],
-  ['|'],
-  ['Tabelle', 'Tabelle 3 × 3 einfügen', e => e.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run()],
+  ['•', 'Aufzählung', e => e.chain().focus().toggleBulletList().run(), e => e.isActive('bulletList')],
+  ['1.', 'Nummerierte Liste', e => e.chain().focus().toggleOrderedList().run(), e => e.isActive('orderedList')],
+  ['☑', 'Checkliste', e => e.chain().focus().toggleTaskList().run(), e => e.isActive('taskList')],
+  ['⊞', 'Tabelle 3 × 3 einfügen', e => e.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run()],
   ['+ Zeile', 'Zeile darunter', e => e.chain().focus().addRowAfter().run(), null, e => e.isActive('table')],
   ['+ Spalte', 'Spalte rechts', e => e.chain().focus().addColumnAfter().run(), null, e => e.isActive('table')],
+  ['⧉ Verbinden', 'Markierte Zellen verbinden oder wieder teilen', e => e.chain().focus().mergeOrSplit().run(), null, e => e.isActive('table')],
   ['− Tabelle', 'Tabelle löschen', e => e.chain().focus().deleteTable().run(), null, e => e.isActive('table')],
-  ['|'],
-  ['Datei', 'Bild oder Datei einfügen', () => $('#filepick').click()],
-  ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
-  ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
-  ['📚 Quelle', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
-  ['✨ Zusammenfassen', 'Eintrag von Claude zusammenfassen lassen (eigener Schlüssel; vorher siehst du, was gesendet wird)', () => aiSummary(), null, () => AI_ON],
-  ['✨ Protokoll', 'Aus Stichpunkten (markiert oder ganzer Eintrag) ein Protokoll entwerfen lassen', () => aiProtocol(), null, () => AI_ON],
-  ['🧩 Erweiterung', 'Block aus einer Erweiterung einfügen', (e, btn) => extMenu(btn), null, () => extBlocks().length > 0],
-  ['⚗️ Struktur', 'Strukturformel aus SMILES mit Summenformel und Molmasse (→ Einwaage-Rechner)', () => insertChem()],
-  ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
-  ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
-  ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
-  ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
-  ['🧬 Sequenz', 'Sequenzkarte eines Registry-Objekts einfügen', () => insertSequenceBlock()],
-  ['↻ Passage', 'Zellkultur: Passage, Mediumwechsel oder Mycoplasma-Test verbuchen', () => insertCultureBlock()],
-  ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
-  ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
-  ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
+  ['|'],
+  ['＋ Einfügen', 'Datei, Formel, Rechner, Diagramm, Platte, Sequenz … – oder „/“ im Text tippen', (e, btn) => insertMenu(btn)],
+  ['🔍', 'Suchen und Ersetzen im Eintrag (⌥⌘F)', () => openFindBar()],
   ['|'],
   ['↶', 'Widerrufen (⌘Z)', e => e.chain().focus().undo().run()],
   ['↷', 'Wiederholen (⇧⌘Z)', e => e.chain().focus().redo().run()],
+  ['⌘?', 'Tastenkürzel', () => shortcutsDialog()],
 ];
 
 function renderToolbar() {
@@ -1333,10 +1325,10 @@ async function selfTest() {
 
   // M23: KI-Assistent (Antworten im Test hinterlegt, kein Netz, nie der echte Schlüsselbund)
   await refreshAI();
-  ok(!AI_ON && !$('#toolbar').textContent.includes('✨') && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Ohne Schlüssel ist der Assistent unsichtbar');
+  ok(!AI_ON && !insertItems().some(i => i.icon == '✨') && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Ohne Schlüssel ist der Assistent unsichtbar');
   let keyErr = ''; try { await call('aiSetKey', {key: 'geheim'}); } catch (e) { keyErr = e.message; }
   await call('aiSetKey', {key: 'sk-ant-test-0000'}); await refreshAI();
-  ok(/sk-ant-/.test(keyErr) && AI_ON && $('#toolbar').textContent.includes('✨ Zusammenfassen') && !document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Mit Schlüssel erscheinen Zusammenfassen, Protokoll und „Fragen“');
+  ok(/sk-ant-/.test(keyErr) && AI_ON && insertItems().some(i => i.label == 'Zusammenfassen') && !document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Mit Schlüssel erscheinen Zusammenfassen, Protokoll und „Fragen“');
   const reply = text => call('testAiReply', {reply: {model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: {input_tokens: 120, output_tokens: 40},
     content: [{type: 'thinking', thinking: ''}, {type: 'text', text}]}});
   const prepEntries = await call('search', {q: 'Plasmid-Präp'});
@@ -1374,7 +1366,7 @@ async function selfTest() {
   // M24: Erweiterungen (abgeschottet im Worker eines Sandbox-Rahmens)
   const inst = await call('installExampleExtensions');
   await loadExtensions();
-  ok(inst.includes('Zellzahl.js') && EXT.has('zellzahl') && $('#toolbar').textContent.includes('🧩 Erweiterung'), 'Beispiel-Erweiterung (Zellzahl) installiert und geladen');
+  ok(inst.includes('Zellzahl.js') && EXT.has('zellzahl') && insertItems().some(i => /Zellzahl/.test(i.label)), 'Beispiel-Erweiterung (Zellzahl) installiert und geladen');
   const exEntry = await call('create', {title: 'Zellen zählen'}); await refreshList(exEntry);
   editor.commands.setContent(''); insertExtBlock('zellzahl', 'neubauer'); await sleep(300);
   const xb = document.querySelector('.extblock');
@@ -1476,6 +1468,71 @@ async function selfTest() {
   showEntryTab('notes');
   await open(signedOne.id); await sleep(150);
   ok(!document.querySelector('#etabs [data-eadd]'), 'Abgeschlossener Eintrag: keine Protokolle anhängen');
+  showView('doc');
+
+  // M27: Editor-Standards
+  const edId = await call('create', {title: 'Editor-Standards'}); await refreshList(edId);
+  editor.commands.setContent({type: 'doc', content: [para('H2O und 10 hoch 6 Zellen')]});
+  const selWord = (w, k = 0) => { const h = findHits(editor.state.doc, w)[k]; editor.commands.setTextSelection(h); };
+  const tool = t => [...document.querySelectorAll('#toolbar button')].find(b => b.title.startsWith(t) || b.textContent.trim() == t);
+  selWord('2'); tool('Tiefgestellt').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  selWord('6'); tool('Hochgestellt').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  selWord('Zellen'); tool('Unterstrichen').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  ok(/H<sub>2<\/sub>O/.test(editor.getHTML()) && editor.getHTML().includes('<sup>6</sup>') && editor.getHTML().includes('<u>Zellen</u>'), 'Tiefstellen, Hochstellen, Unterstreichen (H₂O, 10⁶)');
+  selWord('hoch'); tool('Textfarbe').dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); await sleep(50);
+  document.querySelector('.popmenu [data-col="#c0392b"]').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  selWord('und'); tool('Textfarbe').dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); await sleep(50);
+  document.querySelector('.popmenu [data-hl="#fff3a3"]').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  ok(/<span style="color: rgb\(192, 57, 43\);">hoch<\/span>/.test(editor.getHTML()) && /<mark data-color="#fff3a3"[^>]*>und<\/mark>/.test(editor.getHTML()), 'Textfarbe und Textmarker');
+  selWord('Zellen'); linkDialog(); $('#lkUrl').value = 'www.addgene.org/12345'; $('#lkOk').click();
+  ok(editor.getHTML().includes('href="https://www.addgene.org/12345"'), 'Link setzen (https:// wird ergänzt)');
+  editor.commands.focus('end'); mathDialog(); $('#mxIn').value = 'c = \\frac{n}{V}'; $('#mxIn').dispatchEvent(new Event('input')); $('#mxOk').click(); await sleep(100);
+  ok(editor.getJSON().content[0].content.some(n => n.type == 'inlineMath' && n.attrs.latex == 'c = \\frac{n}{V}') && /<math[\s\S]*<mfrac>/.test(editor.getHTML()) && editor.getText().includes('$c = \\frac{n}{V}$'),
+    'Formel (LaTeX) im Text, im Export als MathML, in der Suche als $…$');
+  editor.commands.insertContent(' und '); editor.commands.insertBlockMath({latex: '\\Delta G = \\Delta H - T\\Delta S'}); await sleep(100);
+  await call('testSnapshot', {name: 'm27-formel.png'}).catch(() => {});
+  changed(); await flush();
+  editor.commands.setContent({type: 'doc', content: [para('Taq-Polymerase: Taq 2 µl, taq-frei')]});
+  openFindBar(); $('#fbQ').value = 'taq'; $('#fbQ').dispatchEvent(new Event('input')); await sleep(50);
+  const fcount = $('#fbCount').textContent;
+  $('#fbR').value = 'Q5'; document.querySelector('#findbar [data-fb="all"]').click(); await sleep(50);
+  ok(fcount == '1 von 3' && editor.getText() == 'Q5-Polymerase: Q5 2 µl, Q5-frei', `Suchen & Ersetzen: ${fcount}, alle ersetzt`);
+  closeFindBar();
+  editor.commands.setContent({type: 'doc', content: [para('')]}); editor.commands.focus('end');
+  editor.commands.insertContent('/Trennlinie'); await sleep(250);
+  const slashOpen = !!document.querySelector('.suggest:not(.popmenu) .opt');
+  editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); await sleep(150);
+  ok(slashOpen && editor.getJSON().content.some(n => n.type == 'horizontalRule') && !editor.getText().includes('/Trennlinie'), '„/“-Befehl fügt eine Trennlinie ein');
+  tool('＋ Einfügen').dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); await sleep(80);
+  const menuN = document.querySelectorAll('.popmenu [data-ii]').length;
+  [...document.querySelectorAll('.popmenu [data-ii]')].find(o => o.textContent.includes('Plattenlayout 96')).dispatchEvent(new MouseEvent('mousedown', {bubbles: true})); await sleep(150);
+  ok(menuN >= 20 && editor.getJSON().content.some(n => n.type == 'plate') && document.querySelectorAll('#toolbar button').length <= 30, `Einfügemenü mit ${menuN} Blöcken; Werkzeugleiste kompakt`);
+  // kleine .xlsx im Speicher (ZIP ohne Kompression)
+  const zipStored = files => {
+    const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+    for (const [name, text] of Object.entries(files)) {
+      const n = enc.encode(name), d = enc.encode(text), h = new DataView(new ArrayBuffer(30));
+      h.setUint32(0, 0x04034b50, true); h.setUint32(18, d.length, true); h.setUint32(22, d.length, true); h.setUint16(26, n.length, true);
+      parts.push(new Uint8Array(h.buffer), n, d);
+      const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint32(20, d.length, true); c.setUint32(24, d.length, true); c.setUint16(28, n.length, true); c.setUint32(42, off, true);
+      central.push(new Uint8Array(c.buffer), n); off += 30 + n.length + d.length;
+    }
+    const cdLen = central.reduce((a, x) => a + x.length, 0), e = new DataView(new ArrayBuffer(22));
+    e.setUint32(0, 0x06054b50, true); e.setUint16(8, Object.keys(files).length, true); e.setUint16(10, Object.keys(files).length, true); e.setUint32(12, cdLen, true); e.setUint32(16, off, true);
+    return new Blob([...parts, ...central, new Uint8Array(e.buffer)]).arrayBuffer();
+  };
+  const xbuf = await zipStored({'xl/workbook.xml': '<workbook><sheets><sheet name="Messung" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/sharedStrings.xml': '<sst><si><t>Probe</t></si><si><t>OD600</t></si><si><t>Kultur A</t></si></sst>',
+    'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="B2"><v>0.82</v></c></row></sheetData></worksheet>'});
+  await insertTableFromBuffer(xbuf, 'messung.xlsx'); await sleep(100);
+  const tbl = editor.getJSON().content.find(n => n.type == 'table');
+  ok(tbl && tbl.content[0].content[0].type == 'tableHeader' && JSON.stringify(tbl).includes('"0,82"') && JSON.stringify(tbl).includes('Kultur A'), 'Excel-Datei als Tabelle eingefügt (Kopfzeile, 0,82)');
+  shortcutsDialog(); await sleep(50);
+  ok(/⌘\./.test($('#locdlg').textContent) && /Einfügen-Befehle/.test($('#locdlg').textContent), 'Übersicht der Tastenkürzel');
+  $('#locdlg').close();
+  await call('testSnapshot', {name: 'm27-editor.png'}).catch(() => {});
+  changed(); await flush();
   showView('doc');
   return out;
 }

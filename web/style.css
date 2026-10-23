@@ -392,3 +392,18 @@ section.day h3.dayhead{font-size:13pt;border-bottom:1px solid #ccc}
 #sidepane{width:min(46vw,620px);border-left:1px solid var(--line);background:var(--bg);overflow:auto;display:flex;flex-direction:column}
 .sidehead{position:sticky;top:0;display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--side)}.sidehead .grow{flex:1}.sidehead .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:16px}
 .sidebody{padding:10px 22px 40px;font-size:14.5px;line-height:1.6}
+/* Editor-Standards */
+.ProseMirror mark,.sidebody mark{color:#1f1d1a !important;border-radius:2px;padding:0 1px}  /* Highlight setzt color: inherit – im Dunkelmodus sonst weiß auf Gelb */
+.ProseMirror a:not(.elink):not(.eref){color:var(--acc);text-decoration:underline}
+.ProseMirror hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.ProseMirror [data-type=inline-math]{cursor:pointer;padding:0 2px;border-radius:3px}.ProseMirror [data-type=inline-math]:hover{background:var(--sel)}
+.ProseMirror [data-type=block-math]{text-align:center;margin:12px 0;cursor:pointer;font-size:1.15em}
+.ProseMirror math{font-size:1.08em}
+.mxprev{min-height:34px;margin:10px 0;padding:8px;background:var(--side);border-radius:6px;text-align:center;font-size:18px}
+#findbar{position:sticky;top:30px;z-index:3;display:flex;gap:6px;align-items:center;background:var(--side);border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:10px}
+#findbar input{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 7px;width:170px}
+#findbar .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px;margin-left:auto}
+.findhit{background:#f3c27a66;border-radius:2px}.findhit.cur{background:#f3c27a;color:#2b1d00}
+.popmenu{max-height:70vh;overflow:auto;min-width:260px}.popmenu .imq{width:calc(100% - 12px);margin:6px;font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:4px 7px}
+.popmenu>.sub{padding:6px 10px 2px}.swrow{display:flex;gap:4px;padding:2px 10px 6px}.swb{width:24px;height:24px;border:1px solid var(--line);border-radius:5px;background:var(--bg);font-weight:700;cursor:pointer}
+table.kbd{border-collapse:collapse;font-size:13px;margin-bottom:6px}table.kbd td{padding:3px 10px 3px 0}kbd{font:12px var(--mono);background:var(--side);border:1px solid var(--line);border-radius:4px;padding:1px 6px}
