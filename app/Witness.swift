@@ -9,14 +9,17 @@ final class WitnessPDF: NSObject, WKNavigationDelegate {
     private var web: WKWebView?
     private var done: ((Result<Data, Error>) -> Void)?
     private var revHash = ""
+    private var noMargins = false
     private var outURL: URL?
     private var keepAlive: WitnessPDF?
 
     /// html: vollständiges Dokument (Bilder über lab://); scheme: derselbe Handler wie im Hauptfenster
-    static func make(html: String, hash: String, scheme: WKURLSchemeHandler, completion: @escaping (Result<Data, Error>) -> Void) {
+    /// noMargins: für Etikettenbögen, deren Raster das HTML selbst in Millimetern festlegt
+    static func make(html: String, hash: String, scheme: WKURLSchemeHandler, noMargins: Bool = false, completion: @escaping (Result<Data, Error>) -> Void) {
         let w = WitnessPDF()
         w.keepAlive = w
         w.revHash = hash
+        w.noMargins = noMargins
         w.done = completion
         let cfg = WKWebViewConfiguration()
         cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
@@ -44,7 +47,8 @@ final class WitnessPDF: NSObject, WKNavigationDelegate {
         let info = NSPrintInfo(dictionary: [.jobSavingURL: url])
         info.jobDisposition = .save
         info.paperSize = NSSize(width: 595, height: 842)
-        info.topMargin = 36; info.bottomMargin = 36; info.leftMargin = 40; info.rightMargin = 40
+        if noMargins { info.topMargin = 0; info.bottomMargin = 0; info.leftMargin = 0; info.rightMargin = 0 }
+        else { info.topMargin = 36; info.bottomMargin = 36; info.leftMargin = 40; info.rightMargin = 40 }
         info.horizontalPagination = .fit
         info.verticalPagination = .automatic
         info.isHorizontallyCentered = false

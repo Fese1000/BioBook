@@ -1,6 +1,6 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **M8–M9** aus Phase 2 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **M8–M10** aus Phase 2 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Installieren
 `Laborbuch-AppleSilicon.dmg` öffnen und die App nach „Programme“ ziehen (macOS 13 oder neuer, Apple Silicon). Die App ist nur ad hoc signiert: Beim ersten Start einer heruntergeladenen Kopie fragt macOS nach. Ab macOS 15 einmal öffnen, dann Systemeinstellungen › Datenschutz & Sicherheit › „Trotzdem öffnen“; unter macOS 13/14 Rechtsklick › Öffnen.
@@ -10,6 +10,8 @@ Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das D
 ## Was schon geht
 - Registry (Seitenleiste „Registry“): Typen wie Plasmid, Primer, Stamm, Zelllinie, Antikörper, Chemikalie – oder eigene mit eigenen Feldern (Text, Zahl, Datum, Auswahl, Sequenz, Ja/Nein, Link). Jedes Objekt bekommt eine fortlaufende ID wie `PL-0042`; jede Änderung landet im Verlauf. Sequenzfelder zeigen Länge, GC-Anteil und Tm. Im Eintrag verweist `@` auf ein Objekt; das Objekt zeigt „Verwendet in“.
 - Bestand (Seitenleiste „📦 Bestand“): Standorte als Baum (Raum › Gerät › Regal › Box mit Raster), Chargen mit Menge, Einheit, Chargennummer, Ablaufdatum, Mindestbestand, GHS-Gefahren und Sicherheitsdatenblatt. Jede Mengenänderung ist eine unveränderliche Buchung. Im Eintrag bucht der Block „📦 Verbrauch“ eine Menge ab (mit Einheitenumrechnung, stornierbar); die Buchung verweist auf den Eintrag. Abgelaufene, bald ablaufende und knappe Chargen werden gemeldet.
+- Etiketten mit QR-Code („🏷 Etikett“ bei Charge, Registry-Objekt, Standort; eine Box druckt sich samt Inhalt): PDF für A4-Bögen 3 × 8 oder 4 × 11. Der QR-Code enthält einen `laborbuch://`-Link; Scannen öffnet das Objekt – mit der Kamera (Ablage › „Etikett scannen …“, ⇧⌘K), mit einem Handscanner ins Suchfeld oder per Link aus einer anderen App.
+- Plattenlayout (🧫 in der Werkzeugleiste): 96 oder 384 Wells, Proben mit Farbe, Wells per Klick oder Ziehen belegen; die Belegung steht als Text im Eintrag und als Tabelle im PDF.
 - Löschen mit Papierkorb (🗑 im Eintrag oder Ablage › „In den Papierkorb“): Gelöschte Einträge verschwinden aus Listen, Suche, Spotlight und „Verwendet in“, lassen sich wiederherstellen und erst im Papierkorb endgültig löschen (mit Rückfrage, samt Revisionen). Signierte Einträge lassen sich nicht löschen.
 - Mehrere Fenster (⌥⌘N) und Tabs (⌘T); ⌘-Klick auf einen Eintrag öffnet ihn in einem neuen Tab. Speichert ein Fenster, sehen die anderen den neuen Stand.
 - Spotlight findet Einträge (Titel, Text, Tags); ein Klick öffnet Buch und Eintrag. Quick Look (Leertaste im Finder) zeigt bei einem `.laborbuch` die letzten Einträge, der Finder ein Vorschaubild.
@@ -57,7 +59,7 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 swiftc app/Store.swift app/Registry.swift app/Stock.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
 node --test tests/calc.test.js tests/markdown.test.js                           # Rechner gegen Handrechnung, Markdown hin und zurück
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 60 Prüfungen
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 68 Prüfungen
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
@@ -87,6 +89,9 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `web/registry.js` | Registry-Oberfläche, Typ-Editor |
 | `app/Stock.swift` | Bestand: Standorte, Chargen, Buchungen, Warnungen |
 | `web/stock.js` | Bestand-Oberfläche, Boxen-Raster, Verbrauch-Block |
+| `app/QR.swift` | QR-Codes erzeugen und erkennen, Kamera-Scanner |
+| `web/labels.js` | Etiketten-PDF, Öffnen per Code |
+| `web/plate.js` | Plattenlayout-Block |
 | `web/` | Oberfläche und Logik (JavaScript), Editor-Bündel |
 | `tools/` | Bündeln des Editors, Icon-Erzeugung |
 | `tests/` | Speicher-Tests, Browser-Testumgebung |

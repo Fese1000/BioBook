@@ -35,6 +35,11 @@ build() {  # $1 = arm64|x86_64
   <key>UTTypeIconFile</key><string>AppIcon</string>
   <key>UTTypeTagSpecification</key><dict><key>public.filename-extension</key><array><string>laborbuch</string></array></dict>
 </dict></array>
+<key>CFBundleURLTypes</key><array><dict>
+  <key>CFBundleURLName</key><string>de.felix.laborbuch.link</string>
+  <key>CFBundleURLSchemes</key><array><string>laborbuch</string></array>
+</dict></array>
+<key>NSCameraUsageDescription</key><string>Zum Scannen von Etiketten (QR-Codes) mit der Kamera.</string>
 <key>CFBundleDocumentTypes</key><array><dict>
   <key>CFBundleTypeName</key><string>Laborbuch</string>
   <key>CFBundleTypeRole</key><string>Editor</string>

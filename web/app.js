@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode,
   ];
 }
 
@@ -217,6 +217,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
+  ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
   ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
@@ -895,6 +896,34 @@ async function selfTest() {
   await showStock('lots'); stockFilter = 'warnings'; await renderLots(); await sleep(100);
   ok(document.querySelectorAll('#stock tr[data-lot]').length == nWarn, 'Liste „Nur Warnungen“');
   stockFilter = 'all'; showView('doc');
+
+  // M10: QR-Etiketten, Scannen, Platte
+  const lab = await labelFor('lot', lotA.id);
+  const qr = await call('qr', {text: lab.url});
+  const decoded = await call('testDecodeQR', {base64: qr});
+  ok(decoded[0] == lab.url && /^laborbuch:\/\/open\?book=.+&t=lot&id=\d+$/.test(lab.url), 'QR-Code erzeugt und wie ein Kamerabild erkannt');
+  ok(await openCode(decoded[0]) && !$('#stock').hidden && $('#stock .reghead h2').textContent.includes(lab.code), 'Gescannter Code öffnet die Charge');
+  const pdfLab = await printLabels([lab, await labelFor('entity', plasmid.id), await labelFor('location', bx)], 'a4_3x8', 'Etiketten Test');
+  ok(pdfLab?.pages == 1, `Etiketten als PDF (${pdfLab?.pages} Seite)`);
+  const many = await printLabels(Array.from({length: 30}, () => lab), 'a4_3x8', 'Etiketten viele');
+  ok(many?.pages == 2, `30 Etiketten auf A4 3 × 8 ergeben ${many?.pages} Seiten`);
+  showView('doc');
+  $('#search').value = plasmid.code; $('#search').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); await sleep(300);
+  ok(!$('#reg').hidden && /PL-0001/.test($('#reg .reghead h2').textContent), 'Handscanner-Eingabe im Suchfeld öffnet das Objekt');
+  showView('doc');
+  const plEntry = await call('create', {title: 'qPCR-Platte'}); await refreshList(plEntry);
+  editor.commands.setContent(''); insertPlate(96); await sleep(100);
+  const pv = document.querySelector('.plate');
+  const ev = (el, type) => el.dispatchEvent(new MouseEvent(type, {bubbles: true}));
+  ev(pv.querySelector('[data-well="A1"]'), 'mousedown'); ev(pv.querySelector('[data-well="A2"]'), 'mouseover'); ev(pv.querySelector('[data-well="A3"]'), 'mouseover');
+  document.dispatchEvent(new MouseEvent('mouseup')); await sleep(50);
+  document.querySelector('.plate [data-padd]').click(); await sleep(50);
+  ev(document.querySelector('.plate [data-well="B1"]'), 'mousedown'); document.dispatchEvent(new MouseEvent('mouseup')); await sleep(50);
+  const pnode = editor.getJSON().content.find(n => n.type == 'plate');
+  ok(Object.keys(pnode.attrs.wells).length == 4 && plateSummary(pnode.attrs) == 'Probe 1: A1–A3; Probe 2: B1', `Platte belegt: ${plateSummary(pnode.attrs)}`);
+  changed(); await flush();
+  ok((await call('search', {q: 'B1'})).some(r => r.id == plEntry) || editor.getText().includes('A1–A3'), 'Belegung steht im Text des Eintrags');
+  ok(editor.getHTML().includes('class="platetab"'), 'Platte erscheint im HTML/PDF als Tabelle');
   return out;
 }
 
@@ -963,6 +992,7 @@ setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS)
 // Von Swift aufgerufen (Menü, Beenden)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
   exportBook, exportEntryPDF, importFiles, backupNow, updateProgress, trashEntry,
+  openCode, scan: () => call('scan'),
   openEntry: id => { $('#search').value = ''; return refreshList(id); },
   // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
   insertReceived: it => {
@@ -991,6 +1021,7 @@ async function start() {
   await loadTemplates();
   initRegistry();
   initStock();
+  initLabels();
   refreshStockBadge().then(n => { if (n) status(`${n} Charge(n) im Bestand abgelaufen, bald ablaufend oder knapp`); });
   await loadTypes();
   await refreshList();

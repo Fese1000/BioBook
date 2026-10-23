@@ -224,8 +224,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     static let bookType = UTType("de.felix.laborbuch.book") ?? .package
 
     func application(_ app: NSApplication, open urls: [URL]) {
+        if let u = urls.first(where: { $0.scheme == "laborbuch" }) { return openScanned(u.absoluteString) }  // Link vom Etikett
         if let u = urls.first(where: { $0.pathExtension == "laborbuch" }) { switchBook(to: u) }
     }
+
+    /// Gescannten Code öffnen; gehört er zu einem anderen bekannten Buch, wird erst gewechselt
+    func openScanned(_ code: String) {
+        guard let t = QR.target(code) else { return alert("Unbekannter Code", code) }
+        if let b = t["book"] as? String, !b.isEmpty, b != store?.bookID {
+            guard let path = (UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String])?[b] else {
+                return alert("Anderes Laborbuch", "Dieses Etikett gehört zu einem Laborbuch, das auf diesem Mac nicht bekannt ist.")
+            }
+            switchBook(to: URL(fileURLWithPath: path))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.openScanned(code) }
+            return
+        }
+        let js = (try? JSONSerialization.data(withJSONObject: code)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
+        web.evaluateJavaScript("app.openCode(\(js))")
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func scanLabel() { web.evaluateJavaScript("app.scan()") }
 
     func alert(_ title: String, _ text: String) {
         let a = NSAlert(); a.messageText = title; a.informativeText = text; a.runModal()
@@ -484,6 +504,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(true, nil)
             case "purgeEntry": try s.purgeEntry(id: try int("id")); replyHandler(true, nil)
             case "emptyTrash": replyHandler(try s.emptyTrash(), nil)
+            case "qr":
+                guard let png = QR.png(try str("text")) else { throw StoreError.invalid("QR-Code ließ sich nicht erzeugen") }
+                replyHandler(png.base64EncodedString(), nil)
+            case "labelsPDF":
+                WitnessPDF.make(html: try str("html"), hash: "", scheme: scheme, noMargins: true) { [weak self] r in
+                    switch r {
+                    case .failure(let e): replyHandler(nil, "\(e)")
+                    case .success(let data): self?.savePDF(data, name: (a["name"] as? String) ?? "Etiketten.pdf", reply: replyHandler)
+                    }
+                }
+            case "scan":
+                ScannerWindow.open(found: { [weak self] code in self?.openScanned(code) }, failed: { [weak self] msg in self?.alert("Scannen", msg) })
+                replyHandler(true, nil)
+            case "resolveCode":  // gescannter oder getippter Code → Ziel
+                guard var t = QR.target(try str("code")) else { return replyHandler(NSNull(), nil) }
+                if t["t"] as? String == "code" {
+                    guard let id = try s.entityID(code: t["code"] as! String) else { return replyHandler(NSNull(), nil) }
+                    t = ["t": "entity", "id": id, "book": ""]
+                }
+                if let b = t["book"] as? String, !b.isEmpty, b != s.bookID { t["otherBook"] = true }
+                replyHandler(t, nil)
+            case "bookID": replyHandler(s.bookID, nil)
+            case "testDecodeQR":  // Testmodus: Bild wie ein Kamerabild auswerten
+                guard testMode, let d = Data(base64Encoded: try str("base64")), let img = NSImage(data: d),
+                      let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else { throw StoreError.invalid("Nur im Testmodus / Bild unlesbar") }
+                replyHandler(QR.detect(in: cg), nil)
             case "locations": replyHandler(try s.locations().map { l in var l = l; l["path"] = try s.locationPath(l["id"] as? Int); return l }, nil)
             case "saveLocation":
                 replyHandler(try s.saveLocation(id: a["id"] as? Int, parent: a["parent"] as? Int, name: try str("name"), kind: (a["kind"] as? String) ?? "ort",
@@ -813,7 +859,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     m.addItem(i); continue
                 }
                 let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
-                if ["Z", "N", "I", "E"].contains(key) { i.keyEquivalentModifierMask = [.command, .shift] }
+                if ["Z", "N", "I", "E", "K"].contains(key) { i.keyEquivalentModifierMask = [.command, .shift] }
                 if key == "NW" { i.keyEquivalent = "n"; i.keyEquivalentModifierMask = [.command, .option] }
                 m.addItem(i)
             }
@@ -825,7 +871,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
                        ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("Importieren …", #selector(importFiles), "I"),
                        ("Laborbuch exportieren …", #selector(exportBook), "E"), ("Eintrag als PDF …", #selector(entryPDF), "p"),
-                       ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("In den Papierkorb", #selector(trashEntry), ""), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
+                       ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("In den Papierkorb", #selector(trashEntry), ""), ("Etikett scannen …", #selector(scanLabel), "K"), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
                        ("Schließen", #selector(NSWindow.performClose(_:)), "w")])
         add("Bearbeiten", [("Widerrufen", Selector(("undo:")), "z"), ("Wiederholen", Selector(("redo:")), "Z"), ("-", nil, ""),
                            ("Ausschneiden", #selector(NSText.cut(_:)), "x"), ("Kopieren", #selector(NSText.copy(_:)), "c"),

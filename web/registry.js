@@ -82,7 +82,7 @@ async function showEntity(id) {
     return b ? (ch.length ? 'geändert: ' + ch.join(', ') : '') : 'angelegt'; };
   $('#reg').innerHTML = `<div class="reghead"><button class="btn" data-regback>← ${esc(t.name)}</button>
       <h2>${esc(t.icon)} ${e ? `<code>${e.code}</code> ${esc(e.name)}` : `Neu: ${esc(t.name)}`}</h2>
-      ${e ? `<button class="btn" data-regcopy="${e.code}" title="ID kopieren">ID kopieren</button><button class="btn" data-regarchive>${e.archived ? 'Wiederherstellen' : 'Archivieren'}</button>` : ''}</div>
+      ${e ? `<button class="btn" data-label="entity:${e.id}">🏷 Etikett</button><button class="btn" data-regcopy="${e.code}" title="ID kopieren">ID kopieren</button><button class="btn" data-regarchive>${e.archived ? 'Wiederherstellen' : 'Archivieren'}</button>` : ''}</div>
     <div class="regdetail"><form id="entform" class="regform">
       <label class="rf"><span>Name</span><input data-name value="${esc(e?.name || '')}" required autocomplete="off"></label>
       ${fields.map(f => `<label class="rf"><span>${esc(f.label)}</span><div>${input(f)}</div></label>`).join('')}

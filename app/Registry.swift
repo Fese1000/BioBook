@@ -182,6 +182,13 @@ extension Store {
         """, args).map { r in var r = r; r["code"] = Store.code(prefix: r["prefix"] as! String, no: r["no"] as! Int); return r }
     }
 
+    /// Objekt über seine ID wie „PL-0042“ finden
+    func entityID(code: String) throws -> Int? {
+        let parts = code.uppercased().split(separator: "-")
+        guard parts.count == 2, let no = Int(parts[1]) else { return nil }
+        return try queryRows("SELECT e.id FROM entity e JOIN rtype t ON t.id = e.type_id WHERE t.prefix = ? AND e.no = ?", [String(parts[0]), no]).first?["id"] as? Int
+    }
+
     /// Verweise auf Objekte in einem Eintrag festhalten (aus dem Editor beim Speichern)
     func setEntryEntities(entry id: Int, _ ids: [Int]) throws {
         try queryRows("DELETE FROM entry_entity WHERE entry_id = ?", [id])

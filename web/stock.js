@@ -63,7 +63,7 @@ async function showLot(id, preset = {}) {
   const ghs = (v.ghs || '').split(',');
   $('#stock').innerHTML = `<div class="reghead"><button class="btn" data-stab="lots">← Bestand</button>
       <h2>📦 ${l ? `<code>${l.code}</code> ${esc(l.name)}` : 'Neue Charge'}</h2>
-      ${l ? `<span class="amtbig">${esc(amt(l))}</span> ${badges(l.warnings)}` : ''}</div>
+      ${l ? `<span class="amtbig">${esc(amt(l))}</span> ${badges(l.warnings)}<button class="btn" data-label="lot:${l.id}">🏷 Etikett</button>` : ''}</div>
     <div class="regdetail"><form id="lotform" class="regform">
       <label class="rf"><span>Bezeichnung</span><input name="name" value="${esc(v.name || '')}" required autocomplete="off"></label>
       <label class="rf"><span>Registry-Objekt</span><div><input name="entity" list="entlist" value="${esc(curEnt ? entLabel(curEnt) : '')}" placeholder="optional, z. B. CH-0003" autocomplete="off">
@@ -139,14 +139,14 @@ async function renderLocations() {
     const lots = await call('lots', {filter: `location:${box.id}`});
     const at = Object.fromEntries(lots.filter(l => l.position).map(l => [l.position, l]));
     const rows = [...Array(box.rows)].map((_, r) => String.fromCharCode(65 + r));
-    grid = `<h3>${esc(box.path)}</h3><table class="boxgrid"><tr><th></th>${[...Array(box.cols)].map((_, c) => `<th>${c + 1}</th>`).join('')}</tr>
+    grid = `<h3>${esc(box.path)} <button class="btn" data-labelbox="${box.id}">🏷 Etiketten (Box und Inhalt)</button></h3><table class="boxgrid"><tr><th></th>${[...Array(box.cols)].map((_, c) => `<th>${c + 1}</th>`).join('')}</tr>
       ${rows.map(r => `<tr><th>${r}</th>${[...Array(box.cols)].map((_, c) => { const p = `${r}${c + 1}`, l = at[p];
         return l ? `<td class="full ${l.warnings.length ? 'w' : ''}" data-lot="${l.id}" title="${esc(`${l.code} ${l.name} · ${amt(l)}`)}">${esc(l.name.slice(0, 10))}</td>`
           : `<td class="free" data-newat="${p}" title="${p}: frei – hier einlagern"></td>`; }).join('')}</tr>`).join('')}</table>
       <p class="sub">Belegt: ${lots.filter(l => l.position).length} von ${box.rows * box.cols}. Klick auf ein freies Feld legt dort eine Charge an.</p>`;
   } else if (box) {
     const lots = await call('lots', {filter: `location:${box.id}`});
-    grid = `<h3>${esc(box.path)}</h3>${lots.length ? lots.map(l => `<div class="locrow" data-lot="${l.id}"><code>${l.code}</code> ${esc(l.name)} · ${esc(amt(l))} ${badges(l.warnings)}</div>`).join('') : '<p class="sub">Hier liegt nichts.</p>'}`;
+    grid = `<h3>${esc(box.path)} <button class="btn" data-label="location:${box.id}">🏷 Etikett</button></h3>${lots.length ? lots.map(l => `<div class="locrow" data-lot="${l.id}"><code>${l.code}</code> ${esc(l.name)} · ${esc(amt(l))} ${badges(l.warnings)}</div>`).join('') : '<p class="sub">Hier liegt nichts.</p>'}`;
   }
   $('#stock').innerHTML = `<div class="reghead"><h2>📦 Bestand</h2>${stockTabs()}<button class="btn on" data-locnew>+ Standort</button></div>
     <div class="locwrap"><ul class="loctree">${locTree() || '<li class="sub">Noch keine Standorte. Zum Beispiel: Raum › Gefrierschrank › Box.</li>'}</ul>

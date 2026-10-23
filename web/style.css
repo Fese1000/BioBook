@@ -237,3 +237,20 @@ dialog#typedlg input,dialog#typedlg select{font:13px -apple-system,system-ui;col
 dialog#locdlg{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:18px 22px;width:520px;box-shadow:0 16px 48px rgba(0,0,0,.25)}
 dialog#locdlg::backdrop{background:rgba(0,0,0,.25)}dialog#locdlg h3{margin:0 0 12px;font:600 17px var(--serif)}
 @media(max-width:1000px){.locwrap{grid-template-columns:1fr}}
+/* Plattenlayout */
+.plate{border:1px solid var(--line);border-left:3px solid #4e79a7;border-radius:8px;margin:12px 0;padding:10px 12px;background:var(--side);font-size:13px}
+.plate.ProseMirror-selectednode{outline:3px solid var(--acc)}
+.phead{display:flex;gap:8px;align-items:center;margin-bottom:8px;font-weight:600}
+.phead input,.phead select{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px}
+.phead input{flex:1}
+.pbody{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.pgrid{border-collapse:separate;border-spacing:2px;user-select:none}
+.pgrid th{font:600 10px var(--mono);color:var(--mut);padding:0 2px}
+.pgrid td{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);background:var(--bg);cursor:crosshair}
+.pgrid.f384 td{width:11px;height:11px}.pgrid.f384 th{font-size:8px}
+.plegend{display:flex;flex-direction:column;gap:4px;min-width:180px}
+.ps{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:6px;cursor:pointer}.ps.on{background:var(--sel);outline:1px solid var(--acc)}
+.ps input{flex:1;min-width:0;font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:2px 5px}
+.ps small{color:var(--mut)}.ps .x{border:0;background:none;color:var(--mut);cursor:pointer}
+.sw{width:14px;height:14px;border-radius:50%;flex:none}.sw.erase{border:1.5px dashed var(--mut)}
+.psum{margin-top:8px;font-size:12px;color:var(--mut)}

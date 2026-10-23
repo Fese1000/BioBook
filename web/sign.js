@@ -64,6 +64,7 @@ const PRINT_CSS = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;
     ul[data-type=taskList]{list-style:none;padding-left:0} a{color:#111;text-decoration:none}
     figure.annot{position:relative;display:inline-block;margin:6pt 0;max-width:100%} figure.annot img{display:block;max-width:100%}
     figure.annot svg{position:absolute;inset:0;width:100%;height:100%}
+    .platetab{border-collapse:collapse;font-size:6.5pt;width:auto} .platetab td,.platetab th{border:1px solid #bbb;width:5.5mm;height:4.5mm;padding:0;text-align:center}
     div[data-calc],div[data-file]{border:1px solid #bbb;border-radius:4pt;padding:5pt 8pt;margin:6pt 0;font-size:10pt}
     .sign{margin-top:22pt;page-break-inside:avoid;border-top:1px solid #999;padding-top:10pt;font-size:10pt}
     .line{display:flex;gap:24pt;margin-top:28pt}.line div{flex:1;border-top:1px solid #333;padding-top:3pt;font-size:9pt;color:#444}`;
