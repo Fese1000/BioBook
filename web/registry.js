@@ -104,9 +104,15 @@ async function showEntity(id) {
   if (!e) $('#entform [data-name]').focus();
   else {
     renderEntityLots(e.id); renderEntityCultures(e.id);
+    if (v.smiles) {  // Chemikalie: Struktur, Summenformel, Molmasse
+      let f = null; try { f = Chem.formula(v.smiles); } catch (err) { f = {error: err.message}; }
+      $('#reg').insertAdjacentHTML('beforeend', `<div class="seqpanel chempanel"><div class="seqbar"><b>⚗️ Struktur</b>${f.error ? `<span class="bad">${esc(f.error)}</span>`
+        : `<span>${Chem.hillHTML(f.hill)} · <b>${Chem.mw(f.mass)}</b> g/mol</span>${fields.some(x => x.key == 'mw') && Calc.num(v.mw) != +Chem.mw(f.mass).replace(',', '.') ? `<button class="btn" data-chemmw="${Chem.mw(f.mass)}">Molmasse ins Feld übernehmen</button>` : ''}`}</div><div class="chempic"></div></div>`);
+      drawStructure(v.smiles, {width: 320, height: 220}).then(svg => { const p = document.querySelector('#reg .chempanel .chempic'); if (p) p.innerHTML = svg || ''; });
+    }
     const sf = fields.filter(f => f.type == 'sequence' && v[f.key]);
     $('#reg').insertAdjacentHTML('beforeend', sf.map(f => `<div class="seqpanel" data-seqent="${e.id}" data-seqfield="${f.key}"></div>`).join(''));
-    await Promise.all([...document.querySelectorAll('#reg .seqpanel')].map(renderSeqPanel));
+    await Promise.all([...document.querySelectorAll('#reg .seqpanel[data-seqent]')].map(renderSeqPanel));
   }
 }
 
@@ -180,5 +186,9 @@ function initRegistry() {
     const a = e.target.closest('a.elink'); if (a) { e.preventDefault(); showView('doc'); cur = null; return open(+a.dataset.entry); }
   });
   $('#reg').addEventListener('submit', e => { e.preventDefault(); saveEntityForm(); });
+  $('#reg').addEventListener('click', e => {
+    const b = e.target.closest('[data-chemmw]'); if (!b) return;
+    const mw = document.querySelector('#entform [data-field="mw"]'); mw.value = b.dataset.chemmw; saveEntityForm();
+  });
   $('#reg').addEventListener('input', e => { if (e.target.classList.contains('seq')) e.target.parentElement.querySelector('.seqstat').textContent = seqStats(e.target.value); });
 }

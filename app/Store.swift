@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 14
+    static let schemaVersion = 15
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -253,6 +253,15 @@ final class Store {
                   done INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(entry_id, idx));
                 CREATE INDEX entry_task_due ON entry_task(due);
                 """)
+            }
+            if v < 15 {
+                // Chemikalien bekommen ein SMILES-Feld (Strukturbild, Summenformel, Molmasse); nur der Standardtyp, nur wenn es fehlt
+                for t in try query("SELECT id, fields_json FROM rtype WHERE prefix = 'CH' AND name = 'Chemikalie'") {
+                    var f = (try JSONSerialization.jsonObject(with: Data((t["fields_json"] as! String).utf8)) as? [[String: Any]]) ?? []
+                    if f.contains(where: { $0["key"] as? String == "smiles" }) { continue }
+                    f.insert(["key": "smiles", "label": "SMILES", "type": "text"], at: min(1, f.count))
+                    try query("UPDATE rtype SET fields_json = ? WHERE id = ?", [String(data: try JSONSerialization.data(withJSONObject: f), encoding: .utf8)!, t["id"]])
+                }
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }

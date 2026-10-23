@@ -3,7 +3,8 @@
   "private": true,
   "description": "Nur zum Bündeln des Editors nach web/vendor/tiptap.js (npm run bundle)",
   "scripts": {
-    "bundle": "esbuild entry.js --bundle --minify --format=iife --global-name=TT --outfile=../web/vendor/tiptap.js"
+    "bundle": "esbuild entry.js --bundle --minify --format=iife --global-name=TT --outfile=../web/vendor/tiptap.js",
+    "chem": "cp node_modules/smiles-drawer/dist/smiles-drawer.min.js ../web/vendor/ && cp node_modules/smiles-drawer/LICENSE.md ../web/vendor/smiles-drawer.LICENSE.md"
   },
   "dependencies": {
     "@tiptap/core": "^3.32.0",
@@ -14,6 +15,7 @@
     "@tiptap/extensions": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
-    "esbuild": "^0.28.2"
+    "esbuild": "^0.28.2",
+    "smiles-drawer": "^2.4.1"
   }
 }

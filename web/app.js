@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, DbLinks, DueDates,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, DbLinks, DueDates,
   ];
 }
 
@@ -219,6 +219,7 @@ const TOOLS = [
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
   ['📚 Quelle', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
+  ['⚗️ Struktur', 'Strukturformel aus SMILES mit Summenformel und Molmasse (→ Einwaage-Rechner)', () => insertChem()],
   ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
@@ -1270,6 +1271,32 @@ async function selfTest() {
   ok(qb.querySelectorAll('tbody tr').length == 1 && qb.querySelector('[data-k="gen"]').value == 'IL6' && qb.querySelector('[data-fk="dct"]').textContent == '9,35',
     'qPCR-Export: Replikate gemittelt, GAPDH als Referenz, ΔCt = 27,51 − 18,16 = 9,35');
   changed(); await flush();
+  showView('doc');
+
+  // M21: Chemie
+  const chEntry2 = await call('create', {title: 'Tris-Puffer ansetzen'}); await refreshList(chEntry2);
+  editor.commands.setContent(''); insertChem(); await sleep(100);
+  const cb = document.querySelector('.chemblock');
+  cb.querySelector('[data-cname]').value = 'Tris'; cb.querySelector('[data-cname]').dispatchEvent(new Event('change', {bubbles: true}));
+  const si = cb.querySelector('[data-csmiles]'); si.value = 'OCC(N)(CO)CO'; si.dispatchEvent(new Event('change', {bubbles: true})); await sleep(600);
+  const cb2 = document.querySelector('.chemblock');
+  ok(cb2.querySelector('.chemfacts .hill')?.textContent == 'C4H11NO3' && /121,14 g\/mol/.test(cb2.querySelector('.chemfacts').textContent), 'SMILES von Tris: C4H11NO3, 121,14 g/mol');
+  ok(!!cb2.querySelector('.chempic svg') && editor.getJSON().content[0].attrs.svg.startsWith('<svg'), 'Strukturbild gezeichnet und für den Druck gespeichert');
+  const probeSub = Object.assign(document.createElement('span'), {className: 'sub', textContent: 'x'}); document.body.appendChild(probeSub);
+  const subSize = parseFloat(getComputedStyle(probeSub).fontSize); probeSub.remove();
+  ok(subSize >= 10, `Stil des Strukturbilds bleibt im Bild (.sub anderswo ${subSize}px, nicht 5 pt)`);
+  cb2.querySelector('[data-cweigh]').click(); await sleep(200);
+  const calcNode = editor.getJSON().content.find(n => n.type == 'calc');
+  ok(calcNode?.attrs.kind == 'molarity' && calcNode.attrs.data.mw.v == '121,14', 'Einwaage-Rechner übernimmt die Molmasse 121,14 g/mol');
+  changed(); await flush();
+  ok(/Tris: OCC\(N\)\(CO\)CO \(C4H11NO3, 121,14 g\/mol\)/.test(editor.getText()) && editor.getHTML().includes('C<sub>4</sub>H<sub>11</sub>NO<sub>3</sub>'), 'Struktur im Text (Suche) und im Export');
+  const chType = (await call('types')).find(t => t.prefix == 'CH');
+  const tris = await call('createEntity', {type: chType.id, name: 'Tris', values: {smiles: 'OCC(N)(CO)CO', cas: '77-86-1'}});
+  await showEntity(tris.id); await sleep(500);
+  ok(/C4H11NO3 · 121,14 g\/mol/.test(document.querySelector('#reg .chempanel').textContent) && document.querySelector('#reg .chempanel svg'), 'Chemikalie in der Registry zeigt Struktur, Formel und Molmasse');
+  document.querySelector('#reg [data-chemmw]').click(); await sleep(400);
+  ok(parseJSON((await call('entity', {id: tris.id})).fields_json, {}).mw == '121,14' && !document.querySelector('#reg [data-chemmw]'), 'Molmasse ins Feld übernommen');
+  await call('testSnapshot', {name: 'm21-chemie.png'}).catch(() => {});
   showView('doc');
   return out;
 }

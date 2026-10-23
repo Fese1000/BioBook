@@ -475,6 +475,9 @@ try s.trashEntry(id: agEntry)
 check(try !(try s.agenda(until: Store.addDays(today, 30), today: today)).contains { $0["kind"] as? String == "task" && $0["id"] as? Int == agEntry }, "Papierkorb zählt nicht")
 try s.restoreEntry(id: agEntry)
 
+// M21: SMILES-Feld für Chemikalien (Migration)
+check(try ((try s.types()).first { $0["prefix"] as? String == "CH" }!["fields_json"] as! String).contains("\"smiles\""), "Chemikalie hat ein SMILES-Feld")
+
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
 var t = Date()

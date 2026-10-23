@@ -355,3 +355,9 @@ section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
 .pviews{display:inline-flex;gap:4px;margin-left:auto}.pgrid td .pv{font:8.5px/1 var(--mono);display:block;text-align:center;pointer-events:none}
 .pscale{display:flex;align-items:center;gap:6px;font-size:11.5px;margin:6px 0}.pscale i{display:inline-block;width:140px;height:9px;border-radius:3px;background:linear-gradient(90deg,rgb(232,240,251),rgb(31,79,153))}
 .phead{flex-wrap:wrap}.phead .btn{white-space:nowrap}
+/* Chemie */
+.chemblock{border:1px solid var(--line);border-left:3px solid #8e5bd0;border-radius:8px;margin:12px 0;padding:10px 12px;background:var(--side);font-size:13px}
+.chemblock.ProseMirror-selectednode{outline:3px solid var(--acc)}.chemblock input[data-csmiles]{flex:1;min-width:220px;font-family:var(--mono)}
+.chembody{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.chempic{background:#fff;border-radius:8px;min-height:20px}.chempic svg{display:block}
+@media(prefers-color-scheme:dark){.chempic{background:var(--bg)}}
+.chemfacts p{margin:2px 0}.chemfacts .hill{font-size:17px;font-weight:600}.chem-print svg{max-width:60mm;height:auto}
