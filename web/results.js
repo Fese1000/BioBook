@@ -41,7 +41,8 @@ const ResultsNode = TT.Node.create({
     function render() {
       const f = schemaFields(cur.attrs.schema), ro = !editor.isEditable, name = RESULT_SCHEMAS.find(x => x.id == cur.attrs.schema)?.name || 'Vorlage fehlt';
       const rows = cur.attrs.rows.length ? cur.attrs.rows : [{}];
-      dom.innerHTML = `<div class="rshead">📊 ${esc(name)}</div><table class="rstab"><thead><tr>${f.map(x => `<th class="${NUMERIC(x) ? 'num' : ''}">${esc(x.label)}${x.unit ? `<small> ${esc(x.unit)}</small>` : ''}</th>`).join('')}${ro ? '' : '<th></th>'}</tr></thead>
+      const dev = f.some(x => x.key == 'ct') ? 'qpcr' : f.some(x => x.key == 'konz') && f.some(x => x.key == 'a260_280') ? 'nanodrop' : null;
+      dom.innerHTML = `<div class="rshead">📊 ${esc(name)}${dev && !ro ? ` <button class="btn" data-rdev="${dev}">📥 ${dev == 'qpcr' ? 'qPCR-Export' : 'NanoDrop-Export'}</button>` : ''}</div><table class="rstab"><thead><tr>${f.map(x => `<th class="${NUMERIC(x) ? 'num' : ''}">${esc(x.label)}${x.unit ? `<small> ${esc(x.unit)}</small>` : ''}</th>`).join('')}${ro ? '' : '<th></th>'}</tr></thead>
         <tbody>${rows.map((r, i) => { const c = computeRow(f, r); return `<tr data-r="${i}">${f.map(x => x.type == 'formula'
           ? `<td class="num calcd" data-fk="${x.key}">${esc(Calc.fmt(Calc.num(c[x.key])))}</td>`
           : `<td>${x.type == 'select' ? `<select data-k="${x.key}" ${ro ? 'disabled' : ''}><option></option>${x.options.map(o => `<option ${o == r[x.key] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`
@@ -73,6 +74,19 @@ const ResultsNode = TT.Node.create({
     dom.addEventListener('click', e => {
       if (!editor.isEditable) return;
       if (e.target.dataset.radd !== undefined) { const rows = read(); rows.push({}); dirty = false; commit(rows); }
+      if (e.target.dataset.rdev) pickDeviceFile({apply: (text, name) => {
+        const de = s => s == null ? '' : String(s).replace('.', ','), keep = read().filter(r => Object.values(r).some(v => String(v ?? '').trim()));
+        let add;
+        if (e.target.dataset.rdev == 'nanodrop') add = DevFiles.parseNanoDrop(text).map(x => ({probe: x.sample, konz: de(x.conc), a260_280: de(x.a260_280), a260_230: de(x.a260_230)}));
+        else {
+          const ct = DevFiles.parseCt(text);
+          let res = DevFiles.ctToRows(ct);
+          if (!res.ref) { const ref = prompt(`Referenzgen? (${[...new Set(ct.map(r => r.target))].join(', ')})`); if (ref) res = DevFiles.ctToRows(ct, ref.trim()); }
+          add = res.rows.map(r => ({probe: r.probe, gen: r.gen, ct: de(r.ct), ct_ref: de(r.ct_ref)}));
+        }
+        dirty = false; commit([...keep, ...add]);
+        status(`${add.length} Zeile(n) aus ${name} übernommen`);
+      }});
       if (e.target.dataset.rdel != null) { const rows = read(); rows.splice(+e.target.dataset.rdel, 1); dirty = false; commit(rows.length ? rows : [{}]); }
     });
     render();

@@ -218,7 +218,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
-  ['📚 Zitat', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
+  ['📚 Quelle', 'Quelle zitieren (Bibliothek, DOI oder PMID); Literaturliste entsteht automatisch', () => citeDialog()],
   ['📈 Diagramm', 'Standardkurve, Gruppenvergleich mit t-Test oder x/y-Diagramm', () => insertChart()],
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
@@ -1234,6 +1234,42 @@ async function selfTest() {
     'Kalenderdatei (.ics) mit allen Terminen');
   [...document.querySelectorAll('#agenda .agrow')].find(r => r.textContent.includes('Antikörper')).click(); await sleep(300);
   ok(cur == agEntry && !$('#doc').hidden, 'Klick auf die Aufgabe öffnet den Eintrag');
+  showView('doc');
+
+  // M20: Gerätedateien (Testdateien wie typische Exporte)
+  const R8 = 'ABCDEFGH', pval = (r, c) => +(0.05 + 0.1 * r + 0.01 * c).toFixed(3);
+  const gridCSV = ['Application: Tecan i-control', 'Measurement Wavelength;595;nm', '', '<>;' + [...Array(12)].map((_, c) => c + 1).join(';'),
+    ...[...R8].map((L, r) => L + ';' + [...Array(12)].map((_, c) => pval(r, c + 1).toFixed(3).replace('.', ',')).join(';'))].join('\r\n');
+  const dfEntry = await call('create', {title: 'Bradford-Platte'}); await refreshList(dfEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'plate', attrs: {format: 96, samples: [{name: 'Blank', color: PLATE_COLORS[0]}, {name: 'Standard', color: PLATE_COLORS[1]}],
+    wells: {A1: 0, A2: 0, A3: 0, B1: 1, B2: 1, B3: 1}}}, {type: 'paragraph'}]});
+  changed(); await flush(); await sleep(150);
+  document.querySelector('.plate [data-pimport]').click();
+  DEVFILE_TARGET.apply(gridCSV, 'messung.csv'); await sleep(200);
+  const heatCells = [...document.querySelectorAll('.plate td[data-well]')].filter(td => td.style.background.startsWith('rgb'));
+  ok(heatCells.length == 96 && document.querySelector('.plate [data-well="H12"] .pv')?.textContent == '0,87', 'Plattenleser-Export: 96 Werte als Heatmap (H12 = 0,87)');
+  ok(/Blank: 0,07 ± 0,01 \(n = 3\); Standard: 0,17 ± 0,01 \(n = 3\)/.test(document.querySelector('.plate .psum').textContent) && /595 nm/.test(document.querySelector('.plate .pscale').textContent),
+    'Mittelwert ± SD je Probe aus den Messwerten, Wellenlänge erkannt');
+  await flush();
+  ok(/Messwerte: Blank: 0,07/.test(editor.getText()) && editor.getHTML().includes('>0,87</td>'), 'Messwerte im Text und im PDF-Export');
+  await call('testSnapshot', {name: 'm20-platte.png'}).catch(() => {});
+  const ndTSV = 'Sample ID\tUser name\tDate\tTime\tNucleic Acid(ng/uL)\tA260 (Abs)\tA280 (Abs)\t260/280\t260/230\tSample Type\tFactor\n'
+    + 'Klon 1\tfelix\t23.10.2026\t10:01\t250.4\t5.008\t2.703\t1.85\t2.10\tDNA\t50.00\nKlon 2\tfelix\t23.10.2026\t10:02\t312.9\t6.258\t3.384\t1.85\t2.21\tDNA\t50.00\n';
+  const qpcrCSV = 'Well,Fluor,Target,Content,Sample,Biological Set Name,Cq,Cq Mean,Cq Std. Dev\nA01,SYBR,GAPDH,Unkn,Kontrolle,,18.12,,\nA02,SYBR,GAPDH,Unkn,Kontrolle,,18.20,,\n'
+    + 'A03,SYBR,IL6,Unkn,Kontrolle,,27.40,,\nA04,SYBR,IL6,Unkn,Kontrolle,,27.62,,\nC01,SYBR,IL6,Unkn,NTC,,NaN,,\n';
+  const qT = RESULT_SCHEMAS.find(x => x.name == 'qPCR');
+  editor.commands.setContent({type: 'doc', content: [{type: 'results', attrs: {schema: prep.id, rows: [{}]}}, {type: 'results', attrs: {schema: qT.id, rows: [{}]}}, {type: 'paragraph'}]});
+  await sleep(150);
+  document.querySelector('.results [data-rdev="nanodrop"]').click();
+  DEVFILE_TARGET.apply(ndTSV, 'nanodrop.tsv'); await sleep(200);
+  const ndRows = [...document.querySelectorAll('.results')[0].querySelectorAll('tbody tr')].map(tr => [...tr.querySelectorAll('[data-k]')].map(i => i.value));
+  ok(ndRows.length == 2 && ndRows[0][0] == 'Klon 1' && ndRows[0][1] == '250,4' && ndRows[1][2] == '1,85', 'NanoDrop-Export füllt die Plasmid-Präp-Tabelle (2 Proben)');
+  document.querySelector('.results [data-rdev="qpcr"]').click();
+  DEVFILE_TARGET.apply(qpcrCSV, 'qpcr.csv'); await sleep(200);
+  const qb = document.querySelectorAll('.results')[1];
+  ok(qb.querySelectorAll('tbody tr').length == 1 && qb.querySelector('[data-k="gen"]').value == 'IL6' && qb.querySelector('[data-fk="dct"]').textContent == '9,35',
+    'qPCR-Export: Replikate gemittelt, GAPDH als Referenz, ΔCt = 27,51 − 18,16 = 9,35');
+  changed(); await flush();
   showView('doc');
   return out;
 }

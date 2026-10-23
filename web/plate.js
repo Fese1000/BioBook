@@ -28,22 +28,42 @@ function plateSummary(a) {
   }).filter(Boolean).join('; ');
 }
 
+/// Messwerte: einfarbige Skala hell → dunkel (sequenziell), Schrift passend zur Helligkeit
+function heat(v, min, max) {
+  const t = max > min ? (v - min) / (max - min) : 0.5, a = [232, 240, 251], b = [31, 79, 153];
+  const c = a.map((x, i) => Math.round(x + (b[i] - x) * t));
+  return {bg: `rgb(${c.join(',')})`, fg: t > 0.55 ? '#fff' : '#10233f'};
+}
+const plateRange = a => { const vs = Object.values(a.values || {}); return vs.length ? [Math.min(...vs), Math.max(...vs)] : null; };
+
+/// Mittelwert ± SD der Messwerte je Probe
+function plateStats(a) {
+  if (!a.values || !Object.keys(a.values).length) return '';
+  return (a.samples || []).map((s, i) => {
+    const vs = Object.entries(a.wells || {}).filter(([w, v]) => v == i && a.values[w] != null).map(([w]) => a.values[w]);
+    if (!vs.length) return '';
+    const st = Calc.stats(vs);
+    return `${s.name}: ${Calc.fmt(st.mean)}${st.sd != null ? ' ± ' + Calc.fmt(st.sd) : ''} (n = ${st.n})`;
+  }).filter(Boolean).join('; ');
+}
+
 const PlateNode = TT.Node.create({
   name: 'plate', group: 'block', atom: true, draggable: true,
-  addAttributes: () => ({format: {default: 96}, title: {default: ''}, samples: {default: []}, wells: {default: {}}}),
+  addAttributes: () => ({format: {default: 96}, title: {default: ''}, samples: {default: []}, wells: {default: {}}, values: {default: {}}, vlabel: {default: ''}, view: {default: 'layout'}}),
   parseHTML: () => [{tag: 'div[data-plate]', getAttrs: el => JSON.parse(el.getAttribute('data-plate') || '{}')}],
   renderHTML: ({node}) => {
     // als Tabelle (lesbar im PDF und im Export), Daten im Attribut
     const a = node.attrs, [rows, cols] = PLATE_FORMATS[a.format] || PLATE_FORMATS[96];
     const head = ['tr', {}, ['th', {}, ''], ...[...Array(cols)].map((_, c) => ['th', {}, String(c + 1)])];
     const body = [...Array(rows)].map((_, r) => ['tr', {}, ['th', {}, String.fromCharCode(65 + r)], ...[...Array(cols)].map((_, c) => {
-      const i = a.wells?.[wellName(r, c)], s = i != null ? a.samples[i] : null;
+      const w = wellName(r, c), i = a.wells?.[w], s = i != null ? a.samples[i] : null, v = a.values?.[w], rg = plateRange(a);
+      if (v != null && rg) { const h = heat(v, ...rg); return ['td', {style: `background:${h.bg};color:${h.fg}`}, Calc.fmt(v)]; }
       return ['td', s ? {style: `background:${s.color};color:#fff`} : {}, s ? s.name.slice(0, 4) : ''];
     })]);
-    return ['div', {'data-plate': JSON.stringify(a), class: 'plate-print'}, ['p', {}, `Platte ${a.format}${a.title ? ' – ' + a.title : ''}: ${plateSummary(a)}`],
+    return ['div', {'data-plate': JSON.stringify(a), class: 'plate-print'}, ['p', {}, `Platte ${a.format}${a.title ? ' – ' + a.title : ''}: ${plateSummary(a)}${plateStats(a) ? ` · Messwerte${a.vlabel ? ' ' + a.vlabel : ''}: ${plateStats(a)}` : ''}`],
       ['table', {class: 'platetab'}, head, ...body]];
   },
-  renderText: ({node}) => `Platte ${node.attrs.format}${node.attrs.title ? ' – ' + node.attrs.title : ''}: ${plateSummary(node.attrs)}`,
+  renderText: ({node}) => `Platte ${node.attrs.format}${node.attrs.title ? ' – ' + node.attrs.title : ''}: ${plateSummary(node.attrs)}${plateStats(node.attrs) ? ` · Messwerte: ${plateStats(node.attrs)}` : ''}`,
   addNodeView: () => ({node, getPos, editor}) => {
     let cur = node, sel = 0, painting = null;
     const dom = document.createElement('div');
@@ -54,15 +74,18 @@ const PlateNode = TT.Node.create({
       const counts = a.samples.map((_, i) => Object.values(a.wells).filter(v => v == i).length);
       dom.innerHTML = `<div class="phead">🧫 <input data-ptitle value="${esc(a.title)}" placeholder="Platte ${a.format}" ${ro ? 'disabled' : ''}>
           ${ro ? '' : `<select data-pformat>${Object.keys(PLATE_FORMATS).map(f => `<option value="${f}" ${f == a.format ? 'selected' : ''}>${f} Wells</option>`).join('')}</select>
-          <button class="btn" data-pclear>Leeren</button>`}</div>
+          <button class="btn" data-pclear>Leeren</button><button class="btn" data-pimport>📥 Messwerte</button>`}
+          ${Object.keys(a.values || {}).length ? `<span class="pviews"><button class="btn ${a.view != 'values' ? 'on' : ''}" data-pview="layout">Belegung</button><button class="btn ${a.view == 'values' ? 'on' : ''}" data-pview="values">Messwerte</button></span>` : ''}</div>
         <div class="pbody"><table class="pgrid f${a.format}"><tr><th></th>${[...Array(cols)].map((_, c) => `<th>${c + 1}</th>`).join('')}</tr>
           ${[...Array(rows)].map((_, r) => `<tr><th>${String.fromCharCode(65 + r)}</th>${[...Array(cols)].map((_, c) => { const w = wellName(r, c), i = a.wells[w];
-            return `<td data-well="${w}" title="${w}${i != null ? ': ' + esc(a.samples[i]?.name) : ''}" style="${i != null ? `background:${a.samples[i]?.color}` : ''}"></td>`; }).join('')}</tr>`).join('')}</table>
+            const v = a.values?.[w], h = a.view == 'values' && v != null ? heat(v, ...plateRange(a)) : null;
+            return `<td data-well="${w}" title="${w}${i != null ? ': ' + esc(a.samples[i]?.name) : ''}${v != null ? ` · ${Calc.fmt(v)}` : ''}" style="${h ? `background:${h.bg};color:${h.fg}` : i != null ? `background:${a.samples[i]?.color}` : ''}">${h && a.format == 96 ? `<span class="pv">${Calc.fmt(v)}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table>
         <div class="plegend">${a.samples.map((s, i) => `<div class="ps ${i == sel && !ro ? 'on' : ''}" data-psel="${i}"><span class="sw" style="background:${s.color}"></span>
             ${ro ? `<span>${esc(s.name)}</span>` : `<input data-pname="${i}" value="${esc(s.name)}">`}<small>${counts[i]}</small>${ro ? '' : `<button class="x" data-pdel="${i}" title="Probe entfernen">×</button>`}</div>`).join('')}
           ${ro ? '' : `<div class="ps ${sel == -1 ? 'on' : ''}" data-psel="-1"><span class="sw erase"></span>Radiergummi</div><button class="btn" data-padd>+ Probe</button>`}
           <p class="sub">${ro ? '' : 'Probe wählen, dann Wells anklicken oder darüber ziehen.'}</p></div></div>
-        <div class="psum">${esc(plateSummary(a)) || '<span class="sub">noch leer</span>'}</div>`;
+        ${a.view == 'values' && plateRange(a) ? `<div class="pscale"><span>${Calc.fmt(plateRange(a)[0])}</span><i></i><span>${Calc.fmt(plateRange(a)[1])}</span>${a.vlabel ? `<span class="sub">${esc(a.vlabel)}</span>` : ''}</div>` : ''}
+        <div class="psum">${esc(plateSummary(a)) || '<span class="sub">noch leer</span>'}${plateStats(a) ? `<br><b>Messwerte${a.vlabel ? ' ' + esc(a.vlabel) : ''}:</b> ${esc(plateStats(a))}` : ''}</div>`;
     }
     const paint = (w, mode) => {
       const wells = {...cur.attrs.wells};
@@ -95,6 +118,13 @@ const PlateNode = TT.Node.create({
         sel = 0; set({samples, wells});
       }
       if (d.pclear !== undefined && confirm('Alle Wells leeren?')) set({wells: {}});
+      if (d.pview) set({view: d.pview});
+      if (d.pimport !== undefined) pickDeviceFile({apply: (text, name) => {
+        const p = DevFiles.parsePlate(text);
+        if (p.format != cur.attrs.format && !confirm(`Die Datei hat das Format ${p.format}, die Platte ${cur.attrs.format}. Trotzdem übernehmen?`)) return;
+        set({values: p.values, vlabel: p.label || name.replace(/\.[^.]+$/, ''), view: 'values'});
+        status(`${Object.keys(p.values).length} Messwerte aus ${name} übernommen`);
+      }});
     });
     dom.addEventListener('change', e => {
       const d = e.target.dataset;

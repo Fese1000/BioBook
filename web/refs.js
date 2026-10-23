@@ -234,7 +234,7 @@ async function renderLiterature(q = $('#litq')?.value || '') {
     ${sd ? `<aside class="regside"><h4>${esc(Refs.citeShort(sd))}</h4><p>${esc(Refs.formatFull(sd))}</p>
       ${sd.doi ? `<p><a href="https://doi.org/${esc(sd.doi)}" data-ext>doi.org/${esc(sd.doi)}</a></p>` : ''}${sd.pmid ? `<p><a href="https://pubmed.ncbi.nlm.nih.gov/${esc(sd.pmid)}/" data-ext>PubMed ${esc(sd.pmid)}</a></p>` : ''}
       <p class="sub">Schlüssel ${esc(sel.key)}${sel.source ? ` · aus ${esc(sel.source)}` : ''}</p>
-      <h4>Zitiert in</h4>${sel.cited_in.length ? sel.cited_in.map(e => `<a href="#" class="elink" data-entry="${e.id}">↗ ${esc(e.title || 'Ohne Titel')}</a>`).join('<br>') : '<span class="sub">noch nirgends (im Eintrag „📚 Zitat“)</span>'}
+      <h4>Zitiert in</h4>${sel.cited_in.length ? sel.cited_in.map(e => `<a href="#" class="elink" data-entry="${e.id}">↗ ${esc(e.title || 'Ohne Titel')}</a>`).join('<br>') : '<span class="sub">noch nirgends (im Eintrag „📚 Quelle“)</span>'}
       ${sel.cited_in.length ? '' : `<p><button class="btn danger" data-litdel="${sel.id}">Aus der Bibliothek löschen</button></p>`}</aside>` : ''}</div>`;
   const inp = $('#litq');
   inp.oninput = () => { clearTimeout(inp._t); inp._t = setTimeout(() => renderLiterature(inp.value).then(() => { const i = $('#litq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }), 150); };

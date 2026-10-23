@@ -1,0 +1,10 @@
+Well,Fluor,Target,Content,Sample,Biological Set Name,Cq,Cq Mean,Cq Std. Dev
+A01,SYBR,GAPDH,Unkn,Kontrolle,,18.12,,
+A02,SYBR,GAPDH,Unkn,Kontrolle,,18.20,,
+A03,SYBR,IL6,Unkn,Kontrolle,,27.40,,
+A04,SYBR,IL6,Unkn,Kontrolle,,27.62,,
+B01,SYBR,GAPDH,Unkn,LPS,,18.31,,
+B02,SYBR,GAPDH,Unkn,LPS,,18.25,,
+B03,SYBR,IL6,Unkn,LPS,,22.10,,
+B04,SYBR,IL6,Unkn,LPS,,22.30,,
+C01,SYBR,IL6,Unkn,NTC,,NaN,,

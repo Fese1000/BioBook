@@ -351,3 +351,7 @@ section.bibliography{margin-top:18pt}section.bibliography ol{padding-left:18pt}
 #agendaBadge.soft{background:#e6a23c;color:#2b1d00}
 .aglist{display:flex;flex-direction:column;gap:2px}.agrow{display:grid;grid-template-columns:28px 92px 1fr;gap:10px;align-items:center;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:13px}
 .agrow:hover{background:var(--sel)}.agrow.overdue .agdate{color:#c0392b;font-weight:600}.agicon{font-size:16px;text-align:center}
+/* Messwerte auf der Platte */
+.pviews{display:inline-flex;gap:4px;margin-left:auto}.pgrid td .pv{font:8.5px/1 var(--mono);display:block;text-align:center;pointer-events:none}
+.pscale{display:flex;align-items:center;gap:6px;font-size:11.5px;margin:6px 0}.pscale i{display:inline-block;width:140px;height:9px;border-radius:3px;background:linear-gradient(90deg,rgb(232,240,251),rgb(31,79,153))}
+.phead{flex-wrap:wrap}.phead .btn{white-space:nowrap}

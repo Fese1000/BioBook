@@ -1,0 +1,4 @@
+Sample ID	User name	Date	Time	Nucleic Acid(ng/uL)	A260 (Abs)	A280 (Abs)	260/280	260/230	Sample Type	Factor
+Klon 1	felix	23.10.2026	10:01	250.4	5.008	2.703	1.85	2.10	DNA	50.00
+Klon 2	felix	23.10.2026	10:02	312.9	6.258	3.384	1.85	2.21	DNA	50.00
+Klon 3	felix	23.10.2026	10:03	98.1	1.962	1.075	1.83	1.62	DNA	50.00
