@@ -3,6 +3,7 @@
 'use strict';
 
 const PLATE_FORMATS = {96: [8, 12], 384: [16, 24]};
+const plateCol = c => /^#[0-9a-f]{3,8}$/i.test(c || '') ? c : '#888';  // Farbe kommt aus dem Dokument, landet in style="…"
 const PLATE_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1', '#76b7b2', '#edc948', '#9c755f', '#bab0ac', '#ff9da7', '#2f6f5e', '#555555'];
 const wellName = (r, c) => `${String.fromCharCode(65 + r)}${c + 1}`;
 
@@ -58,7 +59,7 @@ const PlateNode = TT.Node.create({
     const body = [...Array(rows)].map((_, r) => ['tr', {}, ['th', {}, String.fromCharCode(65 + r)], ...[...Array(cols)].map((_, c) => {
       const w = wellName(r, c), i = a.wells?.[w], s = i != null ? a.samples[i] : null, v = a.values?.[w], rg = plateRange(a);
       if (v != null && rg) { const h = heat(v, ...rg); return ['td', {style: `background:${h.bg};color:${h.fg}`}, Calc.fmt(v)]; }
-      return ['td', s ? {style: `background:${s.color};color:#fff`} : {}, s ? s.name.slice(0, 4) : ''];
+      return ['td', s ? {style: `background:${plateCol(s.color)};color:#fff`} : {}, s ? s.name.slice(0, 4) : ''];
     })]);
     return ['div', {'data-plate': JSON.stringify(a), class: 'plate-print'}, ['p', {}, `Platte ${a.format}${a.title ? ' – ' + a.title : ''}: ${plateSummary(a)}${plateStats(a) ? ` · Messwerte${a.vlabel ? ' ' + a.vlabel : ''}: ${plateStats(a)}` : ''}`],
       ['table', {class: 'platetab'}, head, ...body]];
@@ -79,8 +80,8 @@ const PlateNode = TT.Node.create({
         <div class="pbody"><table class="pgrid f${a.format}"><tr><th></th>${[...Array(cols)].map((_, c) => `<th>${c + 1}</th>`).join('')}</tr>
           ${[...Array(rows)].map((_, r) => `<tr><th>${String.fromCharCode(65 + r)}</th>${[...Array(cols)].map((_, c) => { const w = wellName(r, c), i = a.wells[w];
             const v = a.values?.[w], h = a.view == 'values' && v != null ? heat(v, ...plateRange(a)) : null;
-            return `<td data-well="${w}" title="${w}${i != null ? ': ' + esc(a.samples[i]?.name) : ''}${v != null ? ` · ${Calc.fmt(v)}` : ''}" style="${h ? `background:${h.bg};color:${h.fg}` : i != null ? `background:${a.samples[i]?.color}` : ''}">${h && a.format == 96 ? `<span class="pv">${Calc.fmt(v)}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table>
-        <div class="plegend">${a.samples.map((s, i) => `<div class="ps ${i == sel && !ro ? 'on' : ''}" data-psel="${i}"><span class="sw" style="background:${s.color}"></span>
+            return `<td data-well="${w}" title="${w}${i != null ? ': ' + esc(a.samples[i]?.name) : ''}${v != null ? ` · ${Calc.fmt(v)}` : ''}" style="${h ? `background:${h.bg};color:${h.fg}` : i != null ? `background:${plateCol(a.samples[i]?.color)}` : ''}">${h && a.format == 96 ? `<span class="pv">${Calc.fmt(v)}</span>` : ''}</td>`; }).join('')}</tr>`).join('')}</table>
+        <div class="plegend">${a.samples.map((s, i) => `<div class="ps ${i == sel && !ro ? 'on' : ''}" data-psel="${i}"><span class="sw" style="background:${plateCol(s.color)}"></span>
             ${ro ? `<span>${esc(s.name)}</span>` : `<input data-pname="${i}" value="${esc(s.name)}">`}<small>${counts[i]}</small>${ro ? '' : `<button class="x" data-pdel="${i}" title="Probe entfernen">×</button>`}</div>`).join('')}
           ${ro ? '' : `<div class="ps ${sel == -1 ? 'on' : ''}" data-psel="-1"><span class="sw erase"></span>Radiergummi</div><button class="btn" data-padd>+ Probe</button>`}
           <p class="sub">${ro ? '' : 'Probe wählen, dann Wells anklicken oder darüber ziehen.'}</p></div></div>
@@ -92,7 +93,7 @@ const PlateNode = TT.Node.create({
       if (mode == 'erase' || sel == -1) delete wells[w]; else wells[w] = sel;
       cur = cur.type.create({...cur.attrs, wells});  // sofort zeigen, übernommen wird beim Loslassen
       const td = dom.querySelector(`[data-well="${w}"]`), s = cur.attrs.samples[wells[w]];
-      if (td) td.style.background = s ? s.color : '';
+      if (td) td.style.background = s ? plateCol(s.color) : '';
     };
     dom.addEventListener('mousedown', e => {
       const w = e.target.dataset?.well;

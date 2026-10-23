@@ -662,12 +662,15 @@ async function perfTest() {
   out.push(`Revision sichern: ${(t() - t0).toFixed(0)} ms`);
   window.perfResult = out;
   console.log(out.join('\n'));
-  alert('Leistungstest\n\n' + out.join('\n'));
+  if (!window.TESTING) alert('Leistungstest\n\n' + out.join('\n'));  // im automatischen Lauf würde die Meldung ewig warten
 }
 
 // ---------- Selbsttest in der echten App (--selftest) ----------
 async function selfTest() {
   window.TESTING = true;  // externe Links nicht wirklich öffnen
+  const jsErrors = [];  // jeder unbehandelte Fehler während des Laufs zählt als Fehlschlag, auch wenn die Prüfung selbst grün ist
+  const onErr = e => jsErrors.push(String(e.error?.stack || e.message || e.reason?.stack || e.reason));
+  window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onErr);
   const out = [], sleep = ms => new Promise(r => setTimeout(r, ms));
   const ok = (c, what) => { const l = `${c ? 'ok  ' : 'FAIL'} ${what}`; out.push(l); call('testProgress', {line: l}).catch(() => {}); };
   const a = await call('create', {title: 'Selbsttest Ziel'}), b = await call('create', {title: 'Selbsttest Quelle'});
@@ -791,7 +794,7 @@ async function selfTest() {
   const elnPath = `${ex.path}/${files.find(f => f.endsWith('.eln')).split('/').pop()}`;
   const reIds = await importFiles([elnPath]);
   ok(reIds.length == before, `Re-Import der .eln: ${reIds.length} von ${before} Einträgen`);
-  const origTitles = bookJson.entries.map(e => e.title).sort().join('|');
+  const origTitles = bookJson.entries.map(e => e.title || 'Ohne Titel').sort().join('|');  // .eln braucht einen Namen, leere Titel kommen so zurück
   const reTitles = (await Promise.all(reIds.map(id => call('load', {id})))).map(e => e.title).sort().join('|');
   const reImgs = (await Promise.all(reIds.map(id => call('load', {id})))).flatMap(e => [...(e.draft_json || '').matchAll(/lab:\/\/files\/([0-9a-f]{64})/g)].map(m => m[1]));
   const imgOk = reImgs.length && (await Promise.all(reImgs.map(sh => fetch(`/files/${sh}`).then(r => r.ok)))).every(Boolean);
@@ -1555,7 +1558,9 @@ async function selfTest() {
   ok(!$('#savedsec').hidden && LISTF.status == 'fehlgeschlagen' && document.querySelectorAll('#list li').length == 1, 'Gespeicherte Suche stellt den Filter wieder her');
   Object.assign(LISTF, {status: '', sort: 'title'}); await refreshList();
   const titles = [...document.querySelectorAll('#list li')].filter(l => !/📌/.test(l.textContent)).map(l => l.querySelector('.t').textContent.trim());
-  ok(titles.length > 3 && titles.every((t, i) => !i || titles[i - 1].localeCompare(t, 'de', {numeric: true}) <= 0), 'Sortieren nach Titel');
+  let cut = titles.length; while (cut && titles[cut - 1] == 'Ohne Titel') cut--;  // leere Titel stehen am Ende (ein importierter Eintrag kann wörtlich „Ohne Titel“ heißen)
+  const named = titles.slice(0, cut);
+  ok(named.length > 3 && named.every((t, i) => !i || named[i - 1].localeCompare(t, 'de', {numeric: true}) <= 0), 'Sortieren nach Titel (ohne Titel am Ende)');
   LISTF.sort = 'updated'; await refreshList();
   await open(useEntry); await sleep(150);
   const lotBefore = (await call('lot', {id: lotA.id})).amount;
@@ -1637,6 +1642,9 @@ async function selfTest() {
   ok(newPl && newAnn.length == expLen && newAnn.circular && newAnn.features.some(f => f.label == 'gfp') && /Rückgrat/.test(outTxt) && !$('#reg').hidden,
     `Klonierung EcoRI/HindIII: neues Plasmid ${newAnn?.length} bp mit übernommenem gfp-Feature`);
   showView('doc');
+  await sleep(300);
+  window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onErr);
+  ok(!jsErrors.length, `keine unbehandelten JS-Fehler${jsErrors.length ? ': ' + jsErrors.slice(0, 5).join(' | ') : ''}`);
   return out;
 }
 

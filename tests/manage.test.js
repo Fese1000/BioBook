@@ -44,6 +44,7 @@ test('Filtern und sortieren; Angeheftetes zuerst', () => {
   assert.deepEqual(M.filterSort(rows).map(r => r.id), [2, 3, 1]);  // angeheftet zuerst, dann zuletzt geändert
   assert.deepEqual(M.filterSort(rows, {status: 'fehlgeschlagen'}).map(r => r.id), [3]);
   assert.deepEqual(M.filterSort(rows, {status: '—'}).map(r => r.id), [2]);
+  assert.deepEqual(M.filterSort([{id: 1, title: '', updated: 'a'}, {id: 2, title: 'Probe 10', updated: 'a'}, {id: 3, title: 'Probe 9', updated: 'a'}], {sort: 'title'}).map(r => r.id), [3, 2, 1]);  // ohne Titel ans Ende
   assert.deepEqual(M.filterSort(rows, {kind: 'experiment', sort: 'title'}).map(r => r.id), [1, 3]);
   assert.deepEqual(M.filterSort(rows, {from: '2026-09-15', to: '2026-09-30'}).map(r => r.id), [1]);
   assert.deepEqual(M.filterSort(rows, {to: '2026-06-30'}).map(r => r.id), [3]);

@@ -261,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard !testStarted, w === docs.first?.web else { return }  // nur einmal, nur im ersten Fenster
         if CommandLine.arguments.contains("--updatetest") { testStarted = true; return runUpdateTest() }
         let args = CommandLine.arguments
-        let js = args.contains("--perftest") ? "await app.perfTest(); return window.perfResult.join('\\n')"
+        let js = args.contains("--perftest") ? "window.TESTING = true; await app.perfTest(); return window.perfResult.join('\\n')"
             : args.contains("--selftest") ? "await new Promise(r => setTimeout(r, 300)); return (await app.selfTest()).join('\\n')" : nil
         guard let js else { return }
         testStarted = true

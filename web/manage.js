@@ -69,7 +69,7 @@
     const keep = rows.filter(r => (!kind || r.kind == kind) && (!status || (status == '—' ? !r.status : r.status == status))
       && (!from || day(r) >= from) && (!to || dayFrom(r) <= to));
     const cmp = {updated: (a, b) => b.updated.localeCompare(a.updated), created: (a, b) => (b.created || '').localeCompare(a.created || ''),
-      title: (a, b) => (a.title || '').localeCompare(b.title || '', 'de', {numeric: true}), opened: (a, b) => (b.opened || '').localeCompare(a.opened || ''),
+      title: (a, b) => !a.title - !b.title || (a.title || '').localeCompare(b.title || '', 'de', {numeric: true}),  // ohne Titel ans Ende opened: (a, b) => (b.opened || '').localeCompare(a.opened || ''),
       days: (a, b) => (b.day_last || '').localeCompare(a.day_last || '')}[sort] || (() => 0);
     return keep.sort((a, b) => (b.pinned || 0) - (a.pinned || 0) || cmp(a, b));
   }
