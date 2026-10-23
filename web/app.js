@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, ExtNode, DbLinks, DueDates,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode, SequenceNode, ChartNode, CiteNode, ChemNode, ExtNode, DayNode, DbLinks, DueDates,
   ];
 }
 
@@ -179,7 +179,7 @@ function collectRefs(doc) {
     (n.content || []).forEach(walk);
   };
   walk(doc);
-  return {links: [...links], files: [...files], entities: [...entities], results: collectResults(doc), tasks: collectTasks(doc)};
+  return {links: [...links], files: [...files], entities: [...entities], results: collectResults(doc), tasks: collectTasks(doc), days: Days.daysOf(doc)};
 }
 
 /// Verweis-Beschriftungen auf die aktuellen Titel bringen (Titel können sich geändert haben)
@@ -200,6 +200,8 @@ const TOOLS = [
   ['B', 'Fett', e => e.chain().focus().toggleBold().run(), e => e.isActive('bold')],
   ['I', 'Kursiv', e => e.chain().focus().toggleItalic().run(), e => e.isActive('italic')],
   ['S', 'Durchgestrichen', e => e.chain().focus().toggleStrike().run(), e => e.isActive('strike')],
+  ['|'],
+  ['📅 Heute', 'Tagesabschnitt für heute anlegen oder hinspringen (⇧⌘D)', () => addToday()],
   ['|'],
   ['H1', 'Überschrift 1', e => e.chain().focus().toggleHeading({level: 1}).run(), e => e.isActive('heading', {level: 1})],
   ['H2', 'Überschrift 2', e => e.chain().focus().toggleHeading({level: 2}).run(), e => e.isActive('heading', {level: 2})],
@@ -402,7 +404,7 @@ async function refreshList(selectId) {
   if (q && tag != null) { const n = tags.find(t => t.id == tag)?.name.toLowerCase(); rows = rows.filter(r => (r.tags || '').toLowerCase().split(', ').includes(n)); }
   $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''}">
     <div class="t">${esc(r.title || 'Ohne Titel')}</div>
-    <div class="m">${KINDS[r.kind] || ''} · ${when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
+    <div class="m">${KINDS[r.kind] || ''} · ${r.day_first ? `📅 ${Days.rangeLabel(r.day_first, r.day_last)}` : when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
     ${r.tags ? `<div class="m">${r.tags.split(', ').map(t => '#' + esc(t)).join(' ')}</div>` : ''}
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
   $('#listTitle').textContent = [project == null ? 'Einträge' : project == 'trash' ? 'Papierkorb' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
@@ -418,8 +420,8 @@ async function showBacklinks() {
   refreshDbRefs(); refreshCiteBox();
 }
 
-async function open(id) {
-  if (cur == id && !preview) return;
+async function open(id, {find} = {}) {
+  if (cur == id && !preview) { if (find) jumpToText(find); return; }
   await flush();
   if (cur && changedSinceSnap) await snapshot(true);
   const e = await call('load', {id});
@@ -448,6 +450,7 @@ async function open(id) {
   checkLinks();
   if (!$('#history').hidden) showHistory();
   updateRunBar();
+  if (find && jumpToText(find)) return;
   if (!e.title) $('#title').focus(); else editor.commands.focus('start');
 }
 
@@ -1409,6 +1412,37 @@ async function selfTest() {
   await call('setExtensionEnabled', {file: 'Zellzahl.js', enabled: true}); await loadExtensions();
   await call('testSnapshot', {name: 'm24-erweiterung.png'}).catch(() => {});
   showView('doc');
+
+  // M25: Laufendes Laborbuch mit Tagesabschnitten
+  const tday25 = Days.iso(new Date());
+  const para = t => ({type: 'paragraph', content: [{type: 'text', text: t}]});
+  const lbId = await call('create', {title: 'Nanoreactor Lab Book'}); await refreshList(lbId);
+  editor.commands.setContent({type: 'doc', content: [{type: 'day', attrs: {date: '2026-06-30'}, content: [para('Oligo annealing nach Protokoll')]},
+    {type: 'day', attrs: {date: '2026-07-01'}, content: [para('Trafo E. coli')]}, {type: 'day', attrs: {date: '2026-10-15'}, content: [para('Golden Gate Ligation, Kolonie Zebrafink')]}]});
+  changed(); await flush(); await sleep(100);
+  const dayHeads = [...document.querySelectorAll('#editor section.day .daylabel')].map(x => x.textContent);
+  ok(dayHeads.length == 3 && dayHeads[0] == '📅 Dienstag, 30.6.2026', `Tagesabschnitte im Eintrag (${dayHeads[0]})`);
+  addToday(); await sleep(50); addToday(); await sleep(50);
+  const dates = editor.getJSON().content.filter(n => n.type == 'day').map(n => n.attrs.date);
+  const $sel = editor.state.selection.$from; let inToday = false;
+  for (let d = $sel.depth; d > 0; d--) if ($sel.node(d).type.name == 'day' && $sel.node(d).attrs.date == tday25) inToday = true;
+  ok(dates.length == 4 && dates[3] == tday25 && inToday, '„+ Heute“ legt den Tag einmal an und setzt den Cursor hinein');
+  editor.commands.insertContent('heute: Midi-Präp'); changed(); await flush(); await refreshList();
+  const lbLi = document.querySelector(`#list li[data-id="${lbId}"] .m`)?.textContent || '';
+  ok(lbLi.includes(`📅 ${Days.rangeLabel('2026-06-30', tday25)}`), `Liste zeigt den Zeitraum (${Days.rangeLabel('2026-06-30', tday25)})`);
+  const third = document.querySelectorAll('#editor section.day')[2];
+  third.querySelector('.dayhead').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+  ok(third.classList.contains('collapsed') && getComputedStyle(third.querySelector('.daybody')).display == 'none', 'Tag lässt sich einklappen');
+  await open(signedOne.id); await sleep(100);
+  $('#search').value = 'Zebrafink'; await refreshList(); await sleep(100);
+  document.querySelector(`#list li[data-id="${lbId}"]`).click(); await sleep(400);
+  const selTxt = editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
+  ok(cur == lbId && selTxt.toLowerCase() == 'zebrafink' && !document.querySelectorAll('#editor section.day')[2].classList.contains('collapsed'), 'Suchtreffer im dritten Tag wird angesprungen (Tag klappt auf)');
+  $('#search').value = ''; await refreshList();
+  const lbHTML = editor.getHTML(), lbMD = MD.toMarkdown(editor.getJSON(), {dayLabel: Days.dayLabel});
+  ok(lbHTML.includes('<section data-day="2026-06-30" class="day"><h3 class="dayhead">Dienstag, 30.6.2026</h3>') && lbMD.includes('## Mittwoch, 1.7.2026\n\nTrafo E. coli'), 'Tage im PDF/HTML und im Markdown-Export');
+  await call('testSnapshot', {name: 'm25-tage.png'}).catch(() => {});
+  showView('doc');
   return out;
 }
 
@@ -1422,7 +1456,8 @@ $('#list').addEventListener('click', e => {
   if (e.target.dataset.emptytrash !== undefined) return emptyTrash();
   const li = e.target.closest('li'); if (!li || !li.dataset.id) return;
   if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; }
-  if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id);  // ⌘-Klick: in neuem Tab
+  const q = $('#search').value.trim().replace(/["*()]/g, ' ').split(/\s+/).find(w => w.length >= 3);  // bei Suche: zum Treffer springen
+  if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id, {find: q});  // ⌘-Klick: in neuem Tab
 });
 $('#new').onclick = newEntry;
 let searchTimer;

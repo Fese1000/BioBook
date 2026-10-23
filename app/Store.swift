@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 15
+    static let schemaVersion = 16
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -263,6 +263,10 @@ final class Store {
                     try query("UPDATE rtype SET fields_json = ? WHERE id = ?", [String(data: try JSONSerialization.data(withJSONObject: f), encoding: .utf8)!, t["id"]])
                 }
             }
+            if v < 16 {
+                // Laufendes Laborbuch: Zeitraum der Tagesabschnitte (für die Liste)
+                try exec("ALTER TABLE entry ADD COLUMN day_first TEXT; ALTER TABLE entry ADD COLUMN day_last TEXT;")
+            }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
     }
@@ -375,7 +379,7 @@ final class Store {
         if let p = project { if p == 0 { conds.append("e.project_id IS NULL") } else { conds.append("e.project_id = ?"); args.append(p) } }
         if let t = tag { conds.append("e.id IN (SELECT entry_id FROM entry_tag WHERE tag_id = ?)"); args.append(t) }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions,
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, e.day_first, e.day_last, (SELECT COUNT(*) FROM revision r WHERE r.entry_id = e.id) AS revisions,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM entry e \(conds.isEmpty ? "" : "WHERE " + conds.joined(separator: " AND ")) ORDER BY e.updated DESC
         """, args)
@@ -555,12 +559,13 @@ final class Store {
 
     /// Arbeitsstand speichern (wird beim Tippen laufend überschrieben). Unveränderliche Revisionen entstehen erst mit snapshot().
     /// links/files: Verweise und Dateien, die im Text vorkommen (vom Editor ermittelt); Unbekanntes wird ignoriert.
-    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = [], results: [[String: Any]] = [], tasks: [[String: Any]] = []) throws -> [String: Any] {
+    func saveDraft(id: Int, title: String, json: String, text: String, links: [Int] = [], files: [String] = [], entities: [Int] = [], results: [[String: Any]] = [], tasks: [[String: Any]] = [], days: [String] = []) throws -> [String: Any] {
         if try isTrashed(id) { throw StoreError.invalid("Der Eintrag liegt im Papierkorb. Erst wiederherstellen.") }
         if try isSigned(id) { throw StoreError.invalid("Der Eintrag ist abgeschlossen und signiert. Änderungen bitte als Nachtrag.") }
         let t = Store.now()
         try transaction {
-            try query("UPDATE entry SET title = ?, draft_json = ?, draft_text = ?, updated = ? WHERE id = ?", [title, json, text, t, id])
+            let d = days.filter { $0.range(of: "^\\d{4}-\\d{2}-\\d{2}$", options: .regularExpression) != nil }.sorted()
+            try query("UPDATE entry SET title = ?, draft_json = ?, draft_text = ?, updated = ?, day_first = ?, day_last = ? WHERE id = ?", [title, json, text, t, d.first, d.last, id])
             try query("UPDATE search SET title = ?, body = ? WHERE rowid = ?", [title, text, id])
             try query("DELETE FROM link WHERE from_entry = ?", [id])
             for to in Set(links) where to != id {
@@ -817,7 +822,7 @@ final class Store {
         let terms = q.split(whereSeparator: { $0.isWhitespace }).map { "\"\($0.replacingOccurrences(of: "\"", with: ""))\"*" }
         if terms.isEmpty { return [] }
         return try query("""
-        SELECT e.id, e.title, e.updated, e.kind, e.project_id, snippet(search, -1, '[', ']', '…', 12) AS snippet,
+        SELECT e.id, e.title, e.updated, e.kind, e.project_id, e.day_first, e.day_last, snippet(search, -1, '[', ']', '…', 12) AS snippet,
           (SELECT group_concat(name, ', ') FROM (SELECT t.name FROM entry_tag et JOIN tag t ON t.id = et.tag_id WHERE et.entry_id = e.id ORDER BY t.name COLLATE NOCASE)) AS tags
         FROM search JOIN entry e ON e.id = search.rowid WHERE search MATCH ? AND e.deleted IS NULL ORDER BY rank LIMIT 50
         """, [terms.joined(separator: " ")])

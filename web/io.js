@@ -64,7 +64,7 @@ async function exportBook() {
       `erstellt: ${e.created}`, `geaendert: ${e.updated}`, `revisionen: ${e.revisions}`, e.last_hash && `letzter_hash: ${e.last_hash}`,
       sig && `signiert: ${JSON.stringify(`${sig.name}, ${sig.signed_at}, Revision ${sig.rev_no}`)}`, '---', ''].filter(Boolean).join('\n');
     const md = MD.toMarkdown(json, {file: (sha, name) => att.has(sha) ? '../' + fileName(att.get(sha)) : name,
-      entry: id => byId.has(+id) ? `${base(byId.get(+id)).split('/')[1]}.md` : '#', calc: (k, data) => calcSummary(k, data).text});
+      entry: id => byId.has(+id) ? `${base(byId.get(+id)).split('/')[1]}.md` : '#', calc: (k, data) => calcSummary(k, data).text, dayLabel: Days.dayLabel});
     texts.push({path: base(e) + '.md', text: `${front}\n# ${e.title || 'Ohne Titel'}\n\n${md}`});
   }
 

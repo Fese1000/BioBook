@@ -490,6 +490,13 @@ _ = try s.saveDraft(id: autoId, title: "Notiz aus Safari", json: "{\"type\":\"do
 try s.appendText(entry: autoId, text: "noch etwas")
 check(try (try s.backlinks(id: linkTarget)).contains { $0["id"] as? Int == autoId }, "Anhängen lässt Verweise des Eintrags bestehen")
 
+// M25: Zeitraum der Tagesabschnitte
+let lab = try s.create(title: "Nanoreactor Lab Book")
+_ = try s.saveDraft(id: lab, title: "Nanoreactor Lab Book", json: "{}", text: "Golden Gate", days: ["2026-10-15", "2026-06-30", "kaputt", "2026-07-01"])
+let labRow = try s.list().first { $0["id"] as? Int == lab }!
+check(try labRow["day_first"] as? String == "2026-06-30" && labRow["day_last"] as? String == "2026-10-15", "Zeitraum aus den Tagen (ungültige ignoriert)")
+check(try (try s.search("Golden")).first { $0["id"] as? Int == lab }?["day_last"] as? String == "2026-10-15", "Suche liefert den Zeitraum mit")
+
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
 var t = Date()

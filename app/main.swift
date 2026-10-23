@@ -736,7 +736,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let id = try int("id")
                 replyHandler(try s.saveDraft(id: id, title: try str("title"), json: try str("json"), text: try str("text"),
                                              links: a["links"] as? [Int] ?? [], files: a["files"] as? [String] ?? [], entities: a["entities"] as? [Int] ?? [],
-                                             results: a["results"] as? [[String: Any]] ?? [], tasks: a["tasks"] as? [[String: Any]] ?? []), nil)
+                                             results: a["results"] as? [[String: Any]] ?? [], tasks: a["tasks"] as? [[String: Any]] ?? [], days: a["days"] as? [String] ?? []), nil)
                 broadcast(except: m.webView, "app.externalChange && app.externalChange(\(id))")
                 if !testMode { Spotlight.update(s, id: id) }
                 scheduleQuickLook()

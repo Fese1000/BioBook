@@ -14,6 +14,7 @@
     const inline = nodes => (nodes || []).map(n => {
       if (n.type == 'hardBreak') return '  \n';
       if (n.type == 'mention') return `[${n.attrs.label}](${entry(n.attrs.id, n.attrs.label)})`;
+      if (n.type == 'cite') return `(${n.attrs.short})`;
       if (n.type != 'text') return '';
       let t = n.text.replace(/([\\`*_[\]#<>|])/g, '\\$1');
       for (const m of n.marks || []) {
@@ -60,6 +61,7 @@
         case 'file': return `📎 [${n.attrs.name}](${n.attrs.link ? 'file://' + encodeURI(n.attrs.path) : file(n.attrs.sha, n.attrs.name, n.attrs.mime)})`
           + (n.attrs.link ? ` (verlinkt, SHA-256 ${n.attrs.sha})` : '');
         case 'calc': return '> 🧮 ' + calc(n.attrs.kind, n.attrs.data);
+        case 'day': return [`## ${ctx.dayLabel ? ctx.dayLabel(n.attrs.date) : n.attrs.date}`, ...(n.content || []).map(c => block(c, indent))].join('\n\n');
         default: return (n.content || []).map(c => block(c, indent)).join('\n\n');
       }
     }
