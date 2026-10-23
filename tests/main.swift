@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -272,6 +272,49 @@ sqlite3_finalize(stmt)
 check(sqlite3_exec(pdb, "DELETE FROM revision WHERE entry_id = \(id)", nil, nil, nil) != SQLITE_OK, "Revisionen nicht gelöschter Einträge bleiben geschützt")
 sqlite3_close(pdb)
 check(((try s.verify(id: id))["count"] as? Int ?? 0) > 0, "Andere Einträge behalten ihre Revisionen")
+
+// M9: Bestand
+let room = try s.saveLocation(id: nil, parent: nil, name: "Labor 2.14", kind: "raum", rows: nil, cols: nil, temp: "")
+let freezer = try s.saveLocation(id: nil, parent: room, name: "Gefrierschrank −20", kind: "geraet", rows: nil, cols: nil, temp: "−20 °C")
+let box = try s.saveLocation(id: nil, parent: freezer, name: "Box Enzyme", kind: "box", rows: 9, cols: 9, temp: "")
+check(try s.locationPath(box) == "Labor 2.14 › Gefrierschrank −20 › Box Enzyme", "Standort-Pfad")
+check((try? s.saveLocation(id: room, parent: box, name: "Labor", kind: "raum", rows: nil, cols: nil, temp: "")) == nil, "Keine Schleife im Standort-Baum")
+check((try? s.saveLocation(id: nil, parent: nil, name: "Box", kind: "box", rows: 0, cols: 9, temp: "")) == nil, "Box braucht ein gültiges Raster")
+let chType = (try s.types()).first { $0["prefix"] as? String == "CH" }!["id"] as! Int
+let taqE = try s.createEntity(typeId: chType, name: "Taq-Polymerase", values: [:], author: "")
+let taq = try s.saveLot(id: nil, values: ["entity": taqE["id"]!, "name": "Taq 5 U/µl", "lot_no": "L123", "amount": "500", "unit": "µl", "min": "100",
+                                          "expiry": "2099-12-31", "location": box, "position": "a3", "ghs": ["GHS07", "XYZ"], "sds": "https://example.org/sds.pdf"], author: "Felix")
+let taqId = taq["id"] as! Int
+check(taq["code"] as? String == Store.lotCode(taqId) && taq["position"] as? String == "A3" && taq["ghs"] as? String == "GHS07", "Charge angelegt, Position und GHS bereinigt")
+check((taq["moves"] as! [[String: Any]]).first?["kind"] as? String == "anlegen", "Anlegen ist die erste Bewegung")
+check((try? s.saveLot(id: nil, values: ["name": "Andere", "amount": "1", "unit": "ml", "location": box, "position": "A3"], author: "")) == nil, "Belegte Position abgelehnt")
+check((try? s.saveLot(id: nil, values: ["name": "X", "amount": "1", "unit": "ml", "location": box, "position": "K1"], author: "")) == nil, "Position außerhalb der Box abgelehnt")
+check((try? s.saveLot(id: nil, values: ["name": "X", "amount": "1", "unit": "ml", "location": freezer, "position": "A1"], author: "")) == nil, "Position nur in Boxen")
+let used = try s.moveLot(id: taqId, delta: -2, kind: "verbrauch", entry: usingEntry, note: "PCR", author: "Felix")
+check(used["amount"] as? Double == 498, "Verbrauch: 500 − 2 = 498 µl")
+check((try? s.moveLot(id: taqId, delta: -1000, kind: "verbrauch", entry: nil, note: "", author: "")) == nil, "Nicht mehr verbrauchen als vorhanden")
+check((try? s.moveLot(id: taqId, delta: 2, kind: "verbrauch", entry: nil, note: "", author: "")) == nil, "Verbrauch muss positiv angegeben sein")
+_ = try s.moveLot(id: taqId, delta: 2, kind: "storno", entry: usingEntry, note: "Storno", author: "Felix")
+check((try s.lot(id: taqId))["amount"] as? Double == 500, "Storno bucht zurück")
+_ = try s.moveLot(id: taqId, delta: -450, kind: "verbrauch", entry: nil, note: "", author: "")
+check(((try s.lot(id: taqId))["warnings"] as! [String]) == ["low"], "Unter Mindestbestand: Warnung")
+check((try s.lots(filter: "warnings")).contains { $0["id"] as? Int == taqId }, "Warnungsliste enthält die Charge")
+let oldLot = try s.saveLot(id: nil, values: ["name": "Alter Puffer", "amount": "100", "unit": "ml", "expiry": "2020-01-01"], author: "")
+check((oldLot["warnings"] as! [String]) == ["expired"], "Abgelaufene Charge wird gemeldet")
+let soonDate = Store.isoDay(Date().addingTimeInterval(10 * 86400))
+check(((try s.saveLot(id: nil, values: ["name": "Bald", "amount": "1", "unit": "g", "expiry": soonDate], author: ""))["warnings"] as! [String]) == ["soon"], "Bald ablaufend wird gemeldet")
+_ = try s.moveLot(id: taqId, delta: -50, kind: "verbrauch", entry: nil, note: "", author: "")
+check((try s.lot(id: taqId))["status"] as? String == "empty", "Leer verbraucht: Status leer")
+_ = try s.moveLot(id: oldLot["id"] as! Int, delta: 0, kind: "entsorgen", entry: nil, note: "abgelaufen", author: "")
+let gone = try s.lot(id: oldLot["id"] as! Int)
+let activeLots = try s.lots()
+check(gone["status"] as? String == "disposed" && gone["amount"] as? Double == 0 && !activeLots.contains { $0["id"] as? Int == oldLot["id"] as? Int }, "Entsorgt: Menge 0, nicht mehr in der Liste")
+check((try s.lots(filter: "entity:\(taqE["id"]!)")).count == 1, "Chargen eines Registry-Objekts")
+check((try s.lots(q: "L123")).count == 1, "Suche nach Chargennummer")
+var sdb2: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &sdb2)
+check(sqlite3_exec(sdb2, "UPDATE lot_move SET delta = 0", nil, nil, nil) != SQLITE_OK, "Bewegungen sind unveränderlich")
+sqlite3_close(sdb2)
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]

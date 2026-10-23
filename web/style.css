@@ -206,3 +206,34 @@ dialog#typedlg input,dialog#typedlg select{font:13px -apple-system,system-ui;col
 .btn.danger{border-color:#c0392b;color:#c0392b}.btn.danger:hover{background:#c0392b;color:#fff}
 #list li.trashhead{cursor:default;padding:4px 10px 8px}#list li.trashhead:hover{background:none}
 #trashBtn{padding:4px 8px}
+/* Bestand */
+#stockNav{list-style:none;margin:0;padding:0 6px 6px}
+#stockNav li{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:6px;cursor:pointer}
+#stockNav li:hover{background:var(--sel)}#stockNav li.cur{background:var(--acc);color:var(--accfg)}#stockNav .n{flex:1}
+.badge{background:#c0392b;color:#fff;border-radius:9px;font:600 11px/18px -apple-system,system-ui;padding:0 6px}
+#stock{flex:1;overflow:auto;padding:22px 32px 60px}
+.stabs{display:flex;gap:4px}
+#lotq{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit;width:200px}
+.wbadge{display:inline-block;border-radius:9px;padding:0 7px;font:600 11px/18px -apple-system,system-ui;white-space:nowrap}
+.wbadge.bad{background:#c0392b;color:#fff}.wbadge.warn{background:#e6a23c;color:#2b1d00}.wbadge.mut{background:var(--line);color:var(--ink)}
+.ghs{display:inline-block;border:1.5px solid #c0392b;color:#c0392b;border-radius:4px;padding:0 5px;margin:2px 3px 2px 0;font-size:11.5px;white-space:nowrap}
+.ghsgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:3px 10px;font-size:12.5px}
+.amtbig{font:600 20px var(--mono);color:var(--acc)}
+.lotbtns{display:flex;flex-wrap:wrap;gap:6px}
+.locwrap{display:grid;grid-template-columns:300px 1fr;gap:24px}
+.loctree{list-style:none;margin:0;padding:0;font-size:13px}
+.loctree li{display:flex;align-items:center;gap:6px;padding:4px 8px 4px calc(8px + var(--d,0) * 16px);border-radius:6px;cursor:pointer}
+.loctree li:hover{background:var(--sel)}.loctree li.cur{background:var(--acc);color:var(--accfg)}.loctree .n{flex:1}.loctree .c{opacity:.7;font-size:11.5px}
+.loctree .x{visibility:hidden;border:0;background:none;color:inherit;cursor:pointer}.loctree li:hover .x{visibility:visible}
+.locview h3{margin:0 0 10px;font:600 15px var(--serif)}
+.boxgrid{border-collapse:collapse;font-size:11px;table-layout:fixed}
+.boxgrid th{color:var(--mut);font-weight:600;padding:2px 4px;text-align:center}
+.boxgrid td{width:58px;height:34px;border:1px solid var(--line);text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:2px;cursor:pointer}
+.boxgrid td.free:hover{background:var(--sel)}.boxgrid td.full{background:var(--sel);font-weight:600}.boxgrid td.full.w{background:#f3d3a1;color:#2b1d00}
+.locrow{padding:5px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}.locrow:hover{color:var(--acc)}
+.usage{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);border-left:3px solid #e6a23c;border-radius:8px;margin:10px 0;padding:8px 12px;background:var(--side);font-size:13px}
+.usage .ui{font-weight:600}.usage select,.usage input{font:13px -apple-system,system-ui;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:3px 6px;max-width:340px}
+.usage.ProseMirror-selectednode{outline:3px solid var(--acc)}
+dialog#locdlg{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);padding:18px 22px;width:520px;box-shadow:0 16px 48px rgba(0,0,0,.25)}
+dialog#locdlg::backdrop{background:rgba(0,0,0,.25)}dialog#locdlg h3{margin:0 0 12px;font:600 17px var(--serif)}
+@media(max-width:1000px){.locwrap{grid-template-columns:1fr}}

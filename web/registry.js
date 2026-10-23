@@ -22,6 +22,8 @@ async function loadTypes() {
 
 function showView(v) {
   $('#reg').hidden = v != 'reg';
+  $('#stock').hidden = v != 'stock';
+  if (v != 'stock') document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
   $('#doc').hidden = v != 'doc' || !cur;
   $('#empty').hidden = v != 'doc' || !!cur;
   $('#status').hidden = v != 'doc';
@@ -86,9 +88,11 @@ async function showEntity(id) {
       ${fields.map(f => `<label class="rf"><span>${esc(f.label)}</span><div>${input(f)}</div></label>`).join('')}
       <div class="rfbtns"><span id="entmsg" class="sub"></span><button class="btn on" type="submit">${e ? 'Speichern' : 'Anlegen'}</button></div></form>
       ${e ? `<aside class="regside"><h4>Verwendet in</h4>${e.used_in.length ? e.used_in.map(u => `<a href="#" class="elink" data-entry="${u.id}">↗ ${esc(u.title || 'Ohne Titel')}</a>`).join('<br>') : '<span class="sub">noch in keinem Eintrag (mit @ verweisen)</span>'}
+        <h4>Bestand</h4><div id="entLots" data-entity="${e.id}"><span class="sub">…</span></div>
         <h4>Verlauf</h4><ol class="reghist">${hist.map((h, i) => `<li>${when(h.changed)}${h.author ? ` · ${esc(h.author)}` : ''}<br><span class="sub">${esc(diff(h, hist[i + 1]))}</span></li>`).join('')}</ol></aside>` : ''}
     </div>`;
   if (!e) $('#entform [data-name]').focus();
+  else renderEntityLots(e.id);
 }
 
 async function saveEntityForm() {

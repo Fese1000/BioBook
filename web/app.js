@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode,
+    FileNode, EntryLink, CalcNode, UsageNode,
   ];
 }
 
@@ -217,6 +217,7 @@ const TOOLS = [
   ['↗ Verweis', 'Verweis auf einen Eintrag ([[)', e => e.chain().focus().insertContent('[[').run()],
   ['✎ Beschriften', 'Ausgewähltes Bild beschriften (oder Doppelklick aufs Bild)', () => annotateSelected(), null, e => e.isActive('image')],
   ['🔗 Rohdaten', 'Große Dateien verlinken statt kopieren (Prüfsumme meldet Änderungen)', () => linkRawFiles()],
+  ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
   ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
@@ -650,7 +651,8 @@ async function perfTest() {
 
 // ---------- Selbsttest in der echten App (--selftest) ----------
 async function selfTest() {
-  const out = [], ok = (c, what) => out.push(`${c ? 'ok  ' : 'FAIL'} ${what}`), sleep = ms => new Promise(r => setTimeout(r, ms));
+  const out = [], sleep = ms => new Promise(r => setTimeout(r, ms));
+  const ok = (c, what) => { const l = `${c ? 'ok  ' : 'FAIL'} ${what}`; out.push(l); call('testProgress', {line: l}).catch(() => {}); };
   const a = await call('create', {title: 'Selbsttest Ziel'}), b = await call('create', {title: 'Selbsttest Quelle'});
   await refreshList(b);
   const csv = 'Probe;Wert\nA1;42,7\nA2;38,1\n';
@@ -861,6 +863,38 @@ async function selfTest() {
   let refused = false; try { await call('trashEntry', {id: signedOne.id}); } catch { refused = true; }
   ok(signedOne && refused && (await call('list')).some(r => r.id == signedOne.id), 'Signierter Eintrag lässt sich nicht löschen');
   await selectProject('');
+
+  // M9: Bestand
+  const fr = await call('saveLocation', {name: 'Gefrierschrank −20', kind: 'geraet', temp: '−20 °C'});
+  const bx = await call('saveLocation', {name: 'Box Enzyme', kind: 'box', parent: fr, rows: 9, cols: 9});
+  const lotA = await call('saveLot', {values: {name: 'Taq-Polymerase', amount: '500', unit: 'µl', min: '100', location: bx, position: 'A3', lot_no: 'L77'}});
+  stockLoc = bx; await showStock('locations'); await renderLocations(); await sleep(100);
+  const cellA3 = document.querySelectorAll('.boxgrid tr')[1]?.children[3];
+  ok(cellA3?.dataset.lot == lotA.id, 'Charge liegt in Box A3 (Raster)');
+  showView('doc');
+  const useEntry = await call('create', {title: 'PCR mit Taq'}); await refreshList(useEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'usage', attrs: {lot: lotA.id}}, {type: 'paragraph'}]}); changed(); await flush(); await sleep(300);
+  const ub = document.querySelector('.usage');
+  ub.querySelector('[data-uamt]').value = '2';
+  ub.querySelector('[data-ubook]').click(); await sleep(400);
+  const afterUse = await call('lot', {id: lotA.id});
+  const uNode = editor.getJSON().content.find(n => n.type == 'usage');
+  ok(afterUse.amount == 498 && uNode.attrs.move && /verbucht/.test(document.querySelector('.usage').textContent), 'Verbrauch 2 µl verbucht: 500 → 498 µl');
+  ok(afterUse.moves[0].entry_id == useEntry, 'Bewegung verweist auf den Eintrag');
+  document.querySelector('.usage [data-ustorno]').click(); await sleep(400);
+  ok((await call('lot', {id: lotA.id})).amount == 500 && editor.getJSON().content.find(n => n.type == 'usage').attrs.canceled, 'Storno bucht zurück');
+  editor.commands.setContent({type: 'doc', content: [{type: 'usage', attrs: {lot: lotA.id}}, {type: 'paragraph'}]}); changed(); await flush(); await sleep(300);
+  const ub2 = document.querySelector('.usage');
+  ub2.querySelector('[data-uamt]').value = '0,45'; ub2.querySelector('[data-uunit]').value = 'ml';
+  ub2.querySelector('[data-ubook]').click(); await sleep(400);
+  const lowLot = await call('lot', {id: lotA.id});
+  ok(lowLot.amount == 50 && lowLot.warnings.includes('low'), 'Umrechnung 0,45 ml → 450 µl; danach knapp');
+  await call('saveLot', {values: {name: 'Alter Puffer', amount: '1', unit: 'l', expiry: '2020-01-01'}});
+  const nWarn = await refreshStockBadge();
+  ok(nWarn >= 2 && !$('#stockBadge').hidden, `Warnungen gemeldet (${nWarn})`);
+  await showStock('lots'); stockFilter = 'warnings'; await renderLots(); await sleep(100);
+  ok(document.querySelectorAll('#stock tr[data-lot]').length == nWarn, 'Liste „Nur Warnungen“');
+  stockFilter = 'all'; showView('doc');
   return out;
 }
 
@@ -956,6 +990,8 @@ async function start() {
   await loadTags();
   await loadTemplates();
   initRegistry();
+  initStock();
+  refreshStockBadge().then(n => { if (n) status(`${n} Charge(n) im Bestand abgelaufen, bald ablaufend oder knapp`); });
   await loadTypes();
   await refreshList();
   const wanted = +new URLSearchParams(location.search).get('entry');  // neuer Tab für einen bestimmten Eintrag

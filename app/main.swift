@@ -358,6 +358,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
             case "ocrText": replyHandler(try s.ocrText(try str("sha256")) ?? NSNull(), nil)
             // Nur im Testmodus mit LABORBUCH_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
+            case "testProgress":  // Testmodus: Zwischenstand sofort ausgeben (hängt ein Test, sieht man wo)
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                FileHandle.standardError.write(Data("… \(try str("line"))\n".utf8))
+                replyHandler(true, nil)
             case "testOther":  // Testmodus: JavaScript in einem anderen Fenster ausführen (Tabs/Fenster prüfen)
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 guard let other = docs.first(where: { $0.web !== m.webView }) else { return replyHandler(["windows": docs.count], nil) }
@@ -480,6 +484,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(true, nil)
             case "purgeEntry": try s.purgeEntry(id: try int("id")); replyHandler(true, nil)
             case "emptyTrash": replyHandler(try s.emptyTrash(), nil)
+            case "locations": replyHandler(try s.locations().map { l in var l = l; l["path"] = try s.locationPath(l["id"] as? Int); return l }, nil)
+            case "saveLocation":
+                replyHandler(try s.saveLocation(id: a["id"] as? Int, parent: a["parent"] as? Int, name: try str("name"), kind: (a["kind"] as? String) ?? "ort",
+                                                rows: a["rows"] as? Int, cols: a["cols"] as? Int, temp: (a["temp"] as? String) ?? ""), nil)
+            case "lots": replyHandler(try s.lots(filter: (a["filter"] as? String) ?? "all", q: (a["q"] as? String) ?? ""), nil)
+            case "lot": replyHandler(try s.lot(id: try int("id")), nil)
+            case "saveLot": replyHandler(try s.saveLot(id: a["id"] as? Int, values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "moveLot":
+                guard let delta = Store.number(a["delta"]) else { throw StoreError.invalid("Menge fehlt") }
+                replyHandler(try s.moveLot(id: try int("id"), delta: delta, kind: try str("kind"), entry: a["entry"] as? Int,
+                                           note: (a["note"] as? String) ?? "", author: Settings.author), nil)
+            case "stockWarnings": replyHandler(try s.warningCount(), nil)
             case "types": replyHandler(try s.types(), nil)
             case "saveType":
                 replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",
@@ -889,6 +905,7 @@ app.run()
 enum Log {
     static let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/Laborbuch/app.log")
     static func error(_ msg: String) {
+        if ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] != nil { return }  // Tests schreiben nicht ins Protokoll der App
         let line = "\(Store.now()) [\(Updater.current)] \(msg)\n"
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }

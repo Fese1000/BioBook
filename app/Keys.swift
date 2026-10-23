@@ -24,8 +24,11 @@ enum Keys {
 
     /// Öffentlicher Schlüssel als Fingerabdruck, ohne einen neuen Schlüssel anzulegen
     static func fingerprint() -> String? {
-        guard let d = ProcessInfo.processInfo.environment["LABORBUCH_KEYFILE"].flatMap({ try? Data(contentsOf: URL(fileURLWithPath: $0)) }) ?? (try? read()),
-              let k = try? Curve25519.Signing.PrivateKey(rawRepresentation: d) else { return nil }
+        // Mit Testschlüsseldatei nie auf den Schlüsselbund zurückfallen (sonst fragt macOS nach dem Passwort)
+        let d: Data?
+        if let path = ProcessInfo.processInfo.environment["LABORBUCH_KEYFILE"] { d = try? Data(contentsOf: URL(fileURLWithPath: path)) }
+        else { d = try? read() }
+        guard let d, let k = try? Curve25519.Signing.PrivateKey(rawRepresentation: d) else { return nil }
         return Store.fingerprint(Store.hex(k.publicKey.rawRepresentation))
     }
 

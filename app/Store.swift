@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 7
+    static let schemaVersion = 8
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -153,6 +153,24 @@ final class Store {
                 CREATE TRIGGER revision_readonly_d BEFORE DELETE ON revision
                   WHEN (SELECT deleted FROM entry WHERE id = OLD.entry_id) IS NULL OR (SELECT signed_no FROM entry WHERE id = OLD.entry_id) IS NOT NULL
                   BEGIN SELECT RAISE(ABORT, 'Revisionen sind unveränderlich'); END;
+                """)
+            }
+            if v < 8 {
+                // Bestand: Standorte (Baum, Boxen mit Raster), Chargen, unveränderliche Bewegungen
+                try exec("""
+                CREATE TABLE location(id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES location(id), name TEXT NOT NULL,
+                  kind TEXT NOT NULL DEFAULT 'ort', rows INTEGER, cols INTEGER, temp TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0);
+                CREATE TABLE lot(id INTEGER PRIMARY KEY, entity_id INTEGER REFERENCES entity(id), name TEXT NOT NULL, lot_no TEXT NOT NULL DEFAULT '',
+                  amount REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL, min_amount REAL, expiry TEXT, location_id INTEGER REFERENCES location(id), position TEXT,
+                  ghs TEXT NOT NULL DEFAULT '', sds_url TEXT NOT NULL DEFAULT '', supplier TEXT NOT NULL DEFAULT '', catalog TEXT NOT NULL DEFAULT '',
+                  note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE INDEX lot_entity ON lot(entity_id);
+                CREATE UNIQUE INDEX lot_position ON lot(location_id, position) WHERE position IS NOT NULL AND status = 'active';
+                CREATE TABLE lot_move(id INTEGER PRIMARY KEY, lot_id INTEGER NOT NULL REFERENCES lot(id), at TEXT NOT NULL, delta REAL NOT NULL,
+                  amount_after REAL NOT NULL, kind TEXT NOT NULL, entry_id INTEGER REFERENCES entry(id), note TEXT NOT NULL DEFAULT '', author TEXT NOT NULL DEFAULT '');
+                CREATE INDEX lot_move_entry ON lot_move(entry_id);
+                CREATE TRIGGER lot_move_ro_u BEFORE UPDATE ON lot_move BEGIN SELECT RAISE(ABORT, 'Bewegungen sind unveränderlich'); END;
+                CREATE TRIGGER lot_move_ro_d BEFORE DELETE ON lot_move BEGIN SELECT RAISE(ABORT, 'Bewegungen sind unveränderlich'); END;
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
