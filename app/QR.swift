@@ -36,10 +36,12 @@ enum QR {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if let u = URLComponents(string: t), u.scheme == "laborbuch" {
             let q = Dictionary(uniqueKeysWithValues: (u.queryItems ?? []).compactMap { i in i.value.map { (i.name, $0) } })
-            guard let kind = q["t"], ["lot", "entity", "location", "entry"].contains(kind), let id = q["id"].flatMap(Int.init) else { return nil }
+            guard let kind = q["t"], ["lot", "entity", "location", "entry", "culture", "device"].contains(kind), let id = q["id"].flatMap(Int.init) else { return nil }
             return ["t": kind, "id": id, "book": q["book"] ?? ""]
         }
         if t.range(of: "^BS-\\d{5}$", options: .regularExpression) != nil { return ["t": "lot", "id": Int(t.dropFirst(3))!, "book": ""] }
+        if t.range(of: "^KU-\\d{5}$", options: .regularExpression) != nil { return ["t": "culture", "id": Int(t.dropFirst(3))!, "book": ""] }
+        if t.range(of: "^GE-\\d{5}$", options: .regularExpression) != nil { return ["t": "device", "id": Int(t.dropFirst(3))!, "book": ""] }
         if t.range(of: "^[A-Z]{1,4}-\\d{4}$", options: .regularExpression) != nil { return ["t": "code", "code": t, "book": ""] }
         return nil
     }

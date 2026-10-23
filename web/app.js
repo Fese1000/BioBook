@@ -146,7 +146,7 @@ function editorExtensions(forUI = true) {
     TT.TaskList, TT.TaskItem.configure({nested: true}),
     ...(forUI ? [TT.Placeholder.configure({placeholder: 'Schreib los … Dateien per Drag & Drop, [[ verweist auf einen anderen Eintrag.'})] : []),
     TT.CharacterCount,
-    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode,
+    FileNode, EntryLink, CalcNode, UsageNode, PlateNode, ResultsNode, CultureNode,
   ];
 }
 
@@ -220,6 +220,7 @@ const TOOLS = [
   ['📊 Ergebnisse', 'Ergebnistabelle nach Vorlage (für die Auswertung über viele Einträge)', () => insertResults()],
   ['🧫 Platte', 'Plattenlayout (96 oder 384 Wells) einfügen', () => insertPlate(96)],
   ['📦 Verbrauch', 'Verbrauch einer Charge verbuchen (Bestand sinkt)', () => insertUsage()],
+  ['↻ Passage', 'Zellkultur: Passage, Mediumwechsel oder Mycoplasma-Test verbuchen', () => insertCultureBlock()],
   ['🧮 Rechner', 'Rechner einfügen: Verdünnung, Einwaage, Mastermix, Umrechnen', (e, btn) => calcMenu(btn)],
   ['Code', 'Codeblock', e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive('codeBlock')],
   ['Zitat', 'Zitat', e => e.chain().focus().toggleBlockquote().run(), e => e.isActive('blockquote')],
@@ -955,6 +956,71 @@ async function selfTest() {
   const csvText = csvOut ? await call('testReadText', {path: csvOut.path.split('/').pop()}) : '';
   ok(csvText.includes('Ausbeute (µg)') && csvText.includes('12,5'), 'CSV-Export mit Einheiten und Komma');
   showView('doc');
+
+  // M12: Zellkultur und Gerätebuch
+  const snap = name => call('testSnapshot', {name}).catch(() => {});
+  const zlType = (await call('types')).find(t => t.prefix == 'ZL');
+  const hela = await call('createEntity', {type: zlType.id, name: 'HeLa', values: {}});
+  const ku = await call('saveCulture', {values: {name: 'HeLa Flasche 1', entity: hela.id, passage: '12', medium: 'DMEM + 10 % FKS', vessel: 'T75'}});
+  const kuEntry = await call('create', {title: 'HeLa splitten'}); await refreshList(kuEntry);
+  editor.commands.setContent({type: 'doc', content: [{type: 'cultev', attrs: {culture: ku.id}}, {type: 'paragraph'}]}); changed(); await flush(); await sleep(300);
+  document.querySelector('.cultev [data-csplit]').value = '1:10';
+  document.querySelector('.cultev [data-cbook]').click(); await sleep(400);
+  const ku13 = await call('culture', {id: ku.id});
+  await snap('m12-block.png');
+  ok(ku13.passage == 13 && /P12 → P13 \(1:10\) verbucht/.test(document.querySelector('.cultev').textContent) && ku13.events[0].entry_id == kuEntry,
+    'Passage 12 → 13 im Eintrag verbucht, Ereignis verweist auf den Eintrag');
+  await flush();
+  ok((await call('search', {q: 'P13'})).some(r => r.id == kuEntry), 'Passage steht im Text des Eintrags (Suche, Export)');
+  await showCulture(ku.id); await sleep(100);
+  await snap('m12-kultur.png');
+  ok(!$('#cult').hidden && $('#cult .amtbig').textContent == 'P13' && $('#cult .reghist').textContent.includes('P12 → P13') && $('#cult .reghist .elink'), 'Kulturansicht: P13, Verlauf mit Link zum Eintrag');
+  document.querySelector('#cult [data-cev="myco"]').click(); await sleep(100);
+  $('#ceResult').value = 'negativ'; $('#ceSave').click(); await sleep(300);
+  ok(/negativ/.test($('#cult .reghist').textContent) && !$('#locdlg').open, 'Mycoplasma-Test negativ über den Dialog verbucht');
+  const tank = await call('saveLocation', {name: 'Stickstofftank', kind: 'box', rows: 10, cols: 10, temp: '−196 °C'});
+  document.querySelector('#cult [data-cev="freeze"]').click(); await sleep(150);
+  $('#ceCount').value = '3'; $('#ceLoc').value = String(tank); $('#cePos').value = 'C4'; $('#ceSave').click(); await sleep(300);
+  await showCultures('frozen'); await sleep(100);
+  const frow = document.querySelector('#cult [data-thaw]')?.closest('tr');
+  ok(frow && /P13/.test(frow.textContent) && /Stickstofftank · C4/.test(frow.textContent) && frow.children[4].textContent == '3', 'Einfrierliste: 3 Röhrchen P13 im Tank C4');
+  await snap('m12-einfrierliste.png');
+  const keepPrompt = window.prompt; window.prompt = () => 'HeLa aufgetaut';
+  frow.querySelector('[data-thaw]').click(); await sleep(500);
+  window.prompt = keepPrompt;
+  ok(/HeLa aufgetaut/.test($('#cult .reghead h2').textContent) && $('#cult .amtbig').textContent == 'P13' && /Aufgetaut/.test($('#cult .reghist').textContent), 'Auftauen legt neue Kultur P13 an');
+  ok((await call('frozenStock'))[0].amount == 2, 'Ein Röhrchen weniger in der Einfrierliste');
+  await call('saveCulture', {values: {name: 'CHO alt', passage: 5, day: '2026-01-02', myco_days: 30}});
+  const care1 = await refreshCareBadges();
+  ok(care1.cultures == 1 && $('#cultBadge').textContent == '1', 'Überfälliger Mycoplasma-Test wird in der Seitenleiste gemeldet');
+  await showEntity(hela.id); await sleep(200);
+  ok(document.querySelectorAll('#entCults [data-cult]').length == 2, 'Zelllinie HeLa zeigt ihre zwei Kulturen');
+
+  const zent = await call('saveDevice', {values: {name: 'Zentrifuge 5424', model: 'Eppendorf 5424', serial: 'Z-77'}});
+  await call('saveDeviceTask', {device: zent.id, values: {kind: 'kalibrierung', interval: '365', next_due: '2026-01-15'}});
+  const care2 = await refreshCareBadges();
+  ok(care2.devices == 1 && !$('#devBadge').hidden, 'Fällige Kalibrierung wird gemeldet');
+  await showDevices(); devFilter = 'warnings'; await renderDevices(); await sleep(100);
+  ok(document.querySelectorAll('#dev tr[data-dev]').length == 1 && /überfällig/.test($('#dev tr[data-dev]').textContent), 'Geräteliste „Nur fällige“ zeigt die überfällige Zentrifuge');
+  await snap('m12-geraete.png');
+  devFilter = 'all';
+  await showDevice(zent.id); await sleep(100);
+  document.querySelector('#dev [data-taskdone]').click(); await sleep(150);
+  $('#gNote').value = 'Drehzahl geprüft, Zertifikat 2026-118'; $('#gSave').click(); await sleep(300);
+  const zentAfter = await call('device', {id: zent.id});
+  ok(zentAfter.warnings.length == 0 && zentAfter.tasks[0].next_due > today() && /Zertifikat/.test($('#dev .reghist').textContent), 'Kalibrierung erledigt: nicht mehr fällig, im Protokoll');
+  ok($('#devBadge').hidden, 'Meldung in der Seitenleiste verschwindet');
+  document.querySelector('#dev [data-dlog="stoerung"]').click(); await sleep(150);
+  $('#gNote').value = 'Unwucht'; $('#gSave').click(); await sleep(300);
+  ok(/defekt/.test($('#dev .reghead').textContent) && (await refreshCareBadges()).devices == 1, 'Störung: Gerät als defekt gemeldet');
+  await snap('m12-geraet.png');
+  const devLab = await labelFor('device', zent.id);
+  showView('doc');
+  ok(await openCode(devLab.url) && !$('#dev').hidden && $('#dev .reghead h2').textContent.includes('Zentrifuge'), 'Etikett am Gerät öffnet das Gerätebuch');
+  showView('doc');
+  $('#search').value = ku13.code; $('#search').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); await sleep(300);
+  ok(!$('#cult').hidden && $('#cult .reghead h2').textContent.includes(ku13.code), 'Handscanner: Kulturcode öffnet die Kultur');
+  showView('doc');
   return out;
 }
 
@@ -1054,7 +1120,10 @@ async function start() {
   initStock();
   initLabels();
   initResults();
+  initCulture();
   await loadResultSchemas();
+  refreshCareBadges().then(n => { const t = [n.cultures && `${n.cultures} Kultur(en)`, n.devices && `${n.devices} Gerät(e)`].filter(Boolean);
+    if (t.length) setTimeout(() => status(`Fällig: ${t.join(', ')} – siehe Zellkultur und Geräte`), 4000); });
   refreshStockBadge().then(n => { if (n) status(`${n} Charge(n) im Bestand abgelaufen, bald ablaufend oder knapp`); });
   await loadTypes();
   await refreshList();

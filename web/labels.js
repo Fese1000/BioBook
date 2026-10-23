@@ -13,6 +13,9 @@ async function labelFor(t, id) {
   if (t == 'lot') { const l = await call('lot', {id});
     return {url, code: l.code, title: l.name, lines: [l.lot_no && `Ch. ${l.lot_no}`, l.expiry && `bis ${l.expiry}`, l.location_path && `${l.location_path}${l.position ? ' ' + l.position : ''}`].filter(Boolean)}; }
   if (t == 'entity') { const e = await call('entity', {id}); return {url, code: e.code, title: e.name, lines: [e.type_name]}; }
+  if (t == 'culture') { const c = await call('culture', {id});
+    return {url, code: c.code, title: c.name, lines: [c.entity_code && `${c.entity_code} ${c.entity_name}`, `P${c.passage}${c.medium ? ' · ' + c.medium : ''}`].filter(Boolean)}; }
+  if (t == 'device') { const d = await call('device', {id}); return {url, code: d.code, title: d.name, lines: [[d.model, d.serial && `SN ${d.serial}`].filter(Boolean).join(' · '), d.location_path].filter(Boolean)}; }
   if (t == 'location') { const l = (await call('locations')).find(x => x.id == id); return {url, code: `ORT-${id}`, title: l.name, lines: [l.path, l.temp].filter(Boolean)}; }
   return {url, code: `E-${id}`, title: (await call('load', {id})).title, lines: []};
 }
@@ -63,6 +66,8 @@ async function openCode(code) {
   if (t.t == 'lot') await showLot(t.id);
   else if (t.t == 'entity') await showEntity(t.id);
   else if (t.t == 'location') { stockLoc = t.id; await showStock('locations'); }
+  else if (t.t == 'culture') await showCulture(t.id);
+  else if (t.t == 'device') await showDevice(t.id);
   else if (t.t == 'entry') { showView('doc'); cur = null; await open(t.id); }
   return true;
 }
@@ -72,7 +77,7 @@ function initLabels() {
   $('#search').addEventListener('keydown', async e => {
     if (e.key != 'Enter') return;
     const v = e.target.value.trim();
-    if (/^(laborbuch:\/\/|BS-\d{5}$|[A-Z]{1,4}-\d{4}$)/.test(v) && await openCode(v)) { e.target.value = ''; refreshList(); }
+    if (/^(laborbuch:\/\/|(BS|KU|GE)-\d{5}$|[A-Z]{1,4}-\d{4}$)/.test(v) && await openCode(v)) { e.target.value = ''; refreshList(); }
   });
   document.addEventListener('click', e => {
     const d = e.target.dataset;

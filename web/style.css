@@ -280,3 +280,9 @@ svg.chart .line{fill:none;stroke:var(--series-1);stroke-width:2;stroke-linejoin:
 svg.chart .pt{fill:var(--series-1);stroke:var(--surface);stroke-width:2}
 svg.chart .hit{fill:transparent;cursor:pointer}svg.chart .hit:hover+*{}
 .ctip{position:absolute;pointer-events:none;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px;box-shadow:0 6px 18px rgba(0,0,0,.15);white-space:nowrap}
+/* Zellkultur und Geräte */
+.usage.cultev{border-left-color:#59a14f}
+.regtable tr.gone td{opacity:.55}
+.lnk{cursor:pointer}.lnk:hover{color:var(--acc)}
+.task{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.task .grow{flex:1;min-width:0}
+.task .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:13px}.task .x:hover{color:var(--ink)}

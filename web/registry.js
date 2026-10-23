@@ -24,11 +24,13 @@ function showView(v) {
   $('#reg').hidden = v != 'reg';
   $('#stock').hidden = v != 'stock';
   $('#analysis').hidden = v != 'analysis';
-  if (v != 'stock' && v != 'analysis') document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
+  $('#cult').hidden = v != 'cult';
+  $('#dev').hidden = v != 'dev';
+  if (!['stock', 'analysis', 'cult', 'dev'].includes(v)) document.querySelectorAll('#stockNav li').forEach(li => li.classList.remove('cur'));
   $('#doc').hidden = v != 'doc' || !cur;
   $('#empty').hidden = v != 'doc' || !!cur;
   $('#status').hidden = v != 'doc';
-  if (v == 'doc') { regType = null; regEntity = null; loadTypes(); }
+  if (v != 'reg') { const had = regType != null || regEntity != null; regType = null; regEntity = null; if (v == 'doc' || had) loadTypes(); }  // Markierung in der Registry aufheben
 }
 
 async function showType(id) {
@@ -90,10 +92,11 @@ async function showEntity(id) {
       <div class="rfbtns"><span id="entmsg" class="sub"></span><button class="btn on" type="submit">${e ? 'Speichern' : 'Anlegen'}</button></div></form>
       ${e ? `<aside class="regside"><h4>Verwendet in</h4>${e.used_in.length ? e.used_in.map(u => `<a href="#" class="elink" data-entry="${u.id}">↗ ${esc(u.title || 'Ohne Titel')}</a>`).join('<br>') : '<span class="sub">noch in keinem Eintrag (mit @ verweisen)</span>'}
         <h4>Bestand</h4><div id="entLots" data-entity="${e.id}"><span class="sub">…</span></div>
+        <div id="entCults"></div>
         <h4>Verlauf</h4><ol class="reghist">${hist.map((h, i) => `<li>${when(h.changed)}${h.author ? ` · ${esc(h.author)}` : ''}<br><span class="sub">${esc(diff(h, hist[i + 1]))}</span></li>`).join('')}</ol></aside>` : ''}
     </div>`;
   if (!e) $('#entform [data-name]').focus();
-  else renderEntityLots(e.id);
+  else { renderEntityLots(e.id); renderEntityCultures(e.id); }
 }
 
 async function saveEntityForm() {

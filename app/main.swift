@@ -450,6 +450,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 let data = cmd == "testWriteText" ? Data(try str("text").utf8) : Data(base64Encoded: try str("base64")) ?? Data()
                 try data.write(to: url)
                 replyHandler(url.path, nil)
+            case "testSnapshot":  // Testmodus: Bild der Oberfläche ablegen (zum Ansehen neuer Ansichten)
+                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], let wv = m.webView else { throw StoreError.invalid("Nur im Testmodus") }
+                let url = try FileExport.safe(try str("name"), in: URL(fileURLWithPath: dir))
+                wv.takeSnapshot(with: nil) { img, err in
+                    guard let img, let tiff = img.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
+                        return replyHandler(nil, err.map { "\($0)" } ?? "Kein Bild")
+                    }
+                    do { try png.write(to: url); replyHandler(url.path, nil) } catch { replyHandler(nil, "\(error)") }
+                }
             case "testWriteFile", "testModifyFile", "testReceive":
                 guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
                 if cmd == "testReceive" {
@@ -556,6 +565,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(try s.moveLot(id: try int("id"), delta: delta, kind: try str("kind"), entry: a["entry"] as? Int,
                                            note: (a["note"] as? String) ?? "", author: Settings.author), nil)
             case "stockWarnings": replyHandler(try s.warningCount(), nil)
+            case "cultures": replyHandler(try s.cultures(filter: (a["filter"] as? String) ?? "active", q: (a["q"] as? String) ?? ""), nil)
+            case "culture": replyHandler(try s.culture(id: try int("id")), nil)
+            case "saveCulture": replyHandler(try s.saveCulture(id: a["id"] as? Int, values: a["values"] as? [String: Any] ?? [:], author: Settings.author), nil)
+            case "cultureEvent":
+                replyHandler(try s.cultureEvent(id: try int("id"), kind: try str("kind"), values: a["values"] as? [String: Any] ?? [:], entry: a["entry"] as? Int, author: Settings.author), nil)
+            case "frozenStock": replyHandler(try s.frozenStock(), nil)
+            case "thawCulture": replyHandler(try s.thawCulture(lot: try int("lot"), name: a["name"] as? String, entry: a["entry"] as? Int, author: Settings.author), nil)
+            case "devices": replyHandler(try s.devices(filter: (a["filter"] as? String) ?? "all", q: (a["q"] as? String) ?? ""), nil)
+            case "device": replyHandler(try s.device(id: try int("id")), nil)
+            case "saveDevice": replyHandler(try s.saveDevice(id: a["id"] as? Int, values: a["values"] as? [String: Any] ?? [:]), nil)
+            case "saveDeviceTask": replyHandler(try s.saveDeviceTask(id: a["id"] as? Int, device: try int("device"), values: a["values"] as? [String: Any] ?? [:]), nil)
+            case "archiveDeviceTask": try s.archiveDeviceTask(id: try int("id")); replyHandler(true, nil)
+            case "logDevice":
+                replyHandler(try s.logDevice(id: try int("id"), task: a["task"] as? Int, kind: a["kind"] as? String, result: a["result"] as? String,
+                                             values: a["values"] as? [String: Any] ?? [:], entry: a["entry"] as? Int, author: Settings.author), nil)
+            case "careWarnings": replyHandler(try s.careWarnings(), nil)
             case "types": replyHandler(try s.types(), nil)
             case "saveType":
                 replyHandler(try s.saveType(id: a["id"] as? Int, name: try str("name"), prefix: try str("prefix"), icon: (a["icon"] as? String) ?? "",

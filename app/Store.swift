@@ -11,10 +11,11 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 9
+    static let schemaVersion = 10
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
+    private var txDepth = 0  // verschachtelte Transaktionen laufen als Savepoints
 
     init(root: URL) throws {
         self.root = root
@@ -187,6 +188,34 @@ final class Store {
                     try query("INSERT INTO result_schema(name, fields_json, created) VALUES(?, ?, ?)", [name, json, Store.now()])
                 }
             }
+            if v < 10 {
+                // Zellkultur (Kulturen mit unveränderlichen Ereignissen: Passage, Mycoplasma-Test, Einfrieren …) und Gerätebuch (Aufgaben mit Intervall, Protokoll)
+                try exec("""
+                CREATE TABLE culture(id INTEGER PRIMARY KEY, entity_id INTEGER REFERENCES entity(id), name TEXT NOT NULL, passage INTEGER NOT NULL DEFAULT 0,
+                  vessel TEXT NOT NULL DEFAULT '', medium TEXT NOT NULL DEFAULT '', max_passage INTEGER, myco_days INTEGER NOT NULL DEFAULT 90,
+                  source_lot INTEGER REFERENCES lot(id), status TEXT NOT NULL DEFAULT 'active', note TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE TABLE culture_event(id INTEGER PRIMARY KEY, culture_id INTEGER NOT NULL REFERENCES culture(id), at TEXT NOT NULL, day TEXT NOT NULL,
+                  kind TEXT NOT NULL, passage INTEGER NOT NULL, detail TEXT NOT NULL DEFAULT '', lot_id INTEGER REFERENCES lot(id),
+                  entry_id INTEGER REFERENCES entry(id), note TEXT NOT NULL DEFAULT '', author TEXT NOT NULL DEFAULT '');
+                CREATE INDEX culture_event_c ON culture_event(culture_id);
+                CREATE INDEX culture_event_entry ON culture_event(entry_id);
+                CREATE INDEX culture_event_lot ON culture_event(lot_id);
+                CREATE TRIGGER culture_event_ro_u BEFORE UPDATE ON culture_event BEGIN SELECT RAISE(ABORT, 'Kulturereignisse sind unveränderlich'); END;
+                CREATE TRIGGER culture_event_ro_d BEFORE DELETE ON culture_event BEGIN SELECT RAISE(ABORT, 'Kulturereignisse sind unveränderlich'); END;
+                CREATE TABLE device(id INTEGER PRIMARY KEY, name TEXT NOT NULL, model TEXT NOT NULL DEFAULT '', serial TEXT NOT NULL DEFAULT '',
+                  location_id INTEGER REFERENCES location(id), status TEXT NOT NULL DEFAULT 'ok', note TEXT NOT NULL DEFAULT '',
+                  archived INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL);
+                CREATE TABLE device_task(id INTEGER PRIMARY KEY, device_id INTEGER NOT NULL REFERENCES device(id), kind TEXT NOT NULL, title TEXT NOT NULL,
+                  interval_days INTEGER NOT NULL, next_due TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL);
+                CREATE INDEX device_task_d ON device_task(device_id);
+                CREATE TABLE device_log(id INTEGER PRIMARY KEY, device_id INTEGER NOT NULL REFERENCES device(id), task_id INTEGER REFERENCES device_task(id),
+                  at TEXT NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, result TEXT NOT NULL DEFAULT 'ok', note TEXT NOT NULL DEFAULT '',
+                  entry_id INTEGER REFERENCES entry(id), author TEXT NOT NULL DEFAULT '');
+                CREATE INDEX device_log_d ON device_log(device_id);
+                CREATE TRIGGER device_log_ro_u BEFORE UPDATE ON device_log BEGIN SELECT RAISE(ABORT, 'Geräteprotokoll ist unveränderlich'); END;
+                CREATE TRIGGER device_log_ro_d BEFORE DELETE ON device_log BEGIN SELECT RAISE(ABORT, 'Geräteprotokoll ist unveränderlich'); END;
+                """)
+            }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }
     }
@@ -257,8 +286,12 @@ final class Store {
     }
 
     private func transaction<T>(_ body: () throws -> T) throws -> T {
-        try exec("BEGIN IMMEDIATE")
-        do { let r = try body(); try exec("COMMIT"); return r } catch { try? exec("ROLLBACK"); throw error }
+        let sp = "sp\(txDepth)", outer = txDepth == 0
+        try exec(outer ? "BEGIN IMMEDIATE" : "SAVEPOINT \(sp)")
+        txDepth += 1
+        defer { txDepth -= 1 }
+        do { let r = try body(); try exec(outer ? "COMMIT" : "RELEASE \(sp)"); return r }
+        catch { try? exec(outer ? "ROLLBACK" : "ROLLBACK TO \(sp); RELEASE \(sp)"); throw error }
     }
 
     // MARK: Projekte
@@ -581,6 +614,7 @@ final class Store {
     func purgeEntry(id: Int) throws {
         guard try isTrashed(id) else { throw StoreError.invalid("Nur Einträge aus dem Papierkorb lassen sich endgültig löschen") }
         if try isSigned(id) { throw StoreError.invalid("Signierte Einträge lassen sich nicht löschen") }
+        if try hasBookings(id) { throw StoreError.invalid("Auf diesen Eintrag verweisen Buchungen (Bestand, Zellkultur oder Gerätebuch); er bleibt deshalb im Papierkorb.") }
         try transaction {
             for t in ["revision", "entry_file", "entry_tag", "entry_entity", "result_row"] { try query("DELETE FROM \(t) WHERE entry_id = ?", [id]) }
             try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
@@ -592,9 +626,14 @@ final class Store {
         }
     }
 
+    /// Unveränderliche Buchungen, die auf den Eintrag verweisen, verhindern das endgültige Löschen
+    func hasBookings(_ id: Int) throws -> Bool {
+        try !query("SELECT 1 FROM lot_move WHERE entry_id = ?1 UNION ALL SELECT 1 FROM culture_event WHERE entry_id = ?1 UNION ALL SELECT 1 FROM device_log WHERE entry_id = ?1 LIMIT 1", [id]).isEmpty
+    }
+
     @discardableResult
     func emptyTrash() throws -> Int {
-        let ids = try query("SELECT id FROM entry WHERE deleted IS NOT NULL AND signed_no IS NULL").compactMap { $0["id"] as? Int }
+        let ids = try query("SELECT id FROM entry WHERE deleted IS NOT NULL AND signed_no IS NULL").compactMap { $0["id"] as? Int }.filter { try !hasBookings($0) }
         for i in ids { try purgeEntry(id: i) }
         return ids.count
     }
@@ -644,6 +683,14 @@ final class Store {
             "entry_registry": try query("SELECT entry_id, entity_id FROM entry_entity"),
             "result_schemas": try query("SELECT id, name, fields_json FROM result_schema ORDER BY id"),
             "results": try query("SELECT entry_id, schema_id, row_no, values_json FROM result_row ORDER BY entry_id, row_no"),
+            "locations": try query("SELECT id, parent_id, name, kind, rows, cols, temp, archived, created FROM location ORDER BY id"),
+            "lots": try query("SELECT * FROM lot ORDER BY id"),
+            "lot_moves": try query("SELECT * FROM lot_move ORDER BY id"),
+            "cultures": try query("SELECT * FROM culture ORDER BY id"),
+            "culture_events": try query("SELECT * FROM culture_event ORDER BY id"),
+            "devices": try query("SELECT * FROM device ORDER BY id"),
+            "device_tasks": try query("SELECT * FROM device_task ORDER BY id"),
+            "device_log": try query("SELECT * FROM device_log ORDER BY id"),
         ]
     }
 

@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -337,6 +337,73 @@ let mySchema = try s.saveResultSchema(id: nil, name: "Zellzählung", fields: [["
 check(mySchema > 0, "Eigene Vorlage mit Formel")
 check((try? s.saveResultSchema(id: nil, name: "Kaputt", fields: [["key": "a", "type": "formula", "expr": "a + b"]])) == nil, "Formel mit unbekanntem Feld abgelehnt")
 check((try? s.saveResultSchema(id: nil, name: "Leer", fields: [])) == nil, "Vorlage ohne Felder abgelehnt")
+
+// M12: Zellkultur und Gerätebuch
+let zl = try s.types().first { $0["prefix"] as? String == "ZL" }!["id"] as! Int
+let hela = try s.createEntity(typeId: zl, name: "HeLa", values: [:], author: "Test")["id"] as! Int
+let kultur = try s.saveCulture(id: nil, values: ["name": "HeLa Flasche 1", "entity": hela, "passage": "12", "medium": "DMEM + 10 % FKS", "vessel": "T75", "max_passage": "14"], author: "Test")
+let kid = kultur["id"] as! Int
+check(try kultur["passage"] as? Int == 12 && kultur["code"] as? String == "KU-\(String(format: "%05d", kid))" && (kultur["warnings"] as! [String]).isEmpty, "Kultur mit Passage 12 angelegt, ohne Warnung")
+let pEntry = try s.create(title: "Passage HeLa")
+let pas = try s.cultureEvent(id: kid, kind: "passage", values: ["split": "1:10"], entry: pEntry, author: "Test")
+let k13 = try s.culture(id: kid)
+check(try pas["from"] as? Int == 12 && pas["passage"] as? Int == 13 && k13["passage"] as? Int == 13, "Passage 12 → 13 verbucht")
+let ev13 = (k13["events"] as! [[String: Any]]).first!
+check(try ev13["kind"] as? String == "passage" && ev13["detail"] as? String == "1:10" && ev13["entry_id"] as? Int == pEntry, "Ereignis mit Split und Verweis auf den Eintrag")
+check(try (try? s.cultureEvent(id: kid, kind: "myco", values: ["result": "vielleicht"], entry: nil, author: "Test")) == nil, "Ungültiges Mycoplasma-Ergebnis abgelehnt")
+var cdb: OpaquePointer?
+sqlite3_open(dir.appendingPathComponent("db.sqlite").path, &cdb)
+check(try sqlite3_exec(cdb, "UPDATE culture_event SET passage = 99", nil, nil, nil) != SQLITE_OK, "Kulturereignisse sind unveränderlich")
+sqlite3_close(cdb)
+_ = try s.cultureEvent(id: kid, kind: "passage", values: [:], entry: nil, author: "Test")
+check(try (try s.culture(id: kid))["warnings"] as! [String] == ["passage_high"], "Höchstpassage 14 erreicht wird gemeldet")
+let alt = try s.saveCulture(id: nil, values: ["name": "CHO alt", "passage": 3, "day": "2026-01-02", "myco_days": "30"], author: "Test")
+check(try (alt["warnings"] as! [String]).contains("myco_due"), "Mycoplasma-Test überfällig (Start vor über 30 Tagen, nie getestet)")
+_ = try s.cultureEvent(id: alt["id"] as! Int, kind: "myco", values: ["result": "negativ"], entry: nil, author: "Test")
+check(try (try s.culture(id: alt["id"] as! Int))["warnings"] as! [String] == [], "Negativer Test heute: keine Warnung mehr")
+_ = try s.cultureEvent(id: alt["id"] as! Int, kind: "myco", values: ["result": "positiv"], entry: nil, author: "Test")
+check(try (try s.culture(id: alt["id"] as! Int))["warnings"] as! [String] == ["myco_pos"], "Positiver Test wird gemeldet")
+let gefr = try s.saveLocation(id: nil, parent: nil, name: "Stickstofftank", kind: "box", rows: 10, cols: 10, temp: "−196 °C")
+let fz = try s.cultureEvent(id: kid, kind: "freeze", values: ["count": "3", "location": gefr, "position": "B2"], entry: nil, author: "Test")
+let fzLot = try s.lot(id: fz["lot"] as! Int)
+check(try fzLot["amount"] as? Double == 3 && fzLot["unit"] as? String == "Röhrchen" && fzLot["name"] as? String == "HeLa Flasche 1 P14" && fzLot["entity_id"] as? Int == hela && fzLot["position"] as? String == "B2",
+      "Einfrieren legt Charge an: 3 Röhrchen P14 im Tank B2")
+check(try (try? s.cultureEvent(id: kid, kind: "freeze", values: ["count": "2", "location": gefr, "position": "B2"], entry: nil, author: "Test")) == nil
+      && (try s.lots(filter: "location:\(gefr)")).count == 1, "Belegte Position: Einfrieren scheitert ganz (keine halbe Buchung)")
+let frozen = try s.frozenStock()
+check(try frozen.count == 1 && frozen[0]["passage"] as? Int == 14 && (frozen[0]["location_path"] as? String) == "Stickstofftank", "Einfrierliste mit Passage und Standort")
+let thawed = try s.thawCulture(lot: fz["lot"] as! Int, name: "HeLa aufgetaut", entry: nil, author: "Test")
+check(try thawed["passage"] as? Int == 14 && thawed["entity_id"] as? Int == hela && thawed["medium"] as? String == "DMEM + 10 % FKS"
+      && (try s.lot(id: fz["lot"] as! Int))["amount"] as? Double == 2, "Auftauen: neue Kultur P14, ein Röhrchen weniger")
+check(try ((try s.culture(id: thawed["id"] as! Int))["events"] as! [[String: Any]]).first?["kind"] as? String == "thaw", "Ereignis „aufgetaut“ mit Charge")
+check(try (try? s.cultureEvent(id: kid, kind: "correct", values: ["passage": "20"], entry: nil, author: "Test")) == nil, "Korrektur ohne Grund abgelehnt")
+_ = try s.cultureEvent(id: kid, kind: "correct", values: ["passage": "13", "note": "Falsch gezählt"], entry: nil, author: "Test")
+_ = try s.cultureEvent(id: kid, kind: "end", values: [:], entry: nil, author: "Test")
+check(try (try s.culture(id: kid))["status"] as? String == "ended" && (try? s.cultureEvent(id: kid, kind: "passage", values: [:], entry: nil, author: "Test")) == nil
+      && !(try s.cultures()).contains { $0["id"] as? Int == kid }, "Beendete Kultur: keine Ereignisse mehr, nicht in der aktiven Liste")
+try s.trashEntry(id: pEntry)
+check(try (try? s.purgeEntry(id: pEntry)) == nil && (try s.emptyTrash()) >= 0 && (try s.trash()).contains { $0["id"] as? Int == pEntry }, "Eintrag mit Buchungen bleibt im Papierkorb (kein endgültiges Löschen)")
+try s.restoreEntry(id: pEntry)
+
+let pip = try s.saveDevice(id: nil, values: ["name": "Pipette P200", "model": "Research plus", "serial": "S123"])
+let pid = pip["id"] as! Int
+check(try (pip["warnings"] as! [String]).isEmpty, "Gerät angelegt")
+let withTask = try s.saveDeviceTask(id: nil, device: pid, values: ["kind": "kalibrierung", "interval": "365", "next_due": "2026-01-15"])
+check(try withTask["warnings"] as! [String] == ["overdue"] && (try s.careWarnings())["devices"] == 1, "Fällige Kalibrierung wird gemeldet")
+let soon = try s.saveDeviceTask(id: nil, device: pid, values: ["kind": "wartung", "interval": "180", "next_due": Store.addDays(Store.isoDay(Date()), 5)])
+check(try (soon["tasks"] as! [[String: Any]]).map { $0["state"] as! String } == ["overdue", "due"], "Wartung in 5 Tagen: bald fällig")
+let calTask = (soon["tasks"] as! [[String: Any]]).first { $0["kind"] as? String == "kalibrierung" }!["id"] as! Int
+let logged = try s.logDevice(id: pid, task: calTask, kind: nil, result: "ok", values: ["note": "Gravimetrisch, 0,3 % Abweichung"], entry: nil, author: "Test")
+check(try logged["next_due"] as? String == Store.addDays(Store.isoDay(Date()), 365), "Kalibrierung erledigt: nächste in 365 Tagen")
+check(try (try s.device(id: pid))["warnings"] as! [String] == ["due"], "Danach nur noch die bald fällige Wartung")
+_ = try s.logDevice(id: pid, task: nil, kind: "stoerung", result: nil, values: ["note": "Kolben klemmt"], entry: nil, author: "Test")
+check(try (try s.device(id: pid))["status"] as? String == "defekt" && ((try s.device(id: pid))["warnings"] as! [String]).first == "defect", "Störung: Gerät defekt")
+_ = try s.logDevice(id: pid, task: nil, kind: "reparatur", result: nil, values: [:], entry: nil, author: "Test")
+let repaired = try s.device(id: pid)
+check(try repaired["status"] as? String == "ok" && (repaired["log"] as! [[String: Any]]).count == 3, "Reparatur: wieder einsatzbereit; Protokoll mit 3 Einträgen")
+check(try (try? s.logDevice(id: pid, task: nil, kind: "notiz", result: nil, values: [:], entry: nil, author: "Test")) == nil, "Leere Notiz abgelehnt")
+let dumpAll = try s.dump()
+check(try (dumpAll["cultures"] as! [[String: Any]]).count == 3 && (dumpAll["device_log"] as! [[String: Any]]).count == 3 && (dumpAll["lots"] as! [[String: Any]]).count >= 1, "Export enthält Bestand, Kulturen und Gerätebuch")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
