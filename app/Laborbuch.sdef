@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Laborbuch" xmlns:xi="http://www.w3.org/2003/XInclude">
+  <xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
+  <suite name="Laborbuch" code="LBok" description="Einträge anlegen, ergänzen, finden und lesen">
+    <command name="create entry" code="LBokCrEn" description="Legt einen Eintrag an und liefert seine Nummer.">
+      <cocoa class="LBCreateEntryCommand"/>
+      <parameter name="titled" code="titl" type="text" optional="yes" description="Titel (sonst die erste Zeile des Textes)"><cocoa key="title"/></parameter>
+      <parameter name="with text" code="ctxt" type="text" optional="yes" description="Inhalt; jede Zeile wird ein Absatz"><cocoa key="text"/></parameter>
+      <result type="integer" description="Nummer des neuen Eintrags"/>
+    </command>
+    <command name="append text" code="LBokApTx" description="Hängt Text unten an einen Eintrag an (nicht bei abgeschlossenen Einträgen).">
+      <cocoa class="LBAppendTextCommand"/>
+      <direct-parameter type="text" description="anzuhängender Text"/>
+      <parameter name="to entry" code="entr" type="integer" description="Nummer des Eintrags"><cocoa key="entry"/></parameter>
+      <result type="boolean"/>
+    </command>
+    <command name="find entries" code="LBokFind" description="Volltextsuche; liefert „Nummer: Titel“ je Treffer.">
+      <cocoa class="LBFindEntriesCommand"/>
+      <direct-parameter type="text" description="Suchbegriff"/>
+      <result><type type="text" list="yes"/></result>
+    </command>
+    <command name="entry text" code="LBokGtTx" description="Titel und Text eines Eintrags.">
+      <cocoa class="LBEntryTextCommand"/>
+      <direct-parameter type="integer" description="Nummer des Eintrags"/>
+      <result type="text"/>
+    </command>
+  </suite>
+</dictionary>

@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     let testMode = ["--selftest", "--perftest", "--updatetest"].contains { CommandLine.arguments.contains($0) }
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        NSApp.servicesProvider = self  // Dienste-Menü „Neuer Laborbuch-Eintrag“
         let start = pendingOpen ?? Self.lastBook() ?? Self.defaultBook()
         do { store = try Store(root: start) } catch {
             // Letztes Buch fehlt oder ist kaputt: auf das Standard-Buch ausweichen statt die App zu beenden
@@ -225,7 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     static let bookType = UTType("de.felix.laborbuch.book") ?? .package
 
     func application(_ app: NSApplication, open urls: [URL]) {
-        if let u = urls.first(where: { $0.scheme == "laborbuch" }) { return openScanned(u.absoluteString) }  // Link vom Etikett
+        if let u = urls.first(where: { $0.scheme == "laborbuch" }) {
+            if handleAction(u) { return }  // laborbuch://new|append|search (Kurzbefehle)
+            return openScanned(u.absoluteString)  // Link vom Etikett
+        }
         if let u = urls.first(where: { $0.pathExtension == "laborbuch" }) { switchBook(to: u) }
     }
 
@@ -626,6 +630,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                         replyHandler(text, nil)
                     }
                 }.resume()
+            case "testAppleScript":  // Testmodus: Befehle des Wörterbuchs über Apple Events an die eigene App
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                var err: NSDictionary?
+                let r = NSAppleScript(source: try str("source"))?.executeAndReturnError(&err)
+                if let err { throw StoreError.invalid("AppleScript: \(err[NSAppleScript.errorMessage] ?? err)") }
+                func value(_ d: NSAppleEventDescriptor?) -> Any {
+                    guard let d else { return NSNull() }
+                    if d.descriptorType == typeAEList { return (0..<d.numberOfItems).map { value(d.atIndex($0 + 1)) } }
+                    if d.descriptorType == typeSInt32 || d.descriptorType == typeSInt16 { return Int(d.int32Value) }
+                    if d.descriptorType == typeTrue || d.descriptorType == typeFalse || d.descriptorType == typeBoolean { return d.booleanValue }
+                    return d.stringValue ?? NSNull()
+                }
+                replyHandler(value(r), nil)
+            case "testOpenURL":
+                guard testMode, let u = URL(string: try str("url")) else { throw StoreError.invalid("Nur im Testmodus") }
+                application(NSApp, open: [u]); replyHandler(true, nil)
+            case "testService":
+                guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
+                let pb = NSPasteboard(name: NSPasteboard.Name("lb-test-\(UUID().uuidString)"))
+                pb.clearContents(); pb.setString(try str("text"), forType: .string)
+                var msg: NSString = ""
+                newEntryFromService(pb, userData: "", error: &msg)
+                pb.releaseGlobally()
+                replyHandler(msg as String, nil)
             case "testSetNet":
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 testNet["\(try str("source")):\(try str("id"))"] = try str("text"); replyHandler(true, nil)

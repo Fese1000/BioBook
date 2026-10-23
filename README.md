@@ -1,6 +1,6 @@
 # Laborbuch
 
-Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **Phase 2 (M8–M13)** und **Phase 3 (M14–M17)** sowie **M18–M21** aus Phase 4 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
+Ein schnelles, lokales Laborbuch für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **Phase 2 (M8–M13)** und **Phase 3 (M14–M17)** sowie **M18–M22** aus Phase 4 (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
 
 ## Installieren
 `Laborbuch-AppleSilicon.dmg` öffnen und die App nach „Programme“ ziehen (macOS 13 oder neuer, Apple Silicon). Die App ist nur ad hoc signiert: Beim ersten Start einer heruntergeladenen Kopie fragt macOS nach. Ab macOS 15 einmal öffnen, dann Systemeinstellungen › Datenschutz & Sicherheit › „Trotzdem öffnen“; unter macOS 13/14 Rechtsklick › Öffnen.
@@ -12,6 +12,7 @@ Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das D
 - Bestand (Seitenleiste „📦 Bestand“): Standorte als Baum (Raum › Gerät › Regal › Box mit Raster), Chargen mit Menge, Einheit, Chargennummer, Ablaufdatum, Mindestbestand, GHS-Gefahren und Sicherheitsdatenblatt. Jede Mengenänderung ist eine unveränderliche Buchung. Im Eintrag bucht der Block „📦 Verbrauch“ eine Menge ab (mit Einheitenumrechnung, stornierbar); die Buchung verweist auf den Eintrag. Abgelaufene, bald ablaufende und knappe Chargen werden gemeldet.
 - Strukturierte Ergebnisse (Block „📊 Ergebnisse“): Tabellen nach festen Schemata mit Feldern, Einheiten und berechneten Feldern per Formel (z. B. Ausbeute = konz × volumen / 1000); mitgeliefert sind Plasmid-Präp, Proteinbestimmung und qPCR, eigene Schemata lassen sich anlegen. Die „📈 Auswertung“ sammelt alle Zeilen eines Schemas über Einträge hinweg (Filter nach Projekt und Zeitraum), zeigt Kennzahlen, ein Diagramm über die Zeit oder gegen ein anderes Feld und exportiert CSV.
 - Sequenzen: Sequenzfelder in der Registry (z. B. Plasmid) lassen sich aus GenBank- oder FASTA-Dateien füllen; Features und „ringförmig“ werden übernommen. Darunter: Ring- bzw. lineare Karte mit Features, Basen mit Positionen und Übersetzung (Rahmen +1 bis +3), Motivsuche auf beiden Strängen (IUPAC, über den Ursprung), ORF-Suche (≥ 100 aa, als Feature übernehmen), Revers-Komplement, Export als FASTA oder GenBank. Restriktion: gut 50 gängige Enzyme (auch Typ IIS wie BsaI), Einzelschneider auf einen Klick, Schnitte auf der Karte, virtueller Verdau mit Fragmenten und virtuellem Gel. Primer: Tm nach Nearest-Neighbor (SantaLucia, mit Mg²⁺ – gleiche Werte wie Primer3), GC, Hinweise (3'-Ende, Wiederholungen, Selbstbindung) und Bindestellen auf der Vorlage, auch mit 5'-Überhang; Primer-Objekte in der Registry zeigen dieselbe Tm. Im Eintrag zeigt der Block „🧬 Sequenz“ die Karte eines Objekts. Wird die Sequenz später geändert, gelten die Features als veraltet.
+- Kurzbefehle und AppleScript: Links `laborbuch://new?title=…&text=…` (neuer Eintrag), `laborbuch://append?id=…&text=…` (Text anhängen, mit Rückfrage) und `laborbuch://search?q=…` lassen sich in der Kurzbefehle-App mit „URL öffnen“ nutzen. AppleScript: `tell application "Laborbuch" to create entry titled "PCR" with text "…"`, `append text "…" to entry 12`, `find entries "Taq"`, `entry text 12`. Im Dienste-Menü jeder App macht „Neuer Laborbuch-Eintrag“ aus markiertem Text einen Eintrag. Abgeschlossene Einträge bleiben unverändert.
 - Chemie (Block „⚗️ Struktur“): SMILES eingeben → Strukturbild, Summenformel (Hill) und Molmasse (IUPAC-Atomgewichte); „→ Einwaage“ fügt den Einwaage-Rechner mit der Molmasse ein. Chemikalien in der Registry haben ein SMILES-Feld, zeigen ihre Struktur und übernehmen die Molmasse per Knopf.
 - Gerätedateien: Im Plattenblock übernimmt „📥 Messwerte“ den Export eines Plattenlesers (Raster mit Kopfzeilen wie bei Tecan/BMG oder Liste „A01; Wert“, Komma oder Punkt) und zeigt ihn als Heatmap mit Skala; je Probe stehen Mittelwert ± SD darunter und im PDF. Im Ergebnisblock füllt „📥 NanoDrop-Export“ eine Plasmid-Präp-Tabelle, „📥 qPCR-Export“ (Bio-Rad CFX, QuantStudio) eine qPCR-Tabelle mit gemittelten Replikaten und dem Referenzgen (GAPDH, ACTB … werden erkannt) für ΔCt.
 - Fälligkeiten (Seitenleiste „📅 Fällig“): Checklisten-Punkte mit Datum („bis Freitag“, „morgen“, „30.10.“, „2026-11-02“) werden im Text markiert (überfällig rot) und erscheinen zusammen mit fälligen Geräteaufgaben, Mycoplasma-Tests und ablaufenden Chargen in einer Übersicht (überfällig, heute, diese Woche, später); ein Klick öffnet das Objekt. „Als Kalender (.ics) speichern“ erzeugt ganztägige Termine für Apple Kalender; ein erneuter Import aktualisiert statt zu verdoppeln.
@@ -67,10 +68,10 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 
 ## Tests
 ```bash
-swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
+swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
 node --test tests/                                                             # Rechner gegen Handrechnung, Markdown, Sequenzen und Verdau (pUC19 aus NCBI L09137), Tm gegen Primer3, Kennungen, Statistik gegen scipy, Literaturformate (echte Crossref-/PubMed-Antworten), Termine und iCalendar, Gerätedateien, Summenformeln und Molmassen
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 149 Prüfungen
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 155 Prüfungen
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
@@ -109,6 +110,7 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `web/culture.js` | Zellkultur- und Geräte-Ansicht, Passage-Block im Eintrag |
 | `app/Orders.swift` | Bestellvorschläge, Bestellliste mit Statusverlauf, Wareneingang |
 | `web/orders.js` | Bestellungen-Ansicht, Wareneingang, CSV |
+| `app/Automation.swift`, `app/AutomationStore.swift`, `app/Laborbuch.sdef` | AppleScript-Wörterbuch und -Befehle, laborbuch://-Aktionen, Dienst |
 | `web/chem.js` | SMILES lesen, Summenformel, Molmasse; Struktur-Block |
 | `web/vendor/smiles-drawer.min.js` | Strukturbilder (SmilesDrawer 2.4.1, MIT, offline gebündelt; `cd tools && npm run chem`) |
 | `web/devfiles.js` | Plattenleser-, NanoDrop- und qPCR-Exporte lesen |

@@ -12,7 +12,7 @@ build() {  # $1 = arm64|x86_64
   local stage="$SRC/build/$label" app="$SRC/build/$label/Laborbuch.app"
   rm -rf "$stage"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   cp -R "$SRC/web" "$app/Contents/Resources/"
-  cp "$SRC/app/AppIcon.icns" "$app/Contents/Resources/"
+  cp "$SRC/app/AppIcon.icns" "$SRC/app/Laborbuch.sdef" "$app/Contents/Resources/"
   swiftc -O -target "$arch-apple-macos13" "$SRC"/app/*.swift -o "$app/Contents/MacOS/Laborbuch"
   cat > "$app/Contents/Info.plist" <<PL
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,6 +38,14 @@ build() {  # $1 = arm64|x86_64
 <key>CFBundleURLTypes</key><array><dict>
   <key>CFBundleURLName</key><string>de.felix.laborbuch.link</string>
   <key>CFBundleURLSchemes</key><array><string>laborbuch</string></array>
+</dict></array>
+<key>NSAppleScriptEnabled</key><true/>
+<key>OSAScriptingDefinition</key><string>Laborbuch.sdef</string>
+<key>NSServices</key><array><dict>
+  <key>NSMenuItem</key><dict><key>default</key><string>Neuer Laborbuch-Eintrag</string></dict>
+  <key>NSMessage</key><string>newEntryFromService</string>
+  <key>NSPortName</key><string>Laborbuch</string>
+  <key>NSSendTypes</key><array><string>public.utf8-plain-text</string><string>NSStringPboardType</string></array>
 </dict></array>
 <key>NSCameraUsageDescription</key><string>Zum Scannen von Etiketten (QR-Codes) mit der Kamera.</string>
 <key>CFBundleDocumentTypes</key><array><dict>

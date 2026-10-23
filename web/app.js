@@ -1298,6 +1298,30 @@ async function selfTest() {
   ok(parseJSON((await call('entity', {id: tris.id})).fields_json, {}).mw == '121,14' && !document.querySelector('#reg [data-chemmw]'), 'Molmasse ins Feld übernommen');
   await call('testSnapshot', {name: 'm21-chemie.png'}).catch(() => {});
   showView('doc');
+
+  // M22: AppleScript, Kurzbefehle (laborbuch://), Dienste
+  const as = await call('testAppleScript', {source: `tell current application
+    set n to «event LBokCrEn» given «class titl»:"Aus AppleScript", «class ctxt»:"Zeile 1"
+    «event LBokApTx» "Zeile 2" given «class entr»:n
+    set t to «event LBokGtTx» n
+    set f to «event LBokFind» "AppleScript"
+  end tell
+  return {n, t, f}`});
+  ok(Number.isInteger(as[0]) && /Aus AppleScript\n\nZeile 1\nZeile 2/.test(as[1]) && as[2].includes(`${as[0]}: Aus AppleScript`), 'AppleScript: Eintrag anlegen, Text anhängen, lesen, suchen');
+  let asErr = '';
+  try { await call('testAppleScript', {source: `tell current application to «event LBokApTx» "x" given «class entr»:${signedOne.id}`}); } catch (e) { asErr = e.message; }
+  ok(/abgeschlossen/.test(asErr), 'AppleScript schreibt nicht in abgeschlossene Einträge');
+  await call('testOpenURL', {url: 'laborbuch://new?title=Kurzbefehl&text=' + encodeURIComponent('Erste Zeile\nZweite Zeile')}); await sleep(500);
+  const kbId = cur;
+  ok($('#title').value == 'Kurzbefehl' && editor.getText().includes('Zweite Zeile'), 'laborbuch://new legt einen Eintrag an und öffnet ihn');
+  await call('testOpenURL', {url: `laborbuch://append?id=${kbId}&text=${encodeURIComponent('Messung 42')}`}); await sleep(500);
+  ok(cur == kbId && editor.getText().includes('Messung 42'), 'laborbuch://append hängt Text an, das offene Fenster zeigt ihn');
+  await call('testOpenURL', {url: 'laborbuch://search?q=Kurzbefehl'}); await sleep(400);
+  ok($('#search').value == 'Kurzbefehl' && document.querySelector(`#list li[data-id="${kbId}"]`), 'laborbuch://search sucht im Laborbuch');
+  $('#search').value = ''; await refreshList();
+  const svcMsg = await call('testService', {text: 'Notiz aus Safari\nmit zweiter Zeile'}); await sleep(500);
+  ok(!svcMsg && $('#title').value == 'Notiz aus Safari' && editor.getText().includes('mit zweiter Zeile'), 'Dienst „Neuer Laborbuch-Eintrag“ übernimmt markierten Text');
+  showView('doc');
   return out;
 }
 
@@ -1367,7 +1391,8 @@ setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS)
 window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
   exportBook, exportEntryPDF, importFiles, backupNow, updateProgress, trashEntry,
   openCode, scan: () => call('scan'),
-  openEntry: id => { $('#search').value = ''; return refreshList(id); },
+  openEntry: id => { $('#search').value = ''; showView('doc'); return refreshList(id); },
+  search: q => { showView('doc'); $('#search').value = q; return refreshList(); },
   // vom iPhone übernommen (Swift hat die Datei schon gespeichert)
   insertReceived: it => {
     if (!cur || preview || curSigned) return alert('Bitte zuerst einen bearbeitbaren Eintrag öffnen.');

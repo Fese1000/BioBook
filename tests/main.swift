@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -477,6 +477,18 @@ try s.restoreEntry(id: agEntry)
 
 // M21: SMILES-Feld für Chemikalien (Migration)
 check(try ((try s.types()).first { $0["prefix"] as? String == "CH" }!["fields_json"] as! String).contains("\"smiles\""), "Chemikalie hat ein SMILES-Feld")
+
+// M22: Automatisierung (Store-Teil)
+let autoId = try s.newEntry(title: "", text: "Notiz aus Safari\nzweite Zeile\n\nnach Leerzeile")
+let autoE = try s.load(id: autoId)
+check(try autoE["title"] as? String == "Notiz aus Safari" && (autoE["draft_json"] as! String).contains("nach Leerzeile"), "Neuer Eintrag aus Text: erste Zeile wird Titel")
+try s.appendText(entry: autoId, text: "Nachtrag per Kurzbefehl")
+check(try (try s.entryText(id: autoId)).hasSuffix("Nachtrag per Kurzbefehl") && (try s.search("Kurzbefehl")).contains { $0["id"] as? Int == autoId }, "Text angehängt und durchsuchbar")
+check(try (try? s.appendText(entry: 999_999, text: "x")) == nil, "Unbekannter Eintrag abgelehnt")
+let linkTarget = try s.create(title: "Ziel")
+_ = try s.saveDraft(id: autoId, title: "Notiz aus Safari", json: "{\"type\":\"doc\",\"content\":[]}", text: "mit Verweis", links: [linkTarget])
+try s.appendText(entry: autoId, text: "noch etwas")
+check(try (try s.backlinks(id: linkTarget)).contains { $0["id"] as? Int == autoId }, "Anhängen lässt Verweise des Eintrags bestehen")
 
 // Leistung: 10.000 Einträge, Suche
 let words = ["Puffer", "Probe", "Zentrifuge", "Pellet", "Plasmid", "Primer", "Gel", "Bande", "Ausbeute", "Kontrolle"]
