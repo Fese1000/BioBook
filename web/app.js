@@ -291,6 +291,7 @@ async function selectProject(p) {
   document.querySelectorAll('#projects li').forEach(li => li.classList.toggle('cur', li.dataset.p == p));  // sofort, die Zahlen folgen
   await loadProjects();
   await refreshList();
+  if (p == 'trash') $('#listTitle').closest('.sec').scrollIntoView({block: 'start'});  // die Liste unten in der Seitenleiste ins Bild holen
 }
 
 async function newProject() {
@@ -892,6 +893,7 @@ async function selfTest() {
   await restoreEntry();
   ok(cur == tId && editor.isEditable && (await call('search', {q: 'rotor'})).some(r => r.id == tId), 'Wiederhergestellt, wieder bearbeitbar und auffindbar');
   await trashEntry(); await selectProject('trash'); await open(tId);
+  await call('testSnapshot', {name: 'm33-papierkorb.png'}).catch(() => {});
   await purgeEntry();
   ok(!(await call('trash')).some(r => r.id == tId) && !(await call('load', {id: tId}).catch(() => null)), 'Endgültig gelöscht');
   let signedOne = null;
@@ -1720,6 +1722,8 @@ async function selfTest() {
   for (const p of await call('plans', {from: tdy, to: tdy})) await call('deletePlan', {id: p.id});
   showView('doc');
   // Reiter der Registry ausblenden und wieder holen
+  const hiddenBefore = (await call('prefs')).hiddenTabs || '';  // schon ausgeblendete Reiter in deinem Buch dürfen den Test nicht stören
+  await savePref('hiddenTabs', '');
   const navLi = k => document.querySelector(`#stockNav li[data-stock="${k}"]`);
   navLi('orders').querySelector('[data-hidetab]').click(); await sleep(200);
   ok(navLi('orders').classList.contains('tabhidden') && getComputedStyle(navLi('orders')).display == 'none' && (await call('prefs')).hiddenTabs == 'orders' && !navLi('dev').classList.contains('tabhidden'), 'Reiter ausblenden: nur dieser, und gemerkt');
@@ -1728,12 +1732,24 @@ async function selfTest() {
   ok(menuRow && menuRow.textContent.includes('☐') && document.querySelector('.popmenu [data-tabkey="dev"]').textContent.includes('☑'), 'Reiter-Menü: zeigt, was ein- und ausgeblendet ist');
   menuRow.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(200);
   ok(!navLi('orders').classList.contains('tabhidden') && !(await call('prefs')).hiddenTabs, 'Reiter-Menü: Reiter wieder einblenden');
+  ok(document.querySelector('.popmenu') && document.querySelector('.popmenu [data-tabkey="orders"]').textContent.includes('☑'), 'Reiter-Menü: bleibt nach dem Klick offen, Haken aktualisiert');
+  for (const k of ['dev', 'lit']) document.querySelector(`.popmenu [data-tabkey="${k}"]`).dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})), await sleep(250);
+  ok(navLi('dev').classList.contains('tabhidden') && navLi('lit').classList.contains('tabhidden') && document.querySelector('.popmenu [data-tabkey="dev"]').textContent.includes('☐'), 'Reiter-Menü: mehrere Reiter nacheinander umschalten');
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'})); await sleep(50);
+  ok(!document.querySelector('.popmenu'), 'Reiter-Menü: Escape schließt');
+  tabsMenu($('#regTabs')); await sleep(50);
+  ok(document.querySelectorAll('.popmenu [data-typekey]').length == regTypes.length && document.querySelector('.popmenu [data-tabkey="calendar"]'), 'Reiter-Menü: alle Typen und auch der Kalender sind ausblendbar');
+  document.querySelector('.popmenu [data-tabkey="calendar"]').dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(250);
+  ok($('#calNav').classList.contains('tabhidden') && document.querySelector('.sec[data-fold="calendar"]').classList.contains('tabhidden') && getComputedStyle($('#calNav')).display == 'none', 'Kalender lässt sich ausblenden');
+  document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+  await savePref('hiddenTabs', hiddenBefore); await sleep(100);
+  await savePref('hiddenTabs', '');
   const someType = regTypes.find(t => !t.archived);
   document.querySelector(`#types [data-archivetype="${someType.id}"]`).click(); await sleep(400);
   ok(!document.querySelector(`#types li[data-type="${someType.id}"]`) && (await call('types')).find(t => t.id == someType.id)?.archived, 'Typ ausblenden: archiviert, nichts gelöscht');
   tabsMenu($('#regTabs')); await sleep(100);
-  document.querySelector(`.popmenu [data-typeback="${someType.id}"]`).dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(400);
-  ok(document.querySelector(`#types li[data-type="${someType.id}"]`), 'Typ aus dem Menü wieder holen');
+  document.querySelector(`.popmenu [data-typekey="${someType.id}"]`).dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(400);
+  ok(document.querySelector(`#types li[data-type="${someType.id}"]`), 'Typ aus dem Menü wieder holen (Haken)');
   // Farbschema
   const themeBefore = (await call('prefs')).theme || '', bgBefore = document.documentElement.style.getPropertyValue('--bg');  // dein eigenes Schema darf den Test nicht stören
   await showSettings(); await sleep(100);
@@ -1869,7 +1885,7 @@ $('#list').addEventListener('click', e => {
   if (LIST_SELECT) { const id = +li.dataset.id; LIST_SELECT.has(id) ? LIST_SELECT.delete(id) : LIST_SELECT.add(id); return refreshList(); }
   const q = $('#search').value.trim().replace(/["*()]/g, ' ').split(/\s+/).find(w => w.length >= 3);  // bei Suche: zum Treffer springen
   if (e.metaKey) call('openInTab', {id: +li.dataset.id});  // ⌘-Klick: immer in neuem Tab
-  else openFromSidebar(`entry:${li.dataset.id}`, () => { if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; } return open(+li.dataset.id, {find: q}); });
+  else (project == 'trash' ? (f => f()) : (f => openFromSidebar(`entry:${li.dataset.id}`, f)))(() => { if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; } return open(+li.dataset.id, {find: q}); });  // im Papierkorb bleibt alles im selben Tab
 });
 $('#new').onclick = newEntry;
 $('#aiBtn').onclick = e => aiMenu(e.currentTarget);

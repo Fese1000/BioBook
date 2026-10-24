@@ -2,7 +2,7 @@
 // „Reiter“ der Registry lassen sich ausblenden und über das Menü ⋯ wieder einblenden – nichts geht verloren.
 
 let PREFS = {};
-const NAV_TABS = {agenda: '📅 Fällig', lots: '📦 Bestand', orders: '🛒 Bestellungen', cult: '🧫 Zellkultur', dev: '🔧 Geräte', lit: '📚 Literatur', ask: '✨ Fragen', analysis: '📊 Auswertung'};
+const NAV_TABS = {calendar: '📅 Kalender', agenda: '📅 Fällig', lots: '📦 Bestand', orders: '🛒 Bestellungen', cult: '🧫 Zellkultur', dev: '🔧 Geräte', lit: '📚 Literatur', ask: '✨ Fragen', analysis: '📊 Auswertung'};
 
 async function loadPrefs() {
   PREFS = await call('prefs').catch(() => ({}));
@@ -24,6 +24,7 @@ function applyPrefs() {
   applyTheme(PREFS.theme || 'system');
   const hid = hiddenTabs();
   document.querySelectorAll('#stockNav li[data-stock]').forEach(li => li.classList.toggle('tabhidden', hid.has(li.dataset.stock)));
+  document.querySelectorAll('.sec[data-fold="calendar"], #calNav').forEach(el => el.classList.toggle('tabhidden', hid.has('calendar')));
 }
 
 async function savePref(key, value) {
@@ -37,19 +38,29 @@ async function setTabHidden(key, hide) {
   await savePref('hiddenTabs', [...s].join(','));
 }
 
-/// Menü ⋯ an der Registry: alle Reiter mit Haken, dazu archivierte Typen zum Zurückholen
+/// Menü ⋯ an der Registry: alle Reiter mit Haken, dazu archivierte Typen zum Zurückholen.
+/// Bleibt nach jedem Klick offen (mehrere Reiter nacheinander umschalten); zu geht es per Klick daneben oder Escape.
 function tabsMenu(btn) {
-  const hid = hiddenTabs(), archived = (typeof regTypes != 'undefined' ? regTypes : []).filter(t => t.archived);
-  popMenu(btn, `<div class="sub" style="padding:4px 10px">Reiter ein- und ausblenden</div>
-    ${Object.entries(NAV_TABS).map(([k, t]) => `<div class="opt" data-tabkey="${k}">${hid.has(k) ? '☐' : '☑'} ${esc(t)}</div>`).join('')}
-    ${archived.length ? `<div class="sub" style="padding:8px 10px 4px">Archivierte Typen</div>${archived.map(t => `<div class="opt" data-typeback="${t.id}">↺ ${esc(t.icon)} ${esc(t.name)}</div>`).join('')}` : ''}
-    ${hid.size ? '<div class="opt" data-tabsall>Alle Reiter einblenden</div>' : ''}`, el => el.addEventListener('mousedown', async e => {
-    const o = e.target.closest('[data-tabkey],[data-typeback],[data-tabsall]'); if (!o) return;
-    e.preventDefault(); el.close();
-    if (o.dataset.tabkey) await setTabHidden(o.dataset.tabkey, !hid.has(o.dataset.tabkey));
-    else if (o.dataset.typeback) { await call('archiveType', {id: +o.dataset.typeback, archived: false}); await loadTypes(); }
-    else await savePref('hiddenTabs', '');
-  }));
+  const html = () => {
+    const hid = hiddenTabs(), types = typeof regTypes != 'undefined' ? regTypes : [];
+    return `<div class="sub" style="padding:4px 10px">Reiter</div>
+      ${Object.entries(NAV_TABS).map(([k, t]) => `<div class="opt" data-tabkey="${k}">${hid.has(k) ? '☐' : '☑'} ${esc(t)}</div>`).join('')}
+      ${types.length ? `<div class="sub" style="padding:8px 10px 4px">Typen der Registry</div>${types.map(t => `<div class="opt" data-typekey="${t.id}">${t.archived ? '☐' : '☑'} ${esc(t.icon)} ${esc(t.name)}</div>`).join('')}` : ''}
+      ${hid.size || types.some(t => t.archived) ? '<div class="opt" data-tabsall>Alles einblenden</div>' : ''}`;
+  };
+  popMenu(btn, html(), el => {
+    const onKey = e => { if (e.key == 'Escape') el.close(); };
+    document.addEventListener('keydown', onKey);
+    const close = el.close; el.close = () => { document.removeEventListener('keydown', onKey); close(); };
+    el.addEventListener('mousedown', async e => {
+      const o = e.target.closest('[data-tabkey],[data-typekey],[data-tabsall]'); if (!o) return;
+      e.preventDefault();
+      if (o.dataset.tabkey) await setTabHidden(o.dataset.tabkey, !hiddenTabs().has(o.dataset.tabkey));
+      else if (o.dataset.typekey) { const t = regTypes.find(x => x.id == o.dataset.typekey); await call('archiveType', {id: t.id, archived: !t.archived}); await loadTypes(); }
+      else { await savePref('hiddenTabs', ''); for (const t of regTypes.filter(x => x.archived)) await call('archiveType', {id: t.id, archived: false}); await loadTypes(); }
+      el.innerHTML = html();  // offen lassen, nur die Haken aktualisieren
+    });
+  });
 }
 
 // ---------- Neuer Tab beim Öffnen aus der Seitenleiste ----------

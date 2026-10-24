@@ -562,3 +562,8 @@ dialog#settings input:not([type=checkbox]){padding:6px 9px;border-radius:6px}
 #new{width:36px;align-self:stretch;padding:0;font-size:20px;font-weight:400}
 #new{padding-bottom:2px}
 .cadd{width:22px;height:22px;padding:0 0 2px;font-size:17px}
+
+/* Listen der Seitenleiste nicht zusammendrücken (sonst überlappen sie bei wenig Platz) */
+#types,#stockNav,#calNav,#savedlist,#tags,#templates,#projects{flex:none}
+#meta .iconbtns{border-right:0;padding-right:0;margin-right:2px}
+#projects li,#types li,#stockNav li,#calNav li{padding-top:5px;padding-bottom:5px}
