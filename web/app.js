@@ -1587,6 +1587,24 @@ async function selfTest() {
   LIST_SELECT = null; await refreshList();
   await call('aiSetKey', {key: 'sk-ant-test-0000'}); await showSettings(); await sleep(150);
   ok(/Eingerichtet/.test($('#aiState').textContent), 'Einstellungen zeigen den eingerichteten KI-Assistenten');
+  // Konten in den Einstellungen
+  const setV = (id, v) => { $(id).value = v; };
+  const acc = async (fill, go = '#accGo') => { fill(); $(go).click(); await sleep(400); };
+  $('#accNew').click();
+  await acc(() => { setV('#accName', 'Labor Test'); setV('#accPw1', 'passwort-eins'); setV('#accPw2', 'passwort-zwei'); });
+  ok(/verschieden/.test($('#accMsg').textContent) && !(await call('accounts')).length, 'Konto anlegen: ungleiche Wiederholung wird abgelehnt');
+  await acc(() => setV('#accPw2', 'passwort-eins'));
+  ok((await call('accounts')).join() == 'Labor Test' && $('#accList').textContent.includes('Labor Test') && !$('#accMsg').textContent, 'Konto anlegen: erscheint in der Liste');
+  document.querySelector('[data-accpw]').click();
+  await acc(() => { setV('#accOld', 'falsch-falsch'); setV('#accNew1', 'passwort-drei'); setV('#accNew2', 'passwort-drei'); });
+  ok(/stimmt nicht/.test($('#accMsg').textContent) && await call('authenticate', {name: 'Labor Test', password: 'passwort-eins'}), 'Passwort ändern: falsches altes Passwort wird abgelehnt');
+  await acc(() => setV('#accOld', 'passwort-eins'));
+  ok(await call('authenticate', {name: 'Labor Test', password: 'passwort-drei'}) && !(await call('authenticate', {name: 'Labor Test', password: 'passwort-eins'})), 'Passwort ändern: neues Passwort gilt');
+  document.querySelector('[data-accdel]').click();
+  await acc(() => setV('#accPw', 'falsch-falsch'));
+  ok((await call('accounts')).length == 1 && $('#accMsg').textContent, 'Konto löschen: falsches Passwort scheitert');
+  await acc(() => setV('#accPw', 'passwort-drei'));
+  ok(!(await call('accounts')).length && /Noch kein Konto/.test($('#accList').textContent) && $('#settings').open, 'Konto löschen: weg, Einstellungen bleiben offen');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
   showView('doc');
 

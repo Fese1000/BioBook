@@ -122,6 +122,7 @@ async function showSettings() {
     <p class="row"><b>KI-Assistent</b></p>
     <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „✨ Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
     <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
+    ${await accountsHTML()}
     ${await extSettingsHTML()}
     <p class="row"><b>Updates</b></p>
     <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
@@ -146,6 +147,7 @@ async function showSettings() {
     catch (e) { $('#aiState').textContent = e.message; }
   };
   if ($('#aiDel')) $('#aiDel').onclick = async () => { await call('aiSetKey', {key: null}); await refreshAI(); $('#aiState').textContent = 'Aus – Schlüssel entfernt.'; $('#aiDel').remove(); };
+  bindAccounts();
   bindExtSettings();
   $('#bkChoose').onclick = async () => { const p = await call('chooseBackupDir'); if (p) $('#bkDir').textContent = (await call('settings')).backupDir; };
   $('#bkNow').onclick = async () => { const r = await backupNow(); if (r) $('#bkLast').textContent = when(new Date().toISOString()); };
