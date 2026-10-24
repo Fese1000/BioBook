@@ -78,6 +78,7 @@ function calDrawSide(items = calItems()) {
       <label class="cpt"><input type="checkbox" data-cdone="${p.id}" ${p.done ? 'checked' : ''}> <b>${CAL_KIND[p.kind][1]} ${esc(p.title)}</b></label>
       <div class="sub">${p.time_from ? esc(p.time_from) + (p.time_to ? '–' + esc(p.time_to) : '') + ' Uhr' : 'ganztägig'}${p.day_end ? ` · ${Days.rangeLabel(p.day, p.day_end)}` : ''}</div>
       ${p.note ? `<div class="cnote">${esc(p.note)}</div>` : ''}
+      ${p.entry_id ? `<div class="cent"><a href="#" class="elink" data-entry="${p.entry_id}">↗ ${esc(p.entry_title || 'Eintrag')}</a></div>` : ''}
       <div class="cpb"><button class="btn" data-cedit="${p.id}">Ändern</button>
         <button class="btn" data-centryfor="${p.id}">${p.entry_id ? '📄 Eintrag öffnen' : '📄 Eintrag anlegen'}</button><button class="btn danger" data-cdel="${p.id}" title="Plan löschen (ein Eintrag bleibt)">🗑</button></div></div>`).join('')}
     ${due.length ? `<h4>Fällig</h4><div class="aglist">${due.map(x => `<div class="agrow" data-agt="${x.t}" data-agid="${x.id}"><span class="agicon">${AG_ICON[x.kind] || '•'}</span><span class="agtext"><b>${esc(x.title)}</b>${x.sub ? `<br><span class="sub">${esc(x.sub)}</span>` : ''}</span></div>`).join('')}</div>` : ''}
@@ -94,22 +95,43 @@ function calDrawForm(box) {
       <label>bis (mehrtägig) <input id="cfEnd" type="date" value="${esc(f.day_end)}"></label>
       <div class="row"><label>von <input id="cfFrom" type="time" value="${esc(f.time_from)}"></label><label>bis <input id="cfTo" type="time" value="${esc(f.time_to)}"></label></div>
       <textarea id="cfNote" rows="4" placeholder="Notiz (kommt in den Eintrag, wenn du ihn anlegst)">${esc(f.note)}</textarea>
+      <fieldset class="cflink"><legend>Eintrag dazu</legend>
+        <label class="inl"><input type="radio" name="cfLink" value="none" ${f.link == 'none' ? 'checked' : ''}> keiner</label>
+        <label class="inl"><input type="radio" name="cfLink" value="link" ${f.link == 'link' ? 'checked' : ''}> vorhandenen verlinken</label>
+        <input id="cfEntry" list="cfEntries" placeholder="Eintrag suchen …" value="${esc(f.entryLabel)}" autocomplete="off" ${f.link == 'link' ? '' : 'hidden'}>
+        <datalist id="cfEntries">${CAL.rows.map(r => `<option value="${esc(calEntryLabel(r))}"></option>`).join('')}</datalist>
+        ${f.id && f.entry_id ? '' : `<label class="inl"><input type="radio" name="cfLink" value="new" ${f.link == 'new' ? 'checked' : ''}> neuen Eintrag anlegen (mit Tagesabschnitt und Notiz)</label>`}
+      </fieldset>
       <p class="sub bad" id="cfMsg" role="alert"></p>
       <div class="row"><button class="btn on" id="cfSave">${f.id ? 'Sichern' : 'Planen'}</button><button class="btn" id="cfCancel">Abbrechen</button></div></div>`;
   $('#cfTitle').focus();
 }
 
+/// „Titel · #12“ – die Nummer macht gleiche Titel unterscheidbar und wird beim Speichern wieder gelesen
+const calEntryLabel = r => `${r.title || 'Ohne Titel'} · #${r.id}`;
+
 function calOpenForm(day, kind, plan) {
-  CAL.form = plan ? {id: plan.id, title: plan.title, kind: plan.kind, day: plan.day, day_end: plan.day_end, time_from: plan.time_from, time_to: plan.time_to, note: plan.note, done: !!plan.done}
-    : {id: null, title: '', kind: kind || 'termin', day, day_end: '', time_from: '', time_to: '', note: '', done: false};
+  const linked = plan?.entry_id && CAL.rows.find(r => r.id == plan.entry_id);
+  CAL.form = plan ? {id: plan.id, title: plan.title, kind: plan.kind, day: plan.day, day_end: plan.day_end, time_from: plan.time_from, time_to: plan.time_to, note: plan.note, done: !!plan.done,
+      entry_id: plan.entry_id || null, link: plan.entry_id ? 'link' : 'none', entryLabel: linked ? calEntryLabel(linked) : plan.entry_id ? `${plan.entry_title || ''} · #${plan.entry_id}` : ''}
+    : {id: null, title: '', kind: kind || 'termin', day, day_end: '', time_from: '', time_to: '', note: '', done: false, entry_id: null, link: 'none', entryLabel: ''};
   CAL.sel = day; calDraw();
 }
 
 async function calSaveForm() {
   const f = CAL.form, kindEl = document.querySelector('input[name=cfKind]:checked');
-  const values = {title: $('#cfTitle').value, kind: kindEl?.value || 'termin', day: $('#cfDay').value, day_end: $('#cfEnd').value, time_from: $('#cfFrom').value, time_to: $('#cfTo').value, note: $('#cfNote').value, done: f.done};
-  try { await call('savePlan', {id: f.id, values}); } catch (e) { $('#cfMsg').textContent = e.message; return; }
+  const mode = document.querySelector('input[name=cfLink]:checked')?.value || 'none';
+  const values = {title: $('#cfTitle').value, kind: kindEl?.value || 'termin', day: $('#cfDay').value, day_end: $('#cfEnd').value, time_from: $('#cfFrom').value, time_to: $('#cfTo').value, note: $('#cfNote').value, done: f.done, entry_id: null};
+  if (mode == 'link') {
+    const id = +($('#cfEntry').value.match(/#(\d+)\s*$/)?.[1] || 0);
+    if (!id) { $('#cfMsg').textContent = 'Bitte einen Eintrag aus der Liste wählen (oder „keiner“).'; return; }
+    values.entry_id = id;
+  }
+  let planId;
+  try { planId = await call('savePlan', {id: f.id, values}); } catch (e) { $('#cfMsg').textContent = e.message; return; }
+  if (mode == 'new') await call('planEntry', {id: planId});  // nur wenn gewünscht
   CAL.form = null; CAL.sel = values.day; await calLoad();
+  if (mode == 'new') { const id = CAL.plans.find(p => p.id == planId)?.entry_id; if (id) { showView('doc'); cur = null; await open(id); await refreshList(); } }
 }
 
 async function calMovePlan(id, to) {
@@ -144,6 +166,7 @@ function initCalendar() {
     const cell = d('data-cday'); if (cell) { CAL.sel = cell.dataset.cday; CAL.form = null; calDraw(); }
   });
   root.addEventListener('dblclick', e => { const c = e.target.closest('.ccell'); if (c && !e.target.closest('.cchip')) calOpenForm(c.dataset.cday, 'termin', null); });
+  root.addEventListener('change', e => { if (e.target.name == 'cfLink') { $('#cfEntry').hidden = e.target.value != 'link'; if (e.target.value == 'link') $('#cfEntry').focus(); } });
   root.addEventListener('keydown', e => { if (e.key == 'Enter' && e.target.id == 'cfTitle') { e.preventDefault(); calSaveForm(); } if (e.key == 'Escape' && CAL.form) { CAL.form = null; calDrawSide(); } });
   root.addEventListener('dragstart', e => { const p = e.target.closest('[data-cplan]'); if (p) { e.dataTransfer.setData('text/plan', p.dataset.cplan); e.dataTransfer.effectAllowed = 'move'; } });
   root.addEventListener('dragover', e => { if (e.target.closest('.ccell') && e.dataTransfer.types.includes('text/plan')) { e.preventDefault(); } });

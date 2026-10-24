@@ -47,6 +47,7 @@ final class DocWindow {
     let window: NSWindow
     let web: WKWebView
     var flushed = false  // vor dem Schließen gespeichert
+    var target = ""  // was dieser Tab gerade zeigt („entry:12“, „view:calendar“) – damit dasselbe nicht doppelt aufgeht
     init(window: NSWindow, web: WKWebView) { self.window = window; self.web = web }
 }
 
@@ -93,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     // MARK: Fenster und Tabs
     /// Neues Fenster; entry: diesen Eintrag statt des neuesten öffnen
     @discardableResult
-    func makeDoc(entry: Int?) -> DocWindow {
+    func makeDoc(entry: Int?, target: String? = nil) -> DocWindow {
         let cfg = WKWebViewConfiguration()
         cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
         cfg.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "lab")
@@ -118,7 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let d = DocWindow(window: w, web: web)
         docs.append(d)
         updateTitle()
-        web.load(URLRequest(url: URL(string: "lab://app/index.html" + (entry.map { "?entry=\($0)" } ?? ""))!))
+        let q = target.flatMap { $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) }.map { "?open=\($0)" } ?? entry.map { "?entry=\($0)" } ?? ""
+        web.load(URLRequest(url: URL(string: "lab://app/index.html" + q)!))
         if locker?.locked == true { locker.lockWindow(w) }
         return d
     }
@@ -126,6 +128,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc func newWindow() { makeDoc(entry: nil).window.makeKeyAndOrderFront(nil) }
 
     @objc func newTab() { openTab(entry: nil) }
+
+    var testTabs: [String] = []  // im Test: statt neuer Fenster nur merken, was geöffnet worden wäre
+
+    /// Neuer Tab für eine Sache („entry:12“, „view:agenda“, „type:3“); gibt es sie schon in einem Tab, wird der nach vorn geholt
+    func openTab(target spec: String) {
+        if let d = docs.first(where: { $0.target == spec }) { d.window.makeKeyAndOrderFront(nil); d.window.tabGroup?.selectedWindow = d.window; return }
+        let host = current?.window
+        let d = makeDoc(entry: nil, target: spec)
+        d.target = spec
+        if let host { host.addTabbedWindow(d.window, ordered: .above) }
+        d.window.makeKeyAndOrderFront(nil)
+    }
 
     func openTab(entry: Int?) {
         let host = current?.window
@@ -314,6 +328,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
                 if let m = a["lockMinutes"] as? Int { Settings.lockMinutes = m }
                 replyHandler(true, nil)
+            case "prefs": replyHandler(try s.prefs(), nil)
+            case "setPref":
+                try s.setPref(key: try str("key"), value: try str("value"))
+                broadcast(except: m.webView, "app.loadPrefs && app.loadPrefs()")
+                replyHandler(true, nil)
+            case "testTabs": replyHandler(testTabs, nil)
             case "plans": replyHandler(try s.plans(from: try str("from"), to: try str("to")), nil)
             case "savePlan": replyHandler(try s.savePlan(id: a["id"] as? Int, values: a["values"] as? [String: Any] ?? [:]), nil)
             case "deletePlan": try s.deletePlan(id: try int("id")); replyHandler(true, nil)
@@ -764,6 +784,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if !testMode { Spotlight.update(s, id: id) }
                 scheduleQuickLook()
             case "openInTab": openTab(entry: try int("id")); replyHandler(true, nil)
+            case "openTarget":
+                if testMode { testTabs.append(try str("spec")) } else { openTab(target: try str("spec")) }  // im Test keine echten Fenster
+                replyHandler(true, nil)
+            case "setTarget": if let d = docs.first(where: { $0.web === m.webView }) { d.target = try str("spec") }; replyHandler(true, nil)
             case "snapshot": replyHandler(try s.snapshot(id: try int("id")) ?? NSNull(), nil)
             case "history": replyHandler(try s.history(id: try int("id")), nil)
             case "verify": replyHandler(try s.verify(id: try int("id")), nil)

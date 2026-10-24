@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 20
+    static let schemaVersion = 21
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -299,6 +299,10 @@ final class Store {
                                   entry_id INTEGER REFERENCES entry(id), done INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL);
                 CREATE INDEX plan_day ON plan(day);
                 """)
+            }
+            if v < 21 {
+                // Oberflächen-Einstellungen (Farbschema, Tabs, ausgeblendete Reiter)
+                try exec("CREATE TABLE pref(key TEXT PRIMARY KEY, value TEXT NOT NULL);")
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")
         }

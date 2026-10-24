@@ -116,6 +116,10 @@ async function showSettings() {
     <p class="sub">Persönlicher Signaturschlüssel: ${s.fingerprint ? `<code>${esc(s.fingerprint)}</code> (im Schlüsselbund)` : 'wird beim ersten Signieren angelegt und im Schlüsselbund gespeichert'}</p>
     <label class="row"><input type="checkbox" id="setLock" ${s.lockEnabled ? 'checked' : ''}> Mit Touch ID sperren (beim Start und wenn der Mac schläft)</label>
     <label class="row">… und nach <input id="setLockMin" type="number" min="0" max="240" value="${s.lockMinutes}" style="width:70px"> Minuten ohne Eingabe (0 = nie)</label>
+    <p class="row"><b>Aussehen</b></p>
+    <label class="row">Farbschema <select id="setTheme">${['system', ...Themes.ids.filter(i => i != 'system' && !Themes.THEMES[i].dark), ...Themes.ids.filter(i => Themes.THEMES[i].dark)]
+      .map(i => `<option value="${i}" ${(PREFS.theme || 'system') == i ? 'selected' : ''}>${esc(Themes.THEMES[i].name)}${Themes.THEMES[i].vars ? (Themes.THEMES[i].dark ? ' ◐' : ' ○') : ''}</option>`).join('')}</select></label>
+    <label class="row"><input type="checkbox" id="setNewTab" ${tabsOnOpen() ? 'checked' : ''}> Einträge und Ansichten aus der Seitenleiste in einem neuen Tab öffnen (⌘-Klick auf einen Eintrag geht immer)</label>
     <p class="row"><b>Sicherung</b></p>
     <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
     <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
@@ -151,8 +155,10 @@ async function showSettings() {
   bindExtSettings();
   $('#bkChoose').onclick = async () => { const p = await call('chooseBackupDir'); if (p) $('#bkDir').textContent = (await call('settings')).backupDir; };
   $('#bkNow').onclick = async () => { const r = await backupNow(); if (r) $('#bkLast').textContent = when(new Date().toISOString()); };
+  $('#setTheme').onchange = () => applyTheme($('#setTheme').value);  // Vorschau; „Abbrechen“ stellt das alte Schema zurück
   dlg.onclose = async () => {
-    if (dlg.returnValue != 'ok') return;
+    if (dlg.returnValue != 'ok') return applyTheme(PREFS.theme || 'system');
+    await savePref('theme', $('#setTheme').value); await savePref('newtab', $('#setNewTab').checked ? 'on' : 'off');
     await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0)});
     status('Einstellungen gesichert');
   };

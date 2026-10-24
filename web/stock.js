@@ -267,8 +267,13 @@ function insertUsage() { editor.chain().focus().insertContent([{type: 'usage'}, 
 // ---------- Ereignisse ----------
 function initStock() {
   $('#stockNav').addEventListener('click', e => {
-    const k = e.target.closest('li')?.dataset.stock;
-    if (k == 'analysis') showAnalysis(); else if (k == 'orders') showOrders(); else if (k == 'lit') showLiterature(null); else if (k == 'agenda') showAgenda(); else if (k == 'calendar') showCalendar(); else if (k == 'ask') showAsk(); else if (k == 'cult') showCultures('list'); else if (k == 'dev') showDevices(); else showStock('lots');
+    if (e.target.dataset.hidetab) { e.stopPropagation(); return setTabHidden(e.target.dataset.hidetab, true); }
+    const k = e.target.closest('li')?.dataset.stock; if (!k) return;
+    openFromSidebar(`view:${k}`, () => openView(k));
+  });
+  $('#calNav').addEventListener('click', e => {
+    const m = e.target.closest('li')?.dataset.cal; if (!m) return;
+    openFromSidebar('view:calendar', () => { CAL.mode = m == 'week' ? 'week' : 'month'; CAL.anchor = CAL.sel = m == 'month' ? (CAL.anchor || todayISO()) : todayISO(); if (m == 'today') CAL.sel = todayISO(); return showCalendar(); });
   });
   $('#stock').addEventListener('click', async e => {
     const d = e.target.dataset;

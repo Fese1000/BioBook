@@ -28,13 +28,16 @@ extension Store {
         guard Store.isTime(from), Store.isTime(to) else { throw StoreError.invalid("Uhrzeit bitte als HH:MM") }
         guard to.isEmpty || from.isEmpty || !end.isEmpty || to >= from else { throw StoreError.invalid("Das Ende der Uhrzeit liegt vor dem Beginn") }
         guard Store.planKinds.contains(kind) else { throw StoreError.invalid("Art muss Termin oder Experiment sein") }
+        let link = v["entry_id"] as? Int
+        if let link { guard try queryRows("SELECT 1 FROM entry WHERE id = ? AND deleted IS NULL", [link]).first != nil else { throw StoreError.invalid("Den verlinkten Eintrag gibt es nicht") } }
         let args: [Any?] = [day, end, from, to, title, kind, s("note"), v["done"] as? Bool == true ? 1 : 0]
         if let id {
             guard try queryRows("SELECT 1 FROM plan WHERE id = ?", [id]).first != nil else { throw StoreError.invalid("Den Plan gibt es nicht") }
             try queryRows("UPDATE plan SET day = ?, day_end = ?, time_from = ?, time_to = ?, title = ?, kind = ?, note = ?, done = ? WHERE id = ?", args + [id])
+            if v.keys.contains("entry_id") { try queryRows("UPDATE plan SET entry_id = ? WHERE id = ?", [link, id]) }  // fehlt der Schlüssel, bleibt die Verknüpfung
             return id
         }
-        try queryRows("INSERT INTO plan(day, day_end, time_from, time_to, title, kind, note, done, created) VALUES(?,?,?,?,?,?,?,?,?)", args + [Store.now()])
+        try queryRows("INSERT INTO plan(day, day_end, time_from, time_to, title, kind, note, done, entry_id, created) VALUES(?,?,?,?,?,?,?,?,?,?)", args + [link, Store.now()])
         return try queryRows("SELECT last_insert_rowid() AS id").first!["id"] as! Int
     }
 

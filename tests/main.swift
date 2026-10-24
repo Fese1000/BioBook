@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift app/Planner.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift app/Planner.swift app/Prefs.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -611,6 +611,25 @@ do {
     check(try p.plans(from: "2026-10-26", to: "2026-10-26").first(where: { $0["id"] as? Int == b })?["entry_title"] as? String == "Transfektion HeLa", "Planung: Titel des Eintrags in der Liste")
     try p.deletePlan(id: b)
     check(try p.plans(from: "2026-10-26", to: "2026-10-26").isEmpty && (try? p.load(id: e)) != nil, "Planung: Löschen lässt den Eintrag stehen")
+}
+
+// Planung: Eintrag verlinken; Oberflächen-Einstellungen
+do {
+    let dirQ = FileManager.default.temporaryDirectory.appendingPathComponent("lb-pref-\(UUID().uuidString).laborbuch")
+    defer { try? FileManager.default.removeItem(at: dirQ) }
+    let q = try Store(root: dirQ)
+    let e1 = try q.create(title: "Ansatz 1")
+    let linked = try q.savePlan(id: nil, values: ["day": "2026-11-02", "title": "Mit Verweis", "entry_id": e1])
+    check(try q.plans(from: "2026-11-02", to: "2026-11-02").first?["entry_title"] as? String == "Ansatz 1", "Planung: vorhandenen Eintrag verlinken")
+    check((try? q.savePlan(id: nil, values: ["day": "2026-11-02", "title": "x", "entry_id": 99999])) == nil, "Planung: Verweis auf fehlenden Eintrag abgelehnt")
+    try q.savePlan(id: linked, values: ["day": "2026-11-03", "title": "Mit Verweis"])
+    check(try q.plans(from: "2026-11-03", to: "2026-11-03").first?["entry_id"] as? Int == e1, "Planung: ohne Schlüssel bleibt die Verknüpfung")
+    try q.savePlan(id: linked, values: ["day": "2026-11-03", "title": "Mit Verweis", "entry_id": NSNull()])
+    check(try q.plans(from: "2026-11-03", to: "2026-11-03").first?["entry_id"] as? Int == nil, "Planung: Verknüpfung lösen")
+    check(try q.prefs().isEmpty, "Einstellungen: anfangs leer")
+    try q.setPref(key: "theme", value: "nord"); try q.setPref(key: "theme", value: "dracula"); try q.setPref(key: "hiddenTabs", value: "orders,dev")
+    check(try q.prefs() == ["theme": "dracula", "hiddenTabs": "orders,dev"], "Einstellungen: speichern und überschreiben")
+    check((try? q.setPref(key: "irgendwas", value: "x")) == nil, "Einstellungen: unbekannter Schlüssel abgelehnt")
 }
 
 print(failures == 0 ? "\nAlle Tests bestanden" : "\n\(failures) Test(s) fehlgeschlagen")

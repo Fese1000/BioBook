@@ -18,10 +18,11 @@ function seqStats(seq) {
 async function loadTypes() {
   regTypes = await call('types');
   $('#types').innerHTML = regTypes.filter(t => !t.archived || t.id == regType).map(t => `<li data-type="${t.id}" class="${t.id == regType && !$('#reg').hidden ? 'cur' : ''} ${t.archived ? 'arch' : ''}">
-    <span class="n">${esc(t.icon)} ${esc(t.name)}</span><span class="c">${t.count}</span></li>`).join('');
+    <span class="n">${esc(t.icon)} ${esc(t.name)}</span><span class="c">${t.count}</span>${t.archived ? '' : `<button class="tabx" data-archivetype="${t.id}" title="Typ ausblenden (archivieren) – über ⋯ wieder holen">✕</button>`}</li>`).join('');
 }
 
 function showView(v) {
+  if (v != 'doc' && v != 'reg') reportTarget(`view:${v}`);
   $('#reg').hidden = v != 'reg';
   $('#stock').hidden = v != 'stock';
   $('#analysis').hidden = v != 'analysis';
@@ -42,7 +43,7 @@ function showView(v) {
 async function showType(id) {
   await flush();
   regType = id; regEntity = null;
-  showView('reg');
+  showView('reg'); reportTarget(`type:${id}`);
   await loadTypes();
   await renderTypeTable();
 }
@@ -175,8 +176,12 @@ function typeDialog(t) {
 
 // ---------- Ereignisse (beim Start gebunden; app.js definiert $ erst danach) ----------
 function initRegistry() {
-  $('#types').addEventListener('click', e => { const li = e.target.closest('li[data-type]'); if (li) showType(+li.dataset.type); });
+  $('#types').addEventListener('click', async e => {
+    if (e.target.dataset.archivetype) { e.stopPropagation(); await call('archiveType', {id: +e.target.dataset.archivetype, archived: true}); status('Typ ausgeblendet – über ⋯ an der Registry wieder holen'); return loadTypes(); }
+    const li = e.target.closest('li[data-type]'); if (li) openFromSidebar(`type:${li.dataset.type}`, () => showType(+li.dataset.type));
+  });
   $('#newType').onclick = () => typeDialog(null);
+  $('#regTabs').onclick = e => tabsMenu(e.currentTarget);
   $('#reg').addEventListener('click', async e => {
     const d = e.target.dataset, tr = e.target.closest('tr[data-ent]');
     if (tr) return showEntity(+tr.dataset.ent);

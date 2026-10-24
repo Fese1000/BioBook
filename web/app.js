@@ -462,6 +462,7 @@ async function open(id, {find} = {}) {
   updateRunBar();
   if (SIDE == e.id || SIDE < 0) closeSide();  // negativ: Versionsvergleich des vorigen Eintrags
   call('touchOpened', {id: e.id}).catch(() => {});
+  reportTarget(`entry:${e.id}`);
   renderEntryFlags();
   if (ETAB != 'notes') showEntryTab('notes'); else renderEntryTabs();
   if (find && jumpToText(find)) return;
@@ -1634,8 +1635,9 @@ async function selfTest() {
   if (wasClosed) regSec.click();
   // Kalender als eigene Ansicht
   const tom = SideCal.addDays(todayISO(), 1), tdy = todayISO();
-  ok(!document.querySelector('#sidecal') && !document.querySelector('aside .calgrid') && document.querySelector('#stockNav [data-stock="calendar"]'), 'Seitenleiste: nur der Eintrag „Kalender“, kein Tagesraster');
-  document.querySelector('#stockNav [data-stock="calendar"]').click(); await sleep(400);
+  const secs = [...document.querySelectorAll('aside .sec[data-fold]')].map(x => x.dataset.fold);
+  ok(!document.querySelector('aside .calgrid') && secs.indexOf('calendar') >= 0 && secs.indexOf('calendar') == secs.indexOf('registry') - 1 && !document.querySelector('#stockNav [data-stock="calendar"]') && document.querySelector('#calNav [data-cal="month"]'), 'Seitenleiste: „Kalender“ steht auf der Ebene der Registry, kein Tagesraster');
+  document.querySelector('#calNav [data-cal="month"]').click(); await sleep(400);
   ok(!$('#calendar').hidden && $('#doc').hidden && document.querySelectorAll('#calendar .ccell').length >= 28 && $('#calendar .ccell.today'), 'Kalender öffnet sich in der Hauptansicht (Monat)');
   $('#calendar [data-cnew]').click(); await sleep(100);
   $('#cfTitle').value = 'Transfektion HeLa'; $('#cfDay').value = tdy; $('#cfFrom').value = '09:30'; $('#cfTo').value = '11:00';
@@ -1677,6 +1679,72 @@ async function selfTest() {
   const keepConfirm = window.confirm; window.confirm = () => true;
   CAL.sel = tom; calDraw(); document.querySelector('#calside [data-cdel]').click(); await sleep(300); window.confirm = keepConfirm;
   ok(!(await call('plans', {from: tom, to: tom})).length && (await call('load', {id: planned.id})).title == 'Transfektion HeLa', 'Kalender: Plan löschen, der Eintrag bleibt');
+  // Planen mit Eintrag: nichts passiert automatisch
+  const entriesBefore = (await call('list', {})).length;
+  CAL.sel = tdy; CAL.form = null; calOpenForm(tdy, 'termin', null);
+  $('#cfTitle').value = 'Nur ein Termin'; $('#cfSave').click(); await sleep(400);
+  const solo = (await call('plans', {from: tdy, to: tdy})).find(p => p.title == 'Nur ein Termin');
+  ok(solo && !solo.entry_id && (await call('list', {})).length == entriesBefore, 'Planen: ohne Auswahl entsteht kein Eintrag und keine Verknüpfung');
+  const target = (await call('list', {}))[0];
+  calOpenForm(tdy, 'experiment', null);
+  $('#cfTitle').value = 'Mit Verweis'; document.querySelector('input[name=cfLink][value=link]').click(); await sleep(50);
+  ok(!$('#cfEntry').hidden && document.querySelectorAll('#cfEntries option').length >= 1, 'Planen: „vorhandenen verlinken“ zeigt die Eintragssuche');
+  $('#cfEntry').value = calEntryLabel(target); $('#cfSave').click(); await sleep(400);
+  const linkedPlan = (await call('plans', {from: tdy, to: tdy})).find(p => p.title == 'Mit Verweis');
+  ok(linkedPlan?.entry_id == target.id && (await call('list', {})).length == entriesBefore && $('#calside').textContent.includes(target.title || 'Eintrag'), 'Planen: vorhandenen Eintrag verlinkt, nichts Neues angelegt, Verweis im Tag sichtbar');
+  calOpenForm(tdy, 'termin', null);
+  $('#cfTitle').value = 'Ohne Wahl'; document.querySelector('input[name=cfLink][value=link]').click(); $('#cfEntry').value = 'gibt es nicht'; $('#cfSave').click(); await sleep(200);
+  ok(/Eintrag aus der Liste/.test($('#cfMsg').textContent) && !(await call('plans', {from: tdy, to: tdy})).some(p => p.title == 'Ohne Wahl'), 'Planen: unbekannter Eintrag in der Suche wird nicht still ignoriert');
+  document.querySelector('input[name=cfLink][value=new]').click(); $('#cfTitle').value = 'Neu mit Eintrag'; $('#cfSave').click(); await sleep(700);
+  const withNew = (await call('plans', {from: tdy, to: tdy})).find(p => p.title == 'Neu mit Eintrag');
+  ok(withNew?.entry_id && (await call('list', {})).length == entriesBefore + 1 && cur == withNew.entry_id, 'Planen: „neuen Eintrag anlegen“ legt ihn an und öffnet ihn');
+  for (const p of await call('plans', {from: tdy, to: tdy})) await call('deletePlan', {id: p.id});
+  showView('doc');
+  // Reiter der Registry ausblenden und wieder holen
+  const navLi = k => document.querySelector(`#stockNav li[data-stock="${k}"]`);
+  navLi('orders').querySelector('[data-hidetab]').click(); await sleep(200);
+  ok(navLi('orders').classList.contains('tabhidden') && getComputedStyle(navLi('orders')).display == 'none' && (await call('prefs')).hiddenTabs == 'orders' && !navLi('dev').classList.contains('tabhidden'), 'Reiter ausblenden: nur dieser, und gemerkt');
+  tabsMenu($('#regTabs')); await sleep(100);
+  const menuRow = document.querySelector('.popmenu [data-tabkey="orders"]');
+  ok(menuRow && menuRow.textContent.includes('☐') && document.querySelector('.popmenu [data-tabkey="dev"]').textContent.includes('☑'), 'Reiter-Menü: zeigt, was ein- und ausgeblendet ist');
+  menuRow.dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(200);
+  ok(!navLi('orders').classList.contains('tabhidden') && !(await call('prefs')).hiddenTabs, 'Reiter-Menü: Reiter wieder einblenden');
+  const someType = regTypes.find(t => !t.archived);
+  document.querySelector(`#types [data-archivetype="${someType.id}"]`).click(); await sleep(400);
+  ok(!document.querySelector(`#types li[data-type="${someType.id}"]`) && (await call('types')).find(t => t.id == someType.id)?.archived, 'Typ ausblenden: archiviert, nichts gelöscht');
+  tabsMenu($('#regTabs')); await sleep(100);
+  document.querySelector(`.popmenu [data-typeback="${someType.id}"]`).dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(400);
+  ok(document.querySelector(`#types li[data-type="${someType.id}"]`), 'Typ aus dem Menü wieder holen');
+  // Farbschema
+  await showSettings(); await sleep(100);
+  $('#setTheme').value = 'nord'; $('#setTheme').dispatchEvent(new Event('change'));
+  ok(document.documentElement.style.getPropertyValue('--bg') == '#2e3440' && getComputedStyle(document.body).backgroundColor == 'rgb(46, 52, 64)', 'Farbschema: Vorschau wirkt sofort');
+  $('#settings').close('cancel'); await sleep(200);
+  ok(!document.documentElement.style.getPropertyValue('--bg') && !(await call('prefs')).theme, 'Farbschema: „Abbrechen“ stellt das alte zurück');
+  await showSettings(); $('#setTheme').value = 'dracula'; $('#setTheme').dispatchEvent(new Event('change')); $('#setSave').click(); await sleep(400);
+  ok((await call('prefs')).theme == 'dracula' && document.documentElement.dataset.theme == 'dracula' && document.documentElement.style.colorScheme == 'dark', 'Farbschema: mit „Sichern“ gemerkt');
+  await call('testSnapshot', {name: 'm31-theme-dracula.png'}).catch(() => {});
+  await savePref('theme', 'system'); await sleep(100);
+  ok(!document.documentElement.style.getPropertyValue('--bg') && document.documentElement.dataset.theme == 'system', 'Farbschema: „System“ nimmt die Überschreibung weg');
+  // Neuer Tab beim Öffnen aus der Seitenleiste
+  window.TEST_TABS = true;
+  const otherId = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).find(id => id != cur), here = cur;
+  document.querySelector(`#list li[data-id="${otherId}"]`).click(); await sleep(300);
+  let tabs = await call('testTabs');
+  ok(tabs.includes(`entry:${otherId}`) && cur == here, 'Neuer Tab: Eintrag aus der Liste öffnet in einem neuen Tab, dieser bleibt');
+  document.querySelector('#stockNav li[data-stock="agenda"]').click(); await sleep(200);
+  document.querySelector('#calNav li[data-cal="week"]').click(); await sleep(200);
+  tabs = await call('testTabs');
+  ok(tabs.includes('view:agenda') && tabs.includes('view:calendar') && $('#agenda').hidden && $('#calendar').hidden, 'Neuer Tab: auch Ansichten (Fällig, Kalender) öffnen in neuen Tabs');
+  document.querySelector(`#types li[data-type="${someType.id}"]`).click(); await sleep(200);
+  ok((await call('testTabs')).includes(`type:${someType.id}`), 'Neuer Tab: Registry-Typ öffnet in neuem Tab');
+  const nBefore = (await call('testTabs')).length;
+  document.querySelector(`#list li[data-id="${here}"]`).click(); await sleep(200);
+  ok((await call('testTabs')).length == nBefore, 'Neuer Tab: was dieser Tab schon zeigt, öffnet nicht noch einmal');
+  await savePref('newtab', 'off');
+  document.querySelector(`#list li[data-id="${otherId}"]`).click(); await sleep(500);
+  ok((await call('testTabs')).length == nBefore && cur == otherId, 'Neuer Tab ausgeschaltet: öffnet im selben Tab');
+  await savePref('newtab', 'on'); window.TEST_TABS = false;
   showView('doc');
   const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).filter(id => id != cur).slice(0, 2);
   if (two.length == 2) {
@@ -1754,9 +1822,9 @@ $('#list').addEventListener('click', e => {
   if (e.target.dataset.emptytrash !== undefined) return emptyTrash();
   const li = e.target.closest('li'); if (!li || !li.dataset.id) return;
   if (LIST_SELECT) { const id = +li.dataset.id; LIST_SELECT.has(id) ? LIST_SELECT.delete(id) : LIST_SELECT.add(id); return refreshList(); }
-  if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; }
   const q = $('#search').value.trim().replace(/["*()]/g, ' ').split(/\s+/).find(w => w.length >= 3);  // bei Suche: zum Treffer springen
-  if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id, {find: q});  // ⌘-Klick: in neuem Tab
+  if (e.metaKey) call('openInTab', {id: +li.dataset.id});  // ⌘-Klick: immer in neuem Tab
+  else openFromSidebar(`entry:${li.dataset.id}`, () => { if (!$('#reg').hidden) { showView('doc'); if (li.dataset.id == cur) return; } return open(+li.dataset.id, {find: q}); });
 });
 $('#new').onclick = newEntry;
 $('#aiBtn').onclick = e => aiMenu(e.currentTarget);
@@ -1810,7 +1878,7 @@ $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
+window.app = {loadPrefs, newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
   exportBook, exportEntryPDF, importFiles, backupNow, updateProgress, trashEntry,
   openCode, scan: () => call('scan'),
   openEntry: id => { $('#search').value = ''; showView('doc'); return refreshList(id); },
@@ -1837,6 +1905,7 @@ async function start() {
   $('#book').textContent = book.name;
   $('#book').title = `${book.path}\nAnderes Laborbuch: ⌘O`;
   $('#metaKind').innerHTML = book.kinds.map(k => `<option value="${k}">${KINDS[k] || k}</option>`).join('');
+  await loadPrefs();
   await loadProjects();
   await loadTags();
   await loadTemplates();
@@ -1853,6 +1922,7 @@ async function start() {
   initEntryTabs();
   initManage();
   initSidebar();
+  document.querySelectorAll('#stockNav li[data-stock]').forEach(li => li.insertAdjacentHTML('beforeend', `<button class="tabx" data-hidetab="${li.dataset.stock}" title="Reiter ausblenden – über ⋯ wieder holen">✕</button>`));
   initCalendar();
   initMolBioUI();
   initAssistant();
@@ -1865,7 +1935,7 @@ async function start() {
   refreshStockBadge().then(n => { if (n) status(`${n} Charge(n) im Bestand abgelaufen, bald ablaufend oder knapp`); });
   await loadTypes();
   await refreshList();
-  const wanted = +new URLSearchParams(location.search).get('entry');  // neuer Tab für einen bestimmten Eintrag
-  const first = $('#list li'); if (wanted) await open(wanted); else if (first) await open(+first.dataset.id);
+  const params = new URLSearchParams(location.search), wanted = +params.get('entry');  // neuer Tab für einen bestimmten Eintrag oder eine Ansicht
+  const first = $('#list li[data-id]'); if (params.get('open')) await openSpec(params.get('open')); else if (wanted) await open(wanted); else if (first) await open(+first.dataset.id);
 }
 start().catch(e => alert('Start fehlgeschlagen: ' + e.message));
