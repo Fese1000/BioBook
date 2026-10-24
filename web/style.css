@@ -524,3 +524,35 @@ li:hover>.tabx{visibility:visible}.tabx:hover{opacity:1}
 #noticebar[hidden]{display:none}
 #noticebar .ntext{flex:1;min-width:200px}
 #noticebar .nclose{padding:3px 9px}
+
+/* Einstellungen: Reiter links, Inhalt rechts */
+dialog#settings{width:min(780px,92vw);padding:22px 26px 18px}
+dialog#settings h3{font-size:20px;margin-bottom:16px}
+.setwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:22px;min-height:380px}
+.setnav{display:flex;flex-direction:column;gap:3px;border-right:1px solid var(--line);padding-right:14px}
+.snav{border:0;background:none;color:var(--ink);font:inherit;font-size:14px;text-align:left;padding:8px 12px;border-radius:7px;cursor:pointer}
+.snav:hover{background:var(--sel)}.snav.on{background:var(--acc);color:var(--accfg);font-weight:600}
+.setpanes{max-height:min(62vh,560px);overflow:auto;padding-right:6px}
+.spane[hidden]{display:none}
+.spane h4{margin:22px 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);padding-bottom:5px;border-bottom:1px solid var(--line)}
+.spane h4:first-child{margin-top:0}
+dialog#settings .row{margin:12px 0;gap:10px;flex-wrap:wrap}
+dialog#settings label.row{line-height:1.4}
+dialog#settings .sub{margin:8px 0;line-height:1.5}
+dialog#settings select{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+dialog#settings input:not([type=checkbox]){padding:6px 9px;border-radius:6px}
+
+/* Eintrag: Kopfleiste in zwei Gruppen – links Angaben, rechts Aktionen */
+#title{font:650 30px/1.25 var(--serif);margin-bottom:14px}
+#meta{display:flex;flex-wrap:wrap;align-items:center;gap:12px 24px;margin:0 auto 12px;padding:10px 40px 12px;border-bottom:1px solid var(--line);font-size:13.5px}
+#meta .metafields{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;flex:1 1 auto;min-width:0}
+#meta label{display:inline-flex;align-items:center;gap:7px;color:var(--mut);font-size:13px}
+#meta select,#metaStatus{font:inherit;font-size:13.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:5px 9px;margin:0}
+#metaStatus{border-left-width:4px}
+#meta .metaactions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-left:auto}
+#meta .iconbtns{display:inline-flex;gap:6px;margin-right:6px;padding-right:12px;border-right:1px solid var(--line)}
+#meta .iconbtns .btn{min-width:34px;padding:5px 9px;text-align:center}
+#meta .btn{font-size:13.5px;padding:6px 13px}
+.tagedit{gap:6px}
+#tagInput{font-size:13px;padding:3px 4px}
+#etabs{margin-top:4px}

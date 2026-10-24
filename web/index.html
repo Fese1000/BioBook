@@ -34,19 +34,24 @@
     <div id="trashinfo" class="bar" hidden></div>
     <input id="title" placeholder="Titel" autocomplete="off">
     <div id="meta">
-      <label>Projekt <select id="metaProject"></select></label>
-      <label>Art <select id="metaKind"></select></label>
-      <select id="metaStatus" title="Status"></select>
-      <span class="tagedit"><span id="etags"></span><input id="tagInput" list="tagnames" placeholder="+ Tag" autocomplete="off" spellcheck="false"></span>
-      <datalist id="tagnames"></datalist>
-      <span id="tplinfo"></span>
-      <span class="grow"></span>
-      <button class="btn" id="pinBtn" title="Oben in der Liste anheften">📌</button>
-      <button class="btn" id="dupBtn" title="Eintrag duplizieren (ohne Signatur und Revisionen)">⧉</button>
-      <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
-      <button class="btn" id="trashBtn" title="In den Papierkorb (lässt sich wiederherstellen)">🗑</button>
-      <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
-      <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
+      <div class="metafields">
+        <label>Projekt <select id="metaProject"></select></label>
+        <label>Art <select id="metaKind"></select></label>
+        <label>Status <select id="metaStatus" title="Status"></select></label>
+        <span class="tagedit"><span id="etags"></span><input id="tagInput" list="tagnames" placeholder="+ Tag" autocomplete="off" spellcheck="false"></span>
+        <datalist id="tagnames"></datalist>
+        <span id="tplinfo"></span>
+      </div>
+      <div class="metaactions">
+        <span class="iconbtns">
+          <button class="btn" id="pinBtn" title="Oben in der Liste anheften">📌</button>
+          <button class="btn" id="dupBtn" title="Eintrag duplizieren (ohne Signatur und Revisionen)">⧉</button>
+          <button class="btn" id="trashBtn" title="In den Papierkorb (lässt sich wiederherstellen)">🗑</button>
+        </span>
+        <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
+        <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
+        <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
+      </div>
     </div>
     <div id="etabs"></div>
     <div id="metapanel" hidden></div>

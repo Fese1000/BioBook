@@ -13,7 +13,7 @@ function toggleFold(sec) {
   const folded = !sec.classList.contains('closed');
   setFolded(sec, folded);
   const st = foldState(); st[sec.dataset.fold] = folded;
-  try { localStorage.setItem(FOLD_KEY, JSON.stringify(st)); } catch {}
+  if (!window.TESTING) try { localStorage.setItem(FOLD_KEY, JSON.stringify(st)); } catch {}  // der Selbsttest soll den gemerkten Zustand nicht verstellen
 }
 
 function initFolds() {

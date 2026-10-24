@@ -1606,6 +1606,17 @@ async function selfTest() {
   LIST_SELECT = null; await refreshList();
   await call('aiSetKey', {key: 'sk-ant-test-0000'}); await showSettings(); await sleep(150);
   ok(/Eingerichtet/.test($('#aiState').textContent), 'Einstellungen zeigen den eingerichteten KI-Assistenten');
+  // Einstellungen in Reiter
+  const visiblePanes = () => [...document.querySelectorAll('#settings .spane')].filter(x => !x.hidden).map(x => x.dataset.pane);
+  ok(document.querySelectorAll('#settings .snav').length == 5 && visiblePanes().length == 1, 'Einstellungen: fünf Reiter, immer nur einer sichtbar');
+  document.querySelector('#settings [data-spane="sec"]').click();
+  ok(visiblePanes().join() == 'sec' && document.querySelector('#settings .snav.on').dataset.spane == 'sec' && $('#setAuthor').offsetParent && $('#accNew').offsetParent, 'Einstellungen: Reiter „Sicherheit“ zeigt Signatur, Sperre und Konten');
+  await call('testSnapshot', {name: 'm32-einstellungen.png'}).catch(() => {});
+  document.querySelector('#settings [data-spane="backup"]').click();
+  ok(visiblePanes().join() == 'backup' && $('#upCheck').offsetParent && $('#bkNow').offsetParent && !$('#accNew').offsetParent, 'Einstellungen: Reiter „Sicherung & Updates“');
+  await showSettings(); await sleep(50);
+  ok(visiblePanes().join() == 'backup', 'Einstellungen: merkt sich den zuletzt gezeigten Reiter');
+  document.querySelector('#settings [data-spane="sec"]').click();
   // Konten in den Einstellungen
   const setV = (id, v) => { $(id).value = v; };
   const acc = async (fill, go = '#accGo') => { fill(); $(go).click(); await sleep(400); };
@@ -1770,6 +1781,7 @@ async function selfTest() {
   window.dispatchEvent(new Event('blur')); await sleep(120);
   ok(!dirty && /Autospeichern-Probe/.test((await call('load', {id: cur})).draft_json), 'Speichern: beim Verlassen des Fensters sofort, ohne die Ruhezeit abzuwarten');
   showView('doc');
+  await call('testSnapshot', {name: 'm32-eintrag-kopf.png'}).catch(() => {});
   const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).filter(id => id != cur).slice(0, 2);
   if (two.length == 2) {
     const p1 = open(two[0]), p2 = open(two[1]);  // zwei Klicks kurz hintereinander

@@ -184,7 +184,7 @@ const ExtNode = TT.Node.create({
 /// Abschnitt in den Einstellungen: Liste, ein/aus, Ordner, Beispiele
 async function extSettingsHTML() {
   const list = await call('extensions').catch(() => []);
-  return `<p class="row"><b>Erweiterungen</b></p>
+  return `<h4>Erweiterungen</h4>
     <p class="sub">Eigene Rechner-Blöcke als .js-Datei im Ordner „Erweiterungen“. Sie laufen abgeschottet: kein Netz, keine Dateien, kein Zugriff auf das Laborbuch.</p>
     ${list.map(x => { const loaded = [...EXT.values()].find(e => e.file == x.file), err = EXT_ERRORS.find(e => e.file == x.file);
       return `<label class="row"><input type="checkbox" data-extfile="${esc(x.file)}" ${x.enabled ? 'checked' : ''}> ${esc(loaded ? `${loaded.name} ${loaded.version}` : x.file)}

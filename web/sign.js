@@ -108,32 +108,51 @@ async function attachWitness(testPath) {
 }
 
 // ---------- Einstellungen ----------
+let SET_PANE = 'look';  // zuletzt gezeigter Reiter der Einstellungen
 async function showSettings() {
   const s = {...await call('settings'), ai: (await call('aiStatus')).configured};
   const dlg = $('#settings');
-  dlg.innerHTML = `<form method="dialog"><h3>Einstellungen</h3>
-    <label class="row">Name für Signaturen <input id="setAuthor" value="${esc(s.author)}" autocomplete="off"></label>
-    <p class="sub">Persönlicher Signaturschlüssel: ${s.fingerprint ? `<code>${esc(s.fingerprint)}</code> (im Schlüsselbund)` : 'wird beim ersten Signieren angelegt und im Schlüsselbund gespeichert'}</p>
-    <label class="row"><input type="checkbox" id="setLock" ${s.lockEnabled ? 'checked' : ''}> Mit Touch ID sperren (beim Start und wenn der Mac schläft)</label>
-    <label class="row">… und nach <input id="setLockMin" type="number" min="0" max="240" value="${s.lockMinutes}" style="width:70px"> Minuten ohne Eingabe (0 = nie)</label>
-    <p class="row"><b>Aussehen</b></p>
+  dlg.innerHTML = `<form method="dialog" class="setform"><h3>Einstellungen</h3>
+    <div class="setwrap"><nav class="setnav" role="tablist">${[['look', '🎨 Aussehen'], ['sec', '🔒 Sicherheit'], ['backup', '💾 Sicherung & Updates'], ['ai', '✨ KI-Assistent'], ['ext', '🧩 Erweiterungen']]
+      .map(([k, t]) => `<button type="button" class="snav ${k == SET_PANE ? 'on' : ''}" data-spane="${k}" role="tab">${t}</button>`).join('')}</nav>
+    <div class="setpanes">
+    <section class="spane" data-pane="look" ${SET_PANE == 'look' ? '' : 'hidden'}><h4>Aussehen</h4>
     <label class="row">Farbschema <select id="setTheme">${['system', ...Themes.ids.filter(i => i != 'system' && !Themes.THEMES[i].dark), ...Themes.ids.filter(i => Themes.THEMES[i].dark)]
       .map(i => `<option value="${i}" ${(PREFS.theme || 'system') == i ? 'selected' : ''}>${esc(Themes.THEMES[i].name)}${Themes.THEMES[i].vars ? (Themes.THEMES[i].dark ? ' ◐' : ' ○') : ''}</option>`).join('')}</select></label>
     <label class="row"><input type="checkbox" id="setNewTab" ${tabsOnOpen() ? 'checked' : ''}> Einträge und Ansichten aus der Seitenleiste in einem neuen Tab öffnen (⌘-Klick auf einen Eintrag geht immer)</label>
-    <p class="row"><b>Sicherung</b></p>
+    </section>
+    <section class="spane" data-pane="sec" ${SET_PANE == 'sec' ? '' : 'hidden'}><h4>Signatur</h4>
+    <label class="row">Name für Signaturen <input id="setAuthor" value="${esc(s.author)}" autocomplete="off"></label>
+    <p class="sub">Persönlicher Signaturschlüssel: ${s.fingerprint ? `<code>${esc(s.fingerprint)}</code> (im Schlüsselbund)` : 'wird beim ersten Signieren angelegt und im Schlüsselbund gespeichert'}</p>
+    <h4>Sperre</h4>
+    <label class="row"><input type="checkbox" id="setLock" ${s.lockEnabled ? 'checked' : ''}> Mit Touch ID sperren (beim Start und wenn der Mac schläft)</label>
+    <label class="row">… und nach <input id="setLockMin" type="number" min="0" max="240" value="${s.lockMinutes}" style="width:70px"> Minuten ohne Eingabe (0 = nie)</label>
+    ${await accountsHTML()}
+    </section>
+    <section class="spane" data-pane="backup" ${SET_PANE == 'backup' ? '' : 'hidden'}><h4>Sicherung</h4>
     <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
     <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
-    <p class="row"><b>KI-Assistent</b></p>
-    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „✨ Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
-    <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
-    ${await accountsHTML()}
-    ${await extSettingsHTML()}
-    <p class="row"><b>Updates</b></p>
+    <h4>Updates</h4>
     <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
     <label class="row"><input type="checkbox" id="setUpdCheck" ${PREFS.updatecheck != 'off' ? 'checked' : ''}> Beim Start und alle paar Stunden leise nach Updates suchen und einen Hinweis zeigen</label>
     <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
+    </section>
+    <section class="spane" data-pane="ai" ${SET_PANE == 'ai' ? '' : 'hidden'}><h4>KI-Assistent</h4>
+    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „✨ Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
+    <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
+    </section>
+    <section class="spane" data-pane="ext" ${SET_PANE == 'ext' ? '' : 'hidden'}>
+    ${await extSettingsHTML()}
+    </section>
+    </div></div>
     <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on" id="setSave">Sichern</button></div></form>`;
   dlg.showModal();
+  dlg.querySelector('.setnav').onclick = e => {
+    const b = e.target.closest('[data-spane]'); if (!b) return;
+    SET_PANE = b.dataset.spane;
+    dlg.querySelectorAll('.snav').forEach(x => x.classList.toggle('on', x == b));
+    dlg.querySelectorAll('.spane').forEach(x => x.hidden = x.dataset.pane != SET_PANE);
+  };
   $('#upCheck').onclick = async () => {
     $('#upMsg').textContent = 'suche …';
     try {
