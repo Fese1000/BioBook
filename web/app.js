@@ -288,6 +288,7 @@ function fillMetaProject(sel = $('#metaProject').value) {
 
 async function selectProject(p) {
   project = p === '' ? null : p == 'trash' ? 'trash' : +p;
+  document.querySelectorAll('#projects li').forEach(li => li.classList.toggle('cur', li.dataset.p == p));  // sofort, die Zahlen folgen
   await loadProjects();
   await refreshList();
 }
@@ -387,24 +388,30 @@ async function pickTemplateVersion(id) {
 }
 
 // ---------- Einträge ----------
+let listSeq = 0;
 async function refreshList(selectId) {
+  const seq = ++listSeq;  // schnelle Folge (Tippen, Klicken): nur die jüngste Antwort wird gezeigt
   const q = $('#search').value.trim();
   const filter = {...(project == null ? {} : {project}), ...(tag == null ? {} : {tag})};
   let rows = project == 'trash' ? (await call('trash')).map(r => ({...r, updated: r.deleted}))
     : q ? await call('search', {q}) : await call('list', filter);
+  if (seq != listSeq) return;
   if (q && project != null && project != 'trash') rows = rows.filter(r => (r.project_id ?? 0) == project);  // Suche im gewählten Projekt
   if (q && tag != null) { const n = tags.find(t => t.id == tag)?.name.toLowerCase(); rows = rows.filter(r => (r.tags || '').toLowerCase().split(', ').includes(n)); }
   if (project != 'trash') rows = Manage.filterSort(rows, q && LISTF.sort == 'updated' ? {...LISTF, sort: 'none'} : LISTF);  // Suche: Trefferreihenfolge bleibt
   if (LIST_SELECT) for (const id of [...LIST_SELECT]) if (!rows.some(r => r.id == id)) LIST_SELECT.delete(id);
   renderListBar();
+  const listScroll = $('#list').scrollTop;
   $('#list').innerHTML = rows.map(r => `<li data-id="${r.id}" class="${r.id == cur ? 'cur' : ''} ${LIST_SELECT?.has(r.id) ? 'picked' : ''}">
     <div class="t">${LIST_SELECT ? `<input type="checkbox" class="lpick" ${LIST_SELECT.has(r.id) ? 'checked' : ''}> ` : ''}${r.pinned ? '📌 ' : ''}${statusDot(r.status)}${esc(r.title || 'Ohne Titel')}</div>
     <div class="m">${KINDS[r.kind] || ''} · ${r.day_first ? `📅 ${Days.rangeLabel(r.day_first, r.day_last)}` : when(r.updated)}${r.revisions ? ` · ${r.revisions} Rev.` : ''}${project == null && r.project_id ? ` · ${esc(projectName(r.project_id))}` : ''}</div>
     ${r.tags ? `<div class="m">${r.tags.split(', ').map(t => '#' + esc(t)).join(' ')}</div>` : ''}
     ${r.snippet ? `<div class="s">${esc(r.snippet).replace(/\[(.*?)\]/g, '<mark>$1</mark>')}</div>` : ''}</li>`).join('');
+  $('#list').scrollTop = listScroll;  // die Liste springt beim Auffrischen nicht nach oben
   $('#listTitle').textContent = [project == null ? 'Einträge' : project == 'trash' ? 'Papierkorb' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
   if (project == 'trash' && rows.length) $('#list').insertAdjacentHTML('afterbegin', '<li class="trashhead"><button class="btn danger" data-emptytrash>Papierkorb leeren</button></li>');
   $('#empty').hidden = !!(rows.length || q || cur || project != null || tag != null);
+  SIDECAL.touch();
   if (selectId) await open(selectId);
 }
 
@@ -415,11 +422,18 @@ async function showBacklinks() {
   refreshDbRefs(); refreshCiteBox();
 }
 
+let openSeq = 0;
+const markListCur = id => document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == id));
 async function open(id, {find} = {}) {
   if (cur == id && !preview) { if (find) jumpToText(find); return; }
+  const seq = ++openSeq;  // wer später klickt, gewinnt; ältere Ladevorgänge hören auf
+  markListCur(id);  // Auswahl sofort sichtbar, nicht erst nach dem Laden
   await flush();
+  if (seq != openSeq) return;
   if (cur && changedSinceSnap) await snapshot(true);
+  if (seq != openSeq) return;
   const e = await call('load', {id});
+  if (seq != openSeq) return;
   setPreview(null);
   if (!$('#reg').hidden) showView('doc');
   cur = e.id;
@@ -433,12 +447,14 @@ async function open(id, {find} = {}) {
   curTrashed = e.deleted ?? null;
   renderTemplateInfo();
   if (RUN && RUN.entry != e.id) hideRun();
-  editor.commands.setContent(e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '', {emitUpdate: false});
+  const content = e.draft_json ? await refreshLinkLabels(JSON.parse(e.draft_json)) : '';
+  if (seq != openSeq) { markListCur(cur); return; }
+  editor.commands.setContent(content, {emitUpdate: false});
   showBacklinks();
   dirty = changedSinceSnap = false; lastSnap = Date.now();
   status('Gespeichert');
   updateCounts();
-  document.querySelectorAll('#list li').forEach(li => li.classList.toggle('cur', li.dataset.id == cur));
+  markListCur(cur);
   applyLock();
   renderSignInfo();
   renderTrashInfo();
@@ -1606,6 +1622,30 @@ async function selfTest() {
   await acc(() => setV('#accPw', 'passwort-drei'));
   ok(!(await call('accounts')).length && /Noch kein Konto/.test($('#accList').textContent) && $('#settings').open, 'Konto löschen: weg, Einstellungen bleiben offen');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
+  // Seitenleiste: einklappen, Kalender, schnelles Umschalten
+  const regSec = document.querySelector('.sec[data-fold="registry"]');
+  regSec.click();
+  ok($('#types').classList.contains('folded') && $('#stockNav').classList.contains('folded') && regSec.classList.contains('closed') && getComputedStyle($('#types')).display == 'none', 'Seitenleiste: Registry lässt sich einklappen');
+  regSec.click();
+  ok(!$('#types').classList.contains('folded') && getComputedStyle($('#stockNav')).display != 'none', 'Seitenleiste: und wieder ausklappen');
+  await SIDECAL.load();
+  const todayBtn = document.querySelector(`#sidecal [data-calday="${todayISO()}"]`);
+  ok(todayBtn && todayBtn.classList.contains('today') && todayBtn.classList.contains('has') && document.querySelectorAll('#sidecal .d').length >= 28, 'Kalender: Monat mit heutigem Tag und Markierung für Einträge');
+  document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).click(); await sleep(400);
+  ok(LISTF.from == todayISO() && LISTF.to == todayISO() && document.querySelectorAll('#list li').length > 0 && document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).classList.contains('sel'), 'Kalender: Tag anklicken filtert die Liste');
+  document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).click(); await sleep(400);
+  ok(!LISTF.from && !LISTF.to && !document.querySelector('#sidecal .d.sel'), 'Kalender: zweiter Klick hebt den Filter auf');
+  document.querySelector('#sidecal [data-calmove="1"]').click(); await sleep(150);
+  const shown = $('#sidecal .calhead b').textContent;
+  document.querySelector('#sidecal [data-caltoday]').click(); await sleep(150);
+  ok(shown != $('#sidecal .calhead b').textContent && $('#sidecal .calhead b').textContent == SideCal.label(new Date().getFullYear(), new Date().getMonth()), 'Kalender: Monat wechseln und zurück zu heute');
+  await call('testSnapshot', {name: 'm30-seitenleiste.png'}).catch(() => {});
+  const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).slice(0, 2);
+  if (two.length == 2) {
+    const p1 = open(two[0]), p2 = open(two[1]);  // zwei Klicks kurz hintereinander
+    await Promise.all([p1, p2]); await sleep(100);
+    ok(cur == two[1] && $('#title').value == (await call('load', {id: two[1]})).title && document.querySelectorAll('#list li.cur').length == 1 && document.querySelector('#list li.cur').dataset.id == String(two[1]), 'Schnell zwischen Einträgen klicken: der letzte gewinnt, genau einer markiert');
+  }
   showView('doc');
 
   // M29: Molekularbiologie
@@ -1773,6 +1813,7 @@ async function start() {
   initAgenda();
   initEntryTabs();
   initManage();
+  initSidebar();
   initMolBioUI();
   initAssistant();
   await loadExtensions();

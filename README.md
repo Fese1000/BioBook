@@ -77,7 +77,7 @@ Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/v
 swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
 node --test tests/                                                             # Rechner gegen Handrechnung, Markdown, Sequenzen und Verdau (pUC19 aus NCBI L09137), Tm gegen Primer3, Kennungen, Statistik gegen scipy, Literaturformate (echte Crossref-/PubMed-Antworten), Termine und iCalendar, Gerätedateien, Summenformeln und Molmassen, Prompts des Assistenten, Tage, Excel/CSV, Versionsvergleich, .ab1 (gegen Biopython) und Klonierung
 LABORBUCH_BOOK=/tmp/perf.laborbuch build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --perftest   # Editor-Leistung (gibt die Messwerte aus und beendet sich)
-LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 215 Prüfungen, darunter: keine unbehandelten JS-Fehler im ganzen Lauf
+LABORBUCH_BOOK=/tmp/self.laborbuch LABORBUCH_KEYFILE=/tmp/self.key LABORBUCH_TESTOUT=/tmp LABORBUCH_BACKUPDIR=/tmp/backup build/AppleSilicon/Laborbuch.app/Contents/MacOS/Laborbuch --selftest   # 222 Prüfungen, darunter: keine unbehandelten JS-Fehler im ganzen Lauf
 # Update-Test 1.0 → 1.1: alte App mit --updatetest und LABORBUCH_UPDATE_API/LABORBUCH_UPDATE_PREFIX/LABORBUCH_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
 tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
 ```
@@ -110,6 +110,7 @@ tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browse
 | `app/QR.swift` | QR-Codes erzeugen und erkennen, Kamera-Scanner |
 | `web/labels.js` | Etiketten-PDF, Öffnen per Code |
 | `web/plate.js` | Plattenlayout-Block |
+| `web/sidebar.js`, `web/sidecal.js` | Seitenleiste: Abschnitte einklappbar (Zustand bleibt), Monatskalender mit Markierung für Einträge und Fälliges, Klick auf einen Tag filtert die Liste |
 | `app/Account.swift`, `web/accounts.js` | Lokale Konten (Name + Passwort, PBKDF2 mit eigenem Salz); anlegen, Passwort ändern, löschen unter Einstellungen |
 | `app/Results.swift` | Ergebnis-Schemata und -Zeilen, Abfrage über Einträge |
 | `web/results.js` | Ergebnis-Block, Auswertung mit Diagramm und CSV |

@@ -9,15 +9,17 @@
     <input id="search" type="search" placeholder="Suchen (⌘F)" autocomplete="off" spellcheck="false">
     <button id="new" class="btn" title="Neuer Eintrag (⌘N)">+</button>
   </div>
-  <div class="sec"><span>Projekte</span><button id="newProject" class="link" title="Neues Projekt">+ Projekt</button></div>
+  <div class="sec" data-fold="cal" data-target="#sidecal"><span>Kalender</span></div>
+  <div id="sidecal"></div>
+  <div class="sec" data-fold="projects" data-target="#projects"><span>Projekte</span><button id="newProject" class="link" title="Neues Projekt">+ Projekt</button></div>
   <ul id="projects"></ul>
-  <div id="tagsec" hidden><div class="sec"><span>Tags</span></div><div id="tags"></div></div>
-  <div id="savedsec" hidden><div class="sec"><span>Gespeicherte Suchen</span></div><ul id="savedlist"></ul></div>
-  <div class="sec"><span>Registry</span><button id="newType" class="link" title="Neuer Typ">+ Typ</button></div>
+  <div id="tagsec" hidden><div class="sec" data-fold="tags" data-target="#tags"><span>Tags</span></div><div id="tags"></div></div>
+  <div id="savedsec" hidden><div class="sec" data-fold="saved" data-target="#savedlist"><span>Gespeicherte Suchen</span></div><ul id="savedlist"></ul></div>
+  <div class="sec" data-fold="registry" data-target="#types,#stockNav"><span>Registry</span><button id="newType" class="link" title="Neuer Typ">+ Typ</button></div>
   <ul id="types"></ul>
   <ul id="stockNav"><li data-stock="agenda"><span class="n">📅 Fällig</span><span class="badge" id="agendaBadge" hidden></span></li><li data-stock="lots"><span class="n">📦 Bestand</span><span class="badge" id="stockBadge" hidden></span></li><li data-stock="orders"><span class="n">🛒 Bestellungen</span><span class="badge" id="orderBadge" hidden></span></li><li data-stock="cult"><span class="n">🧫 Zellkultur</span><span class="badge" id="cultBadge" hidden></span></li><li data-stock="dev"><span class="n">🔧 Geräte</span><span class="badge" id="devBadge" hidden></span></li><li data-stock="lit"><span class="n">📚 Literatur</span></li><li data-stock="ask" class="aionly" hidden><span class="n">✨ Fragen</span></li><li data-stock="analysis"><span class="n">📊 Auswertung</span></li></ul>
-  <div id="tplsec" hidden><div class="sec"><span>Vorlagen</span></div><ul id="templates"></ul></div>
-  <div class="sec"><span id="listTitle">Einträge</span></div>
+  <div id="tplsec" hidden><div class="sec" data-fold="templates" data-target="#templates"><span>Vorlagen</span></div><ul id="templates"></ul></div>
+  <div class="sec" data-fold="list" data-target="#listbar,#listsel,#list"><span id="listTitle">Einträge</span></div>
   <div id="listbar"></div>
   <div id="listsel" hidden></div>
   <ul id="list"></ul>
@@ -96,6 +98,8 @@
 <script src="calcblock.js"></script>
 <script src="run.js"></script>
 <script src="accounts.js"></script>
+<script src="sidecal.js"></script>
+<script src="sidebar.js"></script>
 <script src="sign.js"></script>
 <script src="annotate.js"></script>
 <script src="markdown.js"></script>
