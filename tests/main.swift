@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -551,6 +551,35 @@ check(hits.count == 1, "Suche findet genau einen Eintrag unter 10.000")
 check(ms < 100, String(format: "Suche unter 100 ms (%.1f ms)", ms))
 t = Date(); _ = try s.search("zentri"); print(String(format: "info Präfixsuche mit vielen Treffern: %.1f ms", Date().timeIntervalSince(t) * 1000))
 t = Date(); _ = try s.list(); print(String(format: "info Liste von 10.000 Einträgen: %.1f ms", Date().timeIntervalSince(t) * 1000))
+
+// Konten: PBKDF2 mit eigenem Salz, nie das Passwort selbst in der Datenbank
+do {
+    let dirA = FileManager.default.temporaryDirectory.appendingPathComponent("lb-acc-\(UUID().uuidString).laborbuch")
+    defer { try? FileManager.default.removeItem(at: dirA) }
+    let a = try Store(root: dirA)
+    check(try a.accountNames().isEmpty, "Konten: anfangs keins")
+    _ = try a.createAccount(name: "  Felix ", password: "geheim-123")
+    check(try a.accountNames() == ["Felix"], "Konten: Name ohne Leerzeichen gespeichert")
+    check(try a.authenticate(name: "felix", password: "geheim-123"), "Konten: Anmeldung (Name ohne Rücksicht auf Groß-/Kleinschreibung)")
+    check(try !a.authenticate(name: "Felix", password: "falsch-1234"), "Konten: falsches Passwort wird abgelehnt")
+    check(try !a.authenticate(name: "Niemand", password: "geheim-123"), "Konten: unbekannter Name wird abgelehnt")
+    check((try? a.createAccount(name: "FELIX", password: "anderes-pw-1")) == nil, "Konten: Name nur einmal vergeben")
+    check((try? a.createAccount(name: "Kurz", password: "1234567")) == nil, "Konten: Passwort unter 8 Zeichen abgelehnt")
+    check((try? a.createAccount(name: "  ", password: "geheim-123")) == nil, "Konten: leerer Name abgelehnt")
+    let row = try a.queryRows("SELECT * FROM account").first!
+    check(!(row["hash"] as! String).contains("geheim") && (row["salt"] as! String).count == 32 && (row["hash"] as! String).count == 64 && row["rounds"] as? Int == Store.kdfRounds,
+          "Konten: nur Hash (32 Byte) und Salz (16 Byte) gespeichert")
+    _ = try a.createAccount(name: "Anna", password: "geheim-123")
+    let salts = try a.queryRows("SELECT salt, hash FROM account")
+    check(Set(salts.map { $0["salt"] as! String }).count == 2 && Set(salts.map { $0["hash"] as! String }).count == 2, "Konten: gleiches Passwort ergibt anderes Salz und anderen Hash")
+    check((try? a.changePassword(name: "Felix", old: "falsch-1234", new: "neu-passwort-1")) == nil, "Konten: Passwortwechsel braucht das alte Passwort")
+    try a.changePassword(name: "Felix", old: "geheim-123", new: "neu-passwort-1")
+    check(try a.authenticate(name: "Felix", password: "neu-passwort-1") && !(try a.authenticate(name: "Felix", password: "geheim-123")), "Konten: neues Passwort gilt, altes nicht")
+    check(try a.authenticate(name: "Anna", password: "geheim-123"), "Konten: anderes Konto bleibt unberührt")
+    check(try (try? a.deleteAccount(name: "Anna", password: "falsch-1234")) == nil && a.accountNames().count == 2, "Konten: Löschen mit falschem Passwort scheitert")
+    try a.deleteAccount(name: "Anna", password: "geheim-123")
+    check(try a.accountNames() == ["Felix"], "Konten: Löschen mit Passwort")
+}
 
 print(failures == 0 ? "\nAlle Tests bestanden" : "\n\(failures) Test(s) fehlgeschlagen")
 exit(failures == 0 ? 0 : 1)

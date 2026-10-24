@@ -11,7 +11,7 @@ enum StoreError: Error, CustomStringConvertible {
 private let TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 final class Store {
-    static let schemaVersion = 18
+    static let schemaVersion = 19
     static let kinds = ["experiment", "note", "protocol"]
     let root: URL
     private var db: OpaquePointer?
@@ -282,6 +282,13 @@ final class Store {
                 ALTER TABLE entry ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
                 ALTER TABLE entry ADD COLUMN opened TEXT;
                 CREATE TABLE saved_search(id INTEGER PRIMARY KEY, name TEXT NOT NULL, query_json TEXT NOT NULL, created TEXT NOT NULL);
+                """)
+            }
+            if v < 19 {
+                // Lokale Konten: nur PBKDF2-Hash mit eigenem Salz, nie das Passwort selbst
+                try exec("""
+                CREATE TABLE account(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, salt TEXT NOT NULL, hash TEXT NOT NULL,
+                                     rounds INTEGER NOT NULL, created TEXT NOT NULL);
                 """)
             }
             try exec("PRAGMA user_version = \(Store.schemaVersion)")

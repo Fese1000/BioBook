@@ -314,6 +314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
                 if let m = a["lockMinutes"] as? Int { Settings.lockMinutes = m }
                 replyHandler(true, nil)
+            case "accounts": replyHandler(try s.accountNames(), nil)
+            case "createAccount": try s.createAccount(name: try str("name"), password: try str("password")); replyHandler(true, nil)
+            case "authenticate": replyHandler(try s.authenticate(name: try str("name"), password: try str("password")), nil)
+            case "changePassword": try s.changePassword(name: try str("name"), old: try str("old"), new: try str("new")); replyHandler(true, nil)
+            case "deleteAccount": try s.deleteAccount(name: try str("name"), password: try str("password")); replyHandler(true, nil)
             case "lockNow": locker.lock(); replyHandler(true, nil)
             case "signEntry":
                 if testMode && ProcessInfo.processInfo.environment["LABORBUCH_KEYFILE"] == nil { throw StoreError.invalid("Tests brauchen LABORBUCH_KEYFILE (nie den echten Schlüsselbund)") }
