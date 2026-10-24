@@ -435,21 +435,73 @@ aside{overflow-y:auto;overflow-x:hidden}
 .sec[data-fold]>span:first-child::before{content:'▾';display:inline-block;width:14px;font-size:10px}
 .sec[data-fold].closed>span:first-child::before{content:'▸'}
 #projects li,#types li,#stockNav li,#list li{transition:background-color .12s}
-#sidecal{padding:0 10px 8px}
-.calhead{display:flex;align-items:center;gap:2px;padding:2px 0 4px}
-.calhead b{flex:1;text-align:center;font-size:12.5px}
-.calhead button{border:0;background:none;color:var(--mut);cursor:pointer;font:inherit;padding:1px 7px;border-radius:5px}
-.calhead button:hover{background:var(--sel);color:var(--ink)}
-.calgrid{display:grid;grid-template-columns:22px repeat(7,1fr);gap:1px;text-align:center;font-size:11.5px}
-.calgrid .wd,.calgrid .kw{color:var(--mut);font-size:10px;padding:2px 0}
-.calgrid .kw{align-self:center}
-.calgrid .d{position:relative;border:0;background:none;color:var(--ink);font:inherit;padding:4px 0 6px;border-radius:6px;cursor:pointer}
-.calgrid .d:hover{background:var(--sel)}
-.calgrid .d.other{color:var(--mut);opacity:.55}
-.calgrid .d.today{font-weight:700;box-shadow:inset 0 0 0 1px var(--acc)}
-.calgrid .d.sel{background:var(--acc);color:var(--accfg)}
-.calgrid .d.has::after{content:'';position:absolute;left:50%;bottom:2px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--acc)}
-.calgrid .d.has.many::after{width:10px;margin-left:-5px;border-radius:2px}
-.calgrid .d.sel.has::after{background:var(--accfg)}
-.calgrid .d.due::before{content:'';position:absolute;right:3px;top:3px;width:5px;height:5px;border-radius:1px;background:#c0392b}
-.calfoot{display:flex;justify-content:space-between;align-items:center;padding-top:4px;font-size:11px;color:var(--mut)}
+
+/* Kalender-Ansicht */
+#calendar{flex:1;display:flex;flex-direction:column;min-height:0;padding:22px 32px 24px}
+.calbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px}
+.calbar h2{margin:0 8px 0 0;font:600 22px var(--serif)}
+.calbar .seg{display:flex;gap:4px}
+.caltitle{font-size:15px;min-width:150px}
+.calbar .grow{flex:1}
+.calmain{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;flex:1;min-height:0}
+.calbody{display:flex;flex-direction:column;min-height:0;overflow:auto}
+.calwd{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding:0 6px 4px}
+.calcells{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;flex:1;grid-auto-rows:minmax(104px,1fr)}
+.calcells.week{grid-auto-rows:minmax(320px,1fr)}
+.ccell{display:flex;flex-direction:column;gap:3px;padding:6px 7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);min-width:0;overflow:hidden;cursor:pointer}
+.ccell:hover{border-color:var(--acc)}
+.ccell.other{background:var(--side);opacity:.7}
+.ccell.today{box-shadow:inset 0 0 0 1.5px var(--acc)}
+.ccell.sel{background:var(--sel);border-color:var(--acc)}
+.cnum{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;margin-bottom:2px}
+.ccell.today .cnum span{color:var(--acc)}
+.cadd{visibility:hidden;border:0;background:none;color:var(--mut);cursor:pointer;font:inherit;font-size:15px;line-height:1;padding:0 4px;border-radius:4px}
+.ccell:hover .cadd{visibility:visible}.cadd:hover{background:var(--acc);color:var(--accfg)}
+.cchip{font-size:11.5px;line-height:1.3;padding:2px 6px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid var(--mut);background:var(--side);cursor:pointer}
+.cchip.plan{cursor:grab}
+.cchip.plan.termin{border-left-color:#2a78d6;background:rgba(42,120,214,.13)}
+.cchip.plan.experiment{border-left-color:var(--acc);background:rgba(47,111,94,.15)}
+.cchip.due{border-left-color:#c0392b;background:rgba(192,57,43,.1)}
+.cchip.entry{border-left-color:var(--line);color:var(--mut)}
+.cchip.done{text-decoration:line-through;opacity:.55}
+.cmore{font-size:11px;color:var(--mut);padding-left:4px}
+.calside{overflow:auto;padding:4px 2px 12px;border-left:1px solid var(--line);padding-left:16px;font-size:13px}
+.calside h3{margin:0 0 10px;font:600 16px var(--serif)}
+.calside h4{margin:14px 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.cplan{border:1px solid var(--line);border-left:3px solid var(--mut);border-radius:8px;padding:9px 11px;margin:8px 0;background:var(--bg)}
+.cplan.termin{border-left-color:#2a78d6}.cplan.experiment{border-left-color:var(--acc)}.cplan.done .cpt{text-decoration:line-through;opacity:.6}
+.cpt{display:flex;gap:7px;align-items:baseline;cursor:pointer}
+.cnote{margin:6px 0 2px;white-space:pre-wrap}
+.cpb{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}.cpb .btn{padding:3px 9px;font-size:12px}
+.cent{padding:3px 0}
+.cform{display:flex;flex-direction:column;gap:10px}
+.cform input[type=text],.cform input:not([type]),.cform input[type=date],.cform input[type=time],.cform textarea{padding:6px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.cform label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--mut)}
+.cform .row{display:flex;gap:12px;align-items:flex-end}.cform .row label{flex:1}
+.cform .row label:has(input[type=radio]){flex-direction:row;align-items:center;gap:6px;color:var(--ink);font-size:13px}
+@media(max-width:1000px){.calmain{grid-template-columns:1fr}.calside{border-left:0;padding-left:0}}
+
+.dayedit{margin-left:6px;border:0;background:none;color:var(--mut);cursor:pointer;font:inherit;font-size:12px;padding:1px 6px;border-radius:5px;visibility:hidden}
+section.day:hover .dayedit,.dayedit:focus{visibility:visible}.dayedit:hover{background:var(--sel);color:var(--ink)}
+.dayhead input[type=date]{font:inherit;font-size:13px;padding:2px 6px;border:1px solid var(--acc);border-radius:6px;background:var(--bg);color:var(--ink);margin-left:6px}
+
+/* Abstände: Schaltflächen und Listen nicht an den Rand drücken */
+.btn{padding:6px 13px;border-radius:7px;line-height:1.25}
+.side-head{padding:14px 14px 10px;gap:8px}
+.sec{padding:10px 18px 5px}
+#projects,#types,#stockNav{padding:0 10px 8px}
+#projects li,#types li,#stockNav li{padding:6px 12px;border-radius:7px}
+#list{padding:2px 10px 14px}#list li{padding:9px 12px;border-radius:8px;margin-bottom:2px}
+#listbar{padding:6px 14px 8px;gap:6px}#listbar .btn{padding:4px 10px}#listbar select{padding:4px 8px}
+#listsel{padding:6px 14px 8px;gap:6px}#listsel .btn{padding:4px 10px}
+#tags{padding:2px 14px 8px}
+#savedlist{padding:0 10px 8px}
+footer{padding:9px 22px;gap:20px}
+footer .link{margin-left:0;padding:3px 9px;border-radius:6px}footer .link:hover{background:var(--sel)}
+footer #aiBtn{margin-left:auto}
+.reghead{gap:12px;margin-bottom:18px}
+.dlgbtns{gap:10px;margin-top:20px}
+#meta{gap:10px 18px}#meta .btn{padding:5px 11px}
+#toolbar{gap:4px;padding-top:8px;padding-bottom:10px}#toolbar button{min-width:32px;height:30px;padding:0 9px}
+#etabs{gap:4px}
+.badge{padding:0 7px;margin-left:6px}

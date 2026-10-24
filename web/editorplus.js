@@ -59,6 +59,7 @@ function popMenu(btn, html, bind) {
   const r = btn.getBoundingClientRect();
   document.body.appendChild(el);
   el.style.left = `${Math.max(8, Math.min(r.left, innerWidth - el.offsetWidth - 8))}px`; el.style.top = `${r.bottom + 4}px`;
+  if (r.bottom + 4 + el.offsetHeight > innerHeight - 8) el.style.top = `${Math.max(8, r.top - el.offsetHeight - 4)}px`;  // unten am Fenster: nach oben aufklappen
   const outside = e => { if (!el.contains(e.target)) el.close(); };
   el.close = () => { el.remove(); document.removeEventListener('mousedown', outside, true); };
   setTimeout(() => document.addEventListener('mousedown', outside, true));

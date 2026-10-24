@@ -165,12 +165,15 @@ async function agendaICS() {
   return r;
 }
 
+/// Fälliges öffnen: Eintrag, Gerät, Kultur oder Charge
+function openAgendaItem(t, id, title) {
+  ({entry: () => { showView('doc'); cur = null; open(id, {find: title}); }, device: () => showDevice(id), culture: () => showCulture(id), lot: () => showLot(id)})[t]?.();
+}
+
 function initAgenda() {
   $('#agenda').addEventListener('click', e => {
     if (e.target.dataset.agics !== undefined) return agendaICS();
     const row = e.target.closest('[data-agt]'); if (!row) return;
-    const id = +row.dataset.agid;
-    const title = row.querySelector('.agtext b')?.textContent;
-    ({entry: () => { showView('doc'); cur = null; open(id, {find: title}); }, device: () => showDevice(id), culture: () => showCulture(id), lot: () => showLot(id)})[row.dataset.agt]?.();
+    openAgendaItem(row.dataset.agt, +row.dataset.agid, row.querySelector('.agtext b')?.textContent);
   });
 }

@@ -314,6 +314,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
                 if let m = a["lockMinutes"] as? Int { Settings.lockMinutes = m }
                 replyHandler(true, nil)
+            case "plans": replyHandler(try s.plans(from: try str("from"), to: try str("to")), nil)
+            case "savePlan": replyHandler(try s.savePlan(id: a["id"] as? Int, values: a["values"] as? [String: Any] ?? [:]), nil)
+            case "deletePlan": try s.deletePlan(id: try int("id")); replyHandler(true, nil)
+            case "planDone": try s.setPlanDone(id: try int("id"), done: a["done"] as? Bool ?? true); replyHandler(true, nil)
+            case "planEntry": replyHandler(try s.entryForPlan(id: try int("id")), nil)
             case "accounts": replyHandler(try s.accountNames(), nil)
             case "createAccount": try s.createAccount(name: try str("name"), password: try str("password")); replyHandler(true, nil)
             case "authenticate": replyHandler(try s.authenticate(name: try str("name"), password: try str("password")), nil)

@@ -411,7 +411,6 @@ async function refreshList(selectId) {
   $('#listTitle').textContent = [project == null ? 'Einträge' : project == 'trash' ? 'Papierkorb' : projectName(project), tag != null ? '#' + (tags.find(t => t.id == tag)?.name || '') : ''].filter(Boolean).join(' · ');
   if (project == 'trash' && rows.length) $('#list').insertAdjacentHTML('afterbegin', '<li class="trashhead"><button class="btn danger" data-emptytrash>Papierkorb leeren</button></li>');
   $('#empty').hidden = !!(rows.length || q || cur || project != null || tag != null);
-  SIDECAL.touch();
   if (selectId) await open(selectId);
 }
 
@@ -487,7 +486,7 @@ async function trashEntry() {
   status(`„${title}“ liegt im Papierkorb`);
   await loadProjects(); await loadTags();
   await refreshList();
-  const next = [...document.querySelectorAll('#list li')].find(li => li.dataset.id != gone);
+  const next = [...document.querySelectorAll('#list li[data-id]')].find(li => li.dataset.id != gone);
   if (next) await open(+next.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
 }
 
@@ -506,7 +505,7 @@ async function purgeEntry() {
   cur = null;
   await loadProjects(); await loadTags();
   await refreshList();
-  const next = $('#list li'); if (next) await open(+next.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
+  const next = $('#list li[data-id]'); if (next) await open(+next.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
   status('Endgültig gelöscht');
 }
 
@@ -795,7 +794,7 @@ async function selfTest() {
 
   // M6: Export, Re-Import, Import aus Markdown/RTF/Scan, PDF, Sicherung
   const alerts = []; window.alert = m => alerts.push(m);
-  const before = (await call('list')).length;
+  const before = (await call('list')).length + (await call('trash')).length;  // der Export enthält auch den Papierkorb
   const ex = await exportBook();
   const files = ex ? await call('testList') : [];
   const exDir = ex?.path.split('/').pop();
@@ -1350,9 +1349,11 @@ async function selfTest() {
   // M23: KI-Assistent (Antworten im Test hinterlegt, kein Netz, nie der echte Schlüsselbund)
   await refreshAI();
   ok(!AI_ON && !insertItems().some(i => i.icon == '✨') && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Ohne Schlüssel ist der Assistent unsichtbar');
+  ok($('#aiBtn').hidden, 'KI-Assistent in der Fußzeile: ohne Schlüssel unsichtbar');
   let keyErr = ''; try { await call('aiSetKey', {key: 'geheim'}); } catch (e) { keyErr = e.message; }
   await call('aiSetKey', {key: 'sk-ant-test-0000'}); await refreshAI();
   ok(/sk-ant-/.test(keyErr) && AI_ON && insertItems().some(i => i.label == 'Zusammenfassen') && !document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Mit Schlüssel erscheinen Zusammenfassen, Protokoll und „Fragen“');
+  ok(!$('#aiBtn').hidden && getComputedStyle($('#aiBtn')).display != 'none' && $('#aiBtn').compareDocumentPosition($('#histBtn')) & Node.DOCUMENT_POSITION_FOLLOWING, 'KI-Assistent in der Fußzeile: mit Schlüssel sichtbar, links neben „Verlauf“');
   const reply = text => call('testAiReply', {reply: {model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: {input_tokens: 120, output_tokens: 40},
     content: [{type: 'thinking', thinking: ''}, {type: 'text', text}]}});
   const prepEntries = await call('search', {q: 'Plasmid-Präp'});
@@ -1385,6 +1386,7 @@ async function selfTest() {
   ok(/abgelehnt/.test(aiRefused), 'Ablehnung durch Claude wird verständlich gemeldet');
   await call('aiSetKey', {key: null}); await refreshAI();
   ok(!AI_ON && document.querySelector('#stockNav [data-stock="ask"]').hidden, 'Schlüssel entfernt: Assistent wieder unsichtbar');
+  ok($('#aiBtn').hidden, 'KI-Assistent in der Fußzeile: ohne Schlüssel unsichtbar (nach Entfernen)');
   showView('doc');
 
   // M24: Erweiterungen (abgeschottet im Worker eines Sandbox-Rahmens)
@@ -1623,24 +1625,60 @@ async function selfTest() {
   ok(!(await call('accounts')).length && /Noch kein Konto/.test($('#accList').textContent) && $('#settings').open, 'Konto löschen: weg, Einstellungen bleiben offen');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
   // Seitenleiste: einklappen, Kalender, schnelles Umschalten
-  const regSec = document.querySelector('.sec[data-fold="registry"]');
+  const regSec = document.querySelector('.sec[data-fold="registry"]'), wasClosed = regSec.classList.contains('closed');  // gemerkter Zustand der App darf den Test nicht stören
+  if (wasClosed) regSec.click();
   regSec.click();
   ok($('#types').classList.contains('folded') && $('#stockNav').classList.contains('folded') && regSec.classList.contains('closed') && getComputedStyle($('#types')).display == 'none', 'Seitenleiste: Registry lässt sich einklappen');
   regSec.click();
   ok(!$('#types').classList.contains('folded') && getComputedStyle($('#stockNav')).display != 'none', 'Seitenleiste: und wieder ausklappen');
-  await SIDECAL.load();
-  const todayBtn = document.querySelector(`#sidecal [data-calday="${todayISO()}"]`);
-  ok(todayBtn && todayBtn.classList.contains('today') && todayBtn.classList.contains('has') && document.querySelectorAll('#sidecal .d').length >= 28, 'Kalender: Monat mit heutigem Tag und Markierung für Einträge');
-  document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).click(); await sleep(400);
-  ok(LISTF.from == todayISO() && LISTF.to == todayISO() && document.querySelectorAll('#list li').length > 0 && document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).classList.contains('sel'), 'Kalender: Tag anklicken filtert die Liste');
-  document.querySelector(`#sidecal [data-calday="${todayISO()}"]`).click(); await sleep(400);
-  ok(!LISTF.from && !LISTF.to && !document.querySelector('#sidecal .d.sel'), 'Kalender: zweiter Klick hebt den Filter auf');
-  document.querySelector('#sidecal [data-calmove="1"]').click(); await sleep(150);
-  const shown = $('#sidecal .calhead b').textContent;
-  document.querySelector('#sidecal [data-caltoday]').click(); await sleep(150);
-  ok(shown != $('#sidecal .calhead b').textContent && $('#sidecal .calhead b').textContent == SideCal.label(new Date().getFullYear(), new Date().getMonth()), 'Kalender: Monat wechseln und zurück zu heute');
-  await call('testSnapshot', {name: 'm30-seitenleiste.png'}).catch(() => {});
-  const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).slice(0, 2);
+  if (wasClosed) regSec.click();
+  // Kalender als eigene Ansicht
+  const tom = SideCal.addDays(todayISO(), 1), tdy = todayISO();
+  ok(!document.querySelector('#sidecal') && !document.querySelector('aside .calgrid') && document.querySelector('#stockNav [data-stock="calendar"]'), 'Seitenleiste: nur der Eintrag „Kalender“, kein Tagesraster');
+  document.querySelector('#stockNav [data-stock="calendar"]').click(); await sleep(400);
+  ok(!$('#calendar').hidden && $('#doc').hidden && document.querySelectorAll('#calendar .ccell').length >= 28 && $('#calendar .ccell.today'), 'Kalender öffnet sich in der Hauptansicht (Monat)');
+  $('#calendar [data-cnew]').click(); await sleep(100);
+  $('#cfTitle').value = 'Transfektion HeLa'; $('#cfDay').value = tdy; $('#cfFrom').value = '09:30'; $('#cfTo').value = '11:00';
+  document.querySelector('input[name=cfKind][value=experiment]').checked = true; $('#cfNote').value = 'Lipofectamin, 24 h';
+  $('#cfSave').click(); await sleep(400);
+  ok((await call('plans', {from: tdy, to: tdy})).length == 1 && $('#calendar .ccell.today .cchip.plan.experiment')?.textContent.includes('09:30') && $('#calside').textContent.includes('Transfektion HeLa'), 'Kalender: Experiment einplanen (Uhrzeit, Notiz) und im Tag sehen');
+  $('#calendar [data-cnew]').click(); await sleep(100);
+  $('#cfTitle').value = 'Falsch'; $('#cfDay').value = tdy; $('#cfFrom').value = '15:00'; $('#cfTo').value = '14:00'; $('#cfSave').click(); await sleep(300);
+  ok(/Uhrzeit/.test($('#cfMsg').textContent) && (await call('plans', {from: tdy, to: tdy})).length == 1, 'Kalender: ungültige Eingabe zeigt eine Meldung statt zu speichern');
+  $('#cfCancel').click(); await sleep(100);
+  const planId = (await call('plans', {from: tdy, to: tdy}))[0].id;
+  await calMovePlan(planId, tom); await sleep(200);
+  ok((await call('plans', {from: tom, to: tom})).length == 1 && document.querySelector(`#calendar .ccell[data-cday="${tom}"] .cchip.plan`) || SideCal.parse(tom).getMonth() != SideCal.parse(tdy).getMonth(), 'Kalender: Plan auf anderen Tag ziehen');
+  document.querySelector('#calendar [data-cmode="week"]').click(); await sleep(300);
+  ok(document.querySelectorAll('#calendar .ccell').length == 7 && /KW \d+/.test($('#calendar .caltitle').textContent) && $('#calendar .calcells.week'), 'Kalender: Wochenansicht mit sieben Tagen');
+  CAL.sel = tom; calDraw(); await sleep(100);
+  await call('testSnapshot', {name: 'm30-kalender-woche.png'}).catch(() => {});
+  document.querySelector('#calside [data-centryfor]').click(); await sleep(600);
+  const planned = await call('load', {id: cur});
+  ok(cur && planned.title == 'Transfektion HeLa' && (await call('list', {})).find(r => r.id == cur)?.day_first == tom && $('#doc').hidden == false && document.querySelector(`#editor section.day[data-day="${tom}"]`) && /Lipofectamin/.test(editor.getText()), 'Kalender: „Eintrag anlegen“ erzeugt Eintrag mit Tagesabschnitt und Notiz');
+  // Datum eines Tagesabschnitts nachträglich ändern
+  const dayEl = () => document.querySelector('#editor section.day');
+  dayEl().querySelector('.dayedit').dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(100);
+  const dIn = dayEl().querySelector('input[type=date]'), newDay = SideCal.addDays(tom, 3);
+  dIn.value = newDay; dIn.dispatchEvent(new Event('change', {bubbles: true})); await sleep(300);
+  ok(dayEl().dataset.day == newDay && /\d/.test(dayEl().querySelector('.daylabel').textContent) && editor.getJSON().content.find(n => n.type == 'day').attrs.date == newDay, 'Tagesabschnitt: Datum nachträglich geändert');
+  await flush();
+  ok((await call('list', {})).find(r => r.id == cur)?.day_first == newDay, 'Tagesabschnitt: neues Datum steht in der Liste (Zeitraum)');
+  addToday(); await sleep(200);
+  const msgsBefore = []; const keepAlert = window.alert; window.alert = m => msgsBefore.push(m);
+  const days2 = [...document.querySelectorAll('#editor section.day')];
+  days2.find(d => d.dataset.day == newDay).querySelector('.dayedit').dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(100);
+  const dIn2 = days2.find(d => d.dataset.day == newDay).querySelector('input[type=date]'); dIn2.value = todayISO(); dIn2.dispatchEvent(new Event('change', {bubbles: true})); await sleep(200);
+  window.alert = keepAlert;
+  ok(msgsBefore.length == 1 && document.querySelectorAll(`#editor section.day[data-day="${todayISO()}"]`).length == 1 && document.querySelector(`#editor section.day[data-day="${newDay}"]`), 'Tagesabschnitt: doppeltes Datum wird abgelehnt');
+  await showCalendar(); await sleep(200);
+  document.querySelector(`#calendar [data-cplan="${planId}"]`) || (CAL.sel = tom, calDraw());
+  CAL.mode = 'month'; await calLoad(); await call('testSnapshot', {name: 'm30-kalender-monat.png'}).catch(() => {});
+  const keepConfirm = window.confirm; window.confirm = () => true;
+  CAL.sel = tom; calDraw(); document.querySelector('#calside [data-cdel]').click(); await sleep(300); window.confirm = keepConfirm;
+  ok(!(await call('plans', {from: tom, to: tom})).length && (await call('load', {id: planned.id})).title == 'Transfektion HeLa', 'Kalender: Plan löschen, der Eintrag bleibt');
+  showView('doc');
+  const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).filter(id => id != cur).slice(0, 2);
   if (two.length == 2) {
     const p1 = open(two[0]), p2 = open(two[1]);  // zwei Klicks kurz hintereinander
     await Promise.all([p1, p2]); await sleep(100);
@@ -1721,6 +1759,7 @@ $('#list').addEventListener('click', e => {
   if (e.metaKey) call('openInTab', {id: +li.dataset.id}); else open(+li.dataset.id, {find: q});  // ⌘-Klick: in neuem Tab
 });
 $('#new').onclick = newEntry;
+$('#aiBtn').onclick = e => aiMenu(e.currentTarget);
 let searchTimer;
 $('#search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => refreshList(), 120); });
 $('#title').addEventListener('input', changed);
@@ -1814,6 +1853,7 @@ async function start() {
   initEntryTabs();
   initManage();
   initSidebar();
+  initCalendar();
   initMolBioUI();
   initAssistant();
   await loadExtensions();

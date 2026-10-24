@@ -50,3 +50,20 @@ test('Monat weiterschalten über den Jahreswechsel', () => {
   assert.deepEqual(C.shiftMonth(2026, 0, -1), {year: 2025, month: 11});
   assert.equal(C.label(2026, 9), 'Oktober 2026');
 });
+
+test('Woche von Montag bis Sonntag und Tage verschieben', () => {
+  assert.deepEqual(C.weekOf('2026-10-24'), ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25']);
+  assert.equal(C.weekOf('2026-10-26')[0], '2026-10-26');  // Montag bleibt Montag
+  assert.equal(C.weekOf('2026-10-25')[0], '2026-10-19');  // Sonntag gehört zur Woche davor
+  assert.equal(C.addDays('2026-10-31', 1), '2026-11-01');
+  assert.equal(C.addDays('2026-03-01', -1), '2026-02-28');
+});
+
+test('Pläne mit Spanne auf Tage verteilen', () => {
+  const plans = [{id: 1, day: '2026-10-26', day_end: '2026-10-28'}, {id: 2, day: '2026-10-27', day_end: ''}, {id: 3, day: '2026-11-09', day_end: ''}];
+  const m = C.spread(plans, p => p.day, p => p.day_end, '2026-10-26', '2026-11-01');
+  assert.deepEqual(Object.keys(m), ['2026-10-26', '2026-10-27', '2026-10-28']);
+  assert.deepEqual(m['2026-10-27'].map(p => p.id), [1, 2]);
+  const e = C.spread([{day_first: '2026-10-20', day_last: '2026-10-27'}], r => C.entrySpan(r)[0], r => C.entrySpan(r)[1], '2026-10-26', '2026-10-31');
+  assert.deepEqual(Object.keys(e), ['2026-10-26', '2026-10-27']);  // vorn auf den Ausschnitt gekürzt
+});

@@ -31,7 +31,7 @@ if (typeof TT != 'undefined') {
     parseHTML: () => [{tag: 'section[data-day]', contentElement: '.daybody', getAttrs: el => ({date: el.getAttribute('data-day') || ''})}],
     renderHTML: ({node}) => ['section', {'data-day': node.attrs.date, class: 'day'}, ['h3', {class: 'dayhead'}, Days.dayLabel(node.attrs.date)], ['div', {class: 'daybody'}, 0]],
     addKeyboardShortcuts() { return {'Mod-Shift-d': () => { addToday(); return true; }}; },
-    addNodeView: () => ({node, editor}) => {
+    addNodeView: () => ({node, editor, getPos}) => {
       let cur = node;
       const dom = document.createElement('section');
       dom.className = 'day'; dom.dataset.day = node.attrs.date;
@@ -45,10 +45,33 @@ if (typeof TT != 'undefined') {
         const closed = DAY_OPEN.get(key()) === true;
         dom.classList.toggle('collapsed', closed);
         head.innerHTML = `<button class="daytog" title="Ein-/ausklappen (⌥-Klick: alle)">${closed ? '▸' : '▾'}</button><span class="daylabel">📅 ${esc(Days.dayLabel(cur.attrs.date))}</span>`
+          + (editor.isEditable ? '<button class="dayedit" title="Datum dieses Tages ändern">✎ Datum</button>' : '')
           + (closed ? `<span class="sub">${cur.childCount} Absatz/Absätze eingeklappt</span>` : '');
       };
+      /// Datum nachträglich ändern; ein zweiter Abschnitt mit demselben Datum wird abgelehnt (der Tag soll eindeutig bleiben)
+      const editDate = () => {
+        const input = document.createElement('input'); input.type = 'date'; input.value = cur.attrs.date;
+        head.querySelector('.dayedit').replaceWith(input); input.focus();
+        let done = false;
+        const finish = apply => {
+          if (done) return; done = true;
+          const date = input.value;
+          if (apply && date && date != cur.attrs.date) {
+            let taken = false;
+            editor.state.doc.forEach(n => { if (n.type.name == 'day' && n.attrs.date == date) taken = true; });
+            if (taken) alert(`Für den ${Days.dayLabel(date)} gibt es in diesem Eintrag schon einen Tagesabschnitt.`);
+            else editor.view.dispatch(editor.state.tr.setNodeMarkup(getPos(), undefined, {...cur.attrs, date}));
+          }
+          draw();
+        };
+        input.addEventListener('change', () => finish(true));
+        input.addEventListener('blur', () => finish(false));
+        input.addEventListener('keydown', e => { if (e.key == 'Escape') finish(false); if (e.key == 'Enter') finish(true); });
+      };
       head.addEventListener('mousedown', e => {
+        if (e.target.closest('input[type=date]')) return;  // Datumsfeld bedienen, nicht ein-/ausklappen
         e.preventDefault();
+        if (e.target.closest('.dayedit')) return editDate();
         const closed = !(DAY_OPEN.get(key()) === true);
         if (e.altKey) { document.querySelectorAll('#editor section.day').forEach(s => s.dispatchEvent(new CustomEvent('daytoggle', {detail: closed}))); return; }
         DAY_OPEN.set(key(), closed); draw();

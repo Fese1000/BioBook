@@ -1,4 +1,4 @@
-// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
+// Tests für Store.swift (ohne Xcode): swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift app/Planner.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests
 import Foundation
 import CryptoKit
 import SQLite3
@@ -579,6 +579,38 @@ do {
     check(try (try? a.deleteAccount(name: "Anna", password: "falsch-1234")) == nil && a.accountNames().count == 2, "Konten: Löschen mit falschem Passwort scheitert")
     try a.deleteAccount(name: "Anna", password: "geheim-123")
     check(try a.accountNames() == ["Felix"], "Konten: Löschen mit Passwort")
+}
+
+// Kalender-Planung
+do {
+    let dirP = FileManager.default.temporaryDirectory.appendingPathComponent("lb-plan-\(UUID().uuidString).laborbuch")
+    defer { try? FileManager.default.removeItem(at: dirP) }
+    let p = try Store(root: dirP)
+    let a = try p.savePlan(id: nil, values: ["day": "2026-10-27", "time_from": "14:00", "time_to": "15:30", "title": "Gruppenseminar", "kind": "termin"])
+    let b = try p.savePlan(id: nil, values: ["day": "2026-10-26", "day_end": "2026-10-28", "title": "Transfektion HeLa", "kind": "experiment", "note": "Lipofectamin, 24 h"])
+    _ = try p.savePlan(id: nil, values: ["day": "2026-10-27", "time_from": "09:00", "title": "Mikroskop buchen"])
+    _ = try p.savePlan(id: nil, values: ["day": "2026-11-05", "title": "später"])
+    let week = try p.plans(from: "2026-10-26", to: "2026-11-01")
+    check(week.count == 3 && !week.contains { $0["title"] as? String == "später" }, "Planung: nur Pläne der Woche")
+    check(week.map { $0["title"] as! String } == ["Transfektion HeLa", "Mikroskop buchen", "Gruppenseminar"], "Planung: sortiert nach Tag, dann Uhrzeit")
+    check(try p.plans(from: "2026-10-28", to: "2026-10-28").map { $0["id"] as! Int } == [b], "Planung: mehrtägig zählt für den Mittelstag")
+    check(try p.plans(from: "2026-10-29", to: "2026-10-31").isEmpty, "Planung: nach dem Ende nicht mehr")
+    for bad: [String: Any] in [["day": "2026-10-27", "title": " "], ["day": "27.10.2026", "title": "x"], ["day": "2026-10-27", "day_end": "2026-10-26", "title": "x"],
+                               ["day": "2026-10-27", "time_from": "25:00", "title": "x"], ["day": "2026-10-27", "time_from": "15:00", "time_to": "14:00", "title": "x"], ["day": "2026-10-27", "title": "x", "kind": "party"]] {
+        check((try? p.savePlan(id: nil, values: bad)) == nil, "Planung: ungültig abgelehnt (\(bad["title"] ?? ""), \(bad["day"] ?? ""))")
+    }
+    try p.savePlan(id: a, values: ["day": "2026-10-30", "time_from": "10:00", "title": "Gruppenseminar", "kind": "termin"])
+    check(try p.plans(from: "2026-10-30", to: "2026-10-30").first?["time_from"] as? String == "10:00", "Planung: Termin verschieben")
+    try p.setPlanDone(id: a, done: true)
+    check(try p.plans(from: "2026-10-30", to: "2026-10-30").first?["done"] as? Int == 1, "Planung: erledigt")
+    let e = try p.entryForPlan(id: b)
+    let load = try p.load(id: e)
+    let dayFirst = try p.queryRows("SELECT day_first FROM entry WHERE id = ?", [e]).first?["day_first"] as? String
+    check(load["title"] as? String == "Transfektion HeLa" && load["kind"] as? String == "experiment" && dayFirst == "2026-10-26", "Planung: Eintrag zum Experiment mit Tagesabschnitt")
+    check(try p.entryForPlan(id: b) == e, "Planung: zweiter Aufruf liefert denselben Eintrag")
+    check(try p.plans(from: "2026-10-26", to: "2026-10-26").first(where: { $0["id"] as? Int == b })?["entry_title"] as? String == "Transfektion HeLa", "Planung: Titel des Eintrags in der Liste")
+    try p.deletePlan(id: b)
+    check(try p.plans(from: "2026-10-26", to: "2026-10-26").isEmpty && (try? p.load(id: e)) != nil, "Planung: Löschen lässt den Eintrag stehen")
 }
 
 print(failures == 0 ? "\nAlle Tests bestanden" : "\n\(failures) Test(s) fehlgeschlagen")

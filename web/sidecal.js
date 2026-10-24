@@ -1,4 +1,4 @@
-// Kalender in der Seitenleiste: Monatsraster (Woche beginnt Montag), Kalenderwochen und welche Tage Einträge haben.
+// Kalender (Ansicht „📅 Kalender“): Monatsraster (Woche beginnt Montag), Kalenderwochen und welche Tage Einträge haben.
 // Ein Eintrag zählt für jeden Tag von seinem ersten bis zum letzten Tag – genau wie der Zeitraum-Filter der Liste. Reine Hilfen (tests/sidecal.test.js).
 (function (root) {
   'use strict';
@@ -44,8 +44,29 @@
     return out;
   }
 
+  /// Montag bis Sonntag der Woche, in der `day` liegt
+  function weekOf(day) {
+    const d = parse(day); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return Array.from({length: 7}, (_, i) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i); return iso(x); });
+  }
+  const addDays = (day, n) => { const d = parse(day); d.setDate(d.getDate() + n); return iso(d); };
+
+  /// Dinge mit Spanne auf die Tage im Ausschnitt verteilen: {iso: [Ding]}; startOf/endOf liefern 'JJJJ-MM-TT'
+  function spread(items, startOf, endOf, from, to) {
+    const out = {};
+    for (const it of items) {
+      const a = startOf(it), b = endOf(it) || a;
+      if (!a || b < from || a > to) continue;
+      for (let d = a < from ? from : a, n = 0; d <= (b > to ? to : b) && n < 400; d = addDays(d, 1), n++) (out[d] ||= []).push(it);
+    }
+    return out;
+  }
+
+  /// Einträge nach demselben Zeitraum wie der Listenfilter (Tage → sonst angelegt → sonst geändert)
+  const entrySpan = r => [(r.day_first || r.created || r.updated || '').slice(0, 10), (r.day_last || r.updated || '').slice(0, 10)];
+
   function shiftMonth(year, month, by) { const d = new Date(year, month + by, 1); return {year: d.getFullYear(), month: d.getMonth()}; }
 
-  root.SideCal = {iso, parse, isoWeek, monthGrid, markDays, shiftMonth, MONTHS, label: (y, m) => `${MONTHS[m]} ${y}`};
+  root.SideCal = {iso, parse, isoWeek, monthGrid, markDays, weekOf, addDays, spread, entrySpan, shiftMonth, MONTHS, label: (y, m) => `${MONTHS[m]} ${y}`};
   if (typeof module != 'undefined') module.exports = root.SideCal;
 })(typeof window != 'undefined' ? window : globalThis);

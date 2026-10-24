@@ -197,3 +197,12 @@ function initAssistant() {
   });
   refreshAI();
 }
+
+/// Fußzeile: „✨ KI-Assistent“ (nur sichtbar, wenn ein Schlüssel hinterlegt ist)
+function aiMenu(btn) {
+  const items = [['✨', 'Eintrag zusammenfassen', () => aiSummary()], ['✨', 'Protokoll aus Stichpunkten', () => aiProtocol()], ['✨', 'Frage ans Laborbuch …', () => showAsk()]];
+  popMenu(btn, items.map(([i, t], n) => `<div class="opt" data-ai="${n}">${i} ${esc(t)}</div>`).join(''), el => el.addEventListener('mousedown', e => {
+    const o = e.target.closest('[data-ai]'); if (!o) return;
+    e.preventDefault(); el.close(); items[+o.dataset.ai][2]();
+  }));
+}
