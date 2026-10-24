@@ -556,3 +556,9 @@ dialog#settings input:not([type=checkbox]){padding:6px 9px;border-radius:6px}
 .tagedit{gap:6px}
 #tagInput{font-size:13px;padding:3px 4px}
 #etabs{margin-top:4px}
+
+/* „+“-Schaltflächen: Zeichen genau mittig */
+#new,.cadd{display:inline-grid;place-items:center;line-height:1}
+#new{width:36px;align-self:stretch;padding:0;font-size:20px;font-weight:400}
+#new{padding-bottom:2px}
+.cadd{width:22px;height:22px;padding:0 0 2px;font-size:17px}

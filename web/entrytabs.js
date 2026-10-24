@@ -56,7 +56,8 @@ async function renderRelPanel() {
     + sec('Literatur', r.references, x => `<a href="#" data-rref="${x.id}">${esc(x.key)}</a> <span class="sub">${esc(x.title)}</span>`)
     + sec('Ergebnistabellen', r.results, x => `${esc(x.name)} <span class="sub">${x.rows} Zeile(n)</span>`)
     + sec('Dateien', r.files, f => `${esc(f.name)} <span class="sub">${esc(f.mime)}</span>`);
-  $('#relpanel').innerHTML = html || '<p class="sub">Noch nichts verknüpft. Mit @ auf Registry-Objekte verweisen, mit [[ auf Einträge; Verbrauch, Passagen und Geräte erscheinen hier automatisch.</p>';
+  const cite = editor.isEditable ? '<p class="row"><button class="btn" data-relcite title="Quelle per DOI, PMID oder aus der Bibliothek in den Text einfügen">Paper zitieren …</button></p>' : '';
+  $('#relpanel').innerHTML = cite + (html || '<p class="sub">Noch nichts verknüpft.<br>Mit <b>@</b> auf Registry-Objekte verweisen, mit <b>[[</b> auf Einträge. Verbrauch, Passagen und Geräte erscheinen hier von selbst.</p>');
 }
 
 /// Protokoll rechts neben dem Eintrag zeigen (nur lesen)
@@ -124,6 +125,7 @@ function initEntryTabs() {
     if (d.msave !== undefined) saveMeta();
   });
   $('#relpanel').addEventListener('click', e => {
+    if (e.target.closest('[data-relcite]')) { editor.commands.focus(); return citeDialog(); }
     const a = e.target.closest('a'); if (!a) return;
     e.preventDefault();
     const d = a.dataset;

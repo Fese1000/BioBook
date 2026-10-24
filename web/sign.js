@@ -113,7 +113,7 @@ async function showSettings() {
   const s = {...await call('settings'), ai: (await call('aiStatus')).configured};
   const dlg = $('#settings');
   dlg.innerHTML = `<form method="dialog" class="setform"><h3>Einstellungen</h3>
-    <div class="setwrap"><nav class="setnav" role="tablist">${[['look', '🎨 Aussehen'], ['sec', '🔒 Sicherheit'], ['backup', '💾 Sicherung & Updates'], ['ai', '✨ KI-Assistent'], ['ext', '🧩 Erweiterungen']]
+    <div class="setwrap"><nav class="setnav" role="tablist">${[['look', 'Aussehen'], ['sec', 'Sicherheit'], ['backup', 'Sicherung & Updates'], ['ai', 'KI-Assistent'], ['ext', 'Erweiterungen']]
       .map(([k, t]) => `<button type="button" class="snav ${k == SET_PANE ? 'on' : ''}" data-spane="${k}" role="tab">${t}</button>`).join('')}</nav>
     <div class="setpanes">
     <section class="spane" data-pane="look" ${SET_PANE == 'look' ? '' : 'hidden'}><h4>Aussehen</h4>
@@ -138,7 +138,7 @@ async function showSettings() {
     <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
     </section>
     <section class="spane" data-pane="ai" ${SET_PANE == 'ai' ? '' : 'hidden'}><h4>KI-Assistent</h4>
-    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „✨ Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
+    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
     <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
     </section>
     <section class="spane" data-pane="ext" ${SET_PANE == 'ext' ? '' : 'hidden'}>

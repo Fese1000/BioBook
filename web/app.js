@@ -1606,6 +1606,11 @@ async function selfTest() {
   LIST_SELECT = null; await refreshList();
   await call('aiSetKey', {key: 'sk-ant-test-0000'}); await showSettings(); await sleep(150);
   ok(/Eingerichtet/.test($('#aiState').textContent), 'Einstellungen zeigen den eingerichteten KI-Assistenten');
+  // Einstellungen ohne Emojis
+  ok(!/[\u{1F300}-\u{1FAFF}\u2600-\u27BF\u2B50]/u.test($('#settings').textContent), 'Einstellungen: keine Emojis');
+  // „+“ mittig
+  const plusBox = (el => { const r = document.createRange(); r.selectNodeContents(el); const t = r.getBoundingClientRect(), b = el.getBoundingClientRect(); return [Math.abs((t.left + t.right) / 2 - (b.left + b.right) / 2), Math.abs((t.top + t.bottom) / 2 - (b.top + b.bottom) / 2)]; })($('#new'));
+  ok(plusBox[0] < 1.5 && plusBox[1] < 2.5, `Schaltfläche „+“: Zeichen mittig (${plusBox.map(v => v.toFixed(1))} px daneben)`);
   // Einstellungen in Reiter
   const visiblePanes = () => [...document.querySelectorAll('#settings .spane')].filter(x => !x.hidden).map(x => x.dataset.pane);
   ok(document.querySelectorAll('#settings .snav').length == 5 && visiblePanes().length == 1, 'Einstellungen: fünf Reiter, immer nur einer sichtbar');
@@ -1636,6 +1641,13 @@ async function selfTest() {
   await acc(() => setV('#accPw', 'passwort-drei'));
   ok(!(await call('accounts')).length && /Noch kein Konto/.test($('#accList').textContent) && $('#settings').open, 'Konto löschen: weg, Einstellungen bleiben offen');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
+  // Paper zitieren aus dem Reiter „Verknüpft“
+  showEntryTab('rel'); await sleep(300);
+  const citeBtn = $('#relpanel [data-relcite]');
+  ok(citeBtn && editor.isEditable, 'Verknüpft: Schaltfläche „Paper zitieren“ im Reiter');
+  citeBtn.click(); await sleep(300);
+  ok(document.querySelector('#locdlg #ciQ') && $('#locdlg').open, 'Verknüpft: „Paper zitieren“ öffnet den Zitat-Dialog');
+  $('#locdlg').close(); showEntryTab('notes');
   // Seitenleiste: einklappen, Kalender, schnelles Umschalten
   const regSec = document.querySelector('.sec[data-fold="registry"]'), wasClosed = regSec.classList.contains('closed');  // gemerkter Zustand der App darf den Test nicht stören
   if (wasClosed) regSec.click();
@@ -1727,11 +1739,12 @@ async function selfTest() {
   document.querySelector(`.popmenu [data-typeback="${someType.id}"]`).dispatchEvent(new MouseEvent('mousedown', {bubbles: true, cancelable: true})); await sleep(400);
   ok(document.querySelector(`#types li[data-type="${someType.id}"]`), 'Typ aus dem Menü wieder holen');
   // Farbschema
+  const themeBefore = (await call('prefs')).theme || '', bgBefore = document.documentElement.style.getPropertyValue('--bg');  // dein eigenes Schema darf den Test nicht stören
   await showSettings(); await sleep(100);
   $('#setTheme').value = 'nord'; $('#setTheme').dispatchEvent(new Event('change'));
   ok(document.documentElement.style.getPropertyValue('--bg') == '#2e3440' && getComputedStyle(document.body).backgroundColor == 'rgb(46, 52, 64)', 'Farbschema: Vorschau wirkt sofort');
   $('#settings').close('cancel'); await sleep(200);
-  ok(!document.documentElement.style.getPropertyValue('--bg') && !(await call('prefs')).theme, 'Farbschema: „Abbrechen“ stellt das alte zurück');
+  ok(document.documentElement.style.getPropertyValue('--bg') == bgBefore && ((await call('prefs')).theme || '') == themeBefore, 'Farbschema: „Abbrechen“ stellt das alte zurück');
   await showSettings(); $('#setTheme').value = 'dracula'; $('#setTheme').dispatchEvent(new Event('change')); $('#setSave').click(); await sleep(400);
   ok((await call('prefs')).theme == 'dracula' && document.documentElement.dataset.theme == 'dracula' && document.documentElement.style.colorScheme == 'dark', 'Farbschema: mit „Sichern“ gemerkt');
   await call('testSnapshot', {name: 'm31-theme-dracula.png'}).catch(() => {});
