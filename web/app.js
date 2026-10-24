@@ -1641,13 +1641,9 @@ async function selfTest() {
   await acc(() => setV('#accPw', 'passwort-drei'));
   ok(!(await call('accounts')).length && /Noch kein Konto/.test($('#accList').textContent) && $('#settings').open, 'Konto löschen: weg, Einstellungen bleiben offen');
   $('#settings').close(); await call('aiSetKey', {key: null}); await refreshAI();
-  // Paper zitieren aus dem Reiter „Verknüpft“
   showEntryTab('rel'); await sleep(300);
-  const citeBtn = $('#relpanel [data-relcite]');
-  ok(citeBtn && editor.isEditable, 'Verknüpft: Schaltfläche „Paper zitieren“ im Reiter');
-  citeBtn.click(); await sleep(300);
-  ok(document.querySelector('#locdlg #ciQ') && $('#locdlg').open, 'Verknüpft: „Paper zitieren“ öffnet den Zitat-Dialog');
-  $('#locdlg').close(); showEntryTab('notes');
+  ok(!$('#relpanel [data-relcite]'), 'Verknüpft: keine eigene Zitier-Schaltfläche (Quellen erscheinen unter „Literatur“)');
+  showEntryTab('notes');
   // Seitenleiste: einklappen, Kalender, schnelles Umschalten
   const regSec = document.querySelector('.sec[data-fold="registry"]'), wasClosed = regSec.classList.contains('closed');  // gemerkter Zustand der App darf den Test nicht stören
   if (wasClosed) regSec.click();
