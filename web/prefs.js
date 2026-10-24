@@ -76,3 +76,30 @@ function openView(k) {
   ({analysis: showAnalysis, orders: showOrders, lit: () => showLiterature(null), agenda: showAgenda, calendar: showCalendar, ask: showAsk,
     cult: () => showCultures('list'), dev: showDevices, lots: () => showStock('lots')})[k]?.();
 }
+
+// ---------- Hinweisleiste (Updates, fehlgeschlagene Sicherung) ----------
+/// text ist reiner Text; actions: [{label, run, primary}] – jede Schaltfläche schließt die Leiste
+function notice(text, actions = []) {
+  const bar = $('#noticebar');
+  bar.innerHTML = `<span class="ntext">${esc(text)}</span>${actions.map((a, i) => `<button class="btn ${a.primary ? 'on' : ''}" data-nact="${i}">${esc(a.label)}</button>`).join('')}<button class="btn nclose" data-nact="x" title="Schließen" aria-label="Schließen">✕</button>`;
+  bar.hidden = false;
+  bar.onclick = async e => {
+    const b = e.target.closest('[data-nact]'); if (!b) return;
+    bar.hidden = true;
+    if (b.dataset.nact != 'x') await actions[+b.dataset.nact].run?.();
+  };
+}
+
+/// Das Update, das beim leisen Prüfen gefunden wurde (oder null)
+async function updateAvailable() {
+  const u = await call('pendingUpdate').catch(() => null);
+  if (!u || PREFS.updateSkip == u.latest) return;
+  notice(`Version ${u.latest} ist verfügbar (du hast ${u.current}).`, [
+    u.canInstall ? {label: 'Jetzt aktualisieren', primary: true, run: async () => {
+      if (!confirm('Update laden, prüfen und die App neu starten? Dein Stand wird vorher gespeichert.')) return;
+      await flush();
+      try { await call('updateInstall'); } catch (e) { notice('Update fehlgeschlagen: ' + e.message); }
+    }} : {label: 'Einstellungen', primary: true, run: () => showSettings()},
+    {label: 'Später'},
+    {label: 'Diese Version überspringen', run: () => savePref('updateSkip', u.latest)}]);
+}

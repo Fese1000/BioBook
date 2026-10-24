@@ -130,6 +130,7 @@ async function showSettings() {
     ${await extSettingsHTML()}
     <p class="row"><b>Updates</b></p>
     <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
+    <label class="row"><input type="checkbox" id="setUpdCheck" ${PREFS.updatecheck != 'off' ? 'checked' : ''}> Beim Start und alle paar Stunden leise nach Updates suchen und einen Hinweis zeigen</label>
     <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
     <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on" id="setSave">Sichern</button></div></form>`;
   dlg.showModal();
@@ -158,7 +159,7 @@ async function showSettings() {
   $('#setTheme').onchange = () => applyTheme($('#setTheme').value);  // Vorschau; „Abbrechen“ stellt das alte Schema zurück
   dlg.onclose = async () => {
     if (dlg.returnValue != 'ok') return applyTheme(PREFS.theme || 'system');
-    await savePref('theme', $('#setTheme').value); await savePref('newtab', $('#setNewTab').checked ? 'on' : 'off');
+    await savePref('theme', $('#setTheme').value); await savePref('newtab', $('#setNewTab').checked ? 'on' : 'off'); await savePref('updatecheck', $('#setUpdCheck').checked ? 'on' : 'off');
     await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0)});
     status('Einstellungen gesichert');
   };

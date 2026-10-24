@@ -3,7 +3,7 @@
 import Foundation
 
 extension Store {
-    static let prefKeys: Set<String> = ["theme", "newtab", "hiddenTabs"]
+    static let prefKeys: Set<String> = ["theme", "newtab", "hiddenTabs", "updatecheck", "updateSkip"]
 
     func prefs() throws -> [String: String] {
         var out: [String: String] = [:]

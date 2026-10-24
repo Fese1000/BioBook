@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if !testMode {
             autoBackup()
             Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in self?.autoBackup() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.quietUpdateCheck() }  // nach dem Start, ohne ihn zu bremsen
+            Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in self?.quietUpdateCheck() }
         }
         locker = Locker(windows: { [weak self] in self?.docs.map(\.window) ?? [] }, disabled: testMode)
         locker.lockIfEnabled()
@@ -439,6 +441,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                                       "canInstall": ci.ok, "reason": ci.reason ?? ""], nil)
                     }
                 }
+            case "pendingUpdate":
+                replyHandler(pendingRelease.map { ["latest": $0.version, "current": Updater.current, "canInstall": Updater.canInstall.ok] as [String: Any] } ?? NSNull(), nil)
+            case "testSetUpdate":
+                guard testMode else { throw StoreError.invalid("nur im Test") }
+                pendingRelease = a["version"] is String ? Updater.Release(version: try str("version"), url: URL(string: "https://example.invalid/x")!, size: 0, sha256: "") : nil
+                replyHandler(true, nil)
             case "updateInstall":
                 guard let rel = pendingRelease else { throw StoreError.invalid("Erst nach Updates suchen") }
                 let ci = Updater.canInstall
@@ -877,13 +885,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
     }
 
+    /// Leise nach einer neuen Version sehen: kein Netz oder kein Fund = keine Meldung. Abschaltbar in den Einstellungen.
+    func quietUpdateCheck() {
+        guard !testMode, let s = store, (try? s.prefs())?["updatecheck"] != "off" else { return }
+        Updater.check { [weak self] r in
+            guard let self, case .success(let found) = r, let rel = found else { return }
+            self.pendingRelease = rel
+            self.broadcast(except: nil, "app.updateAvailable && app.updateAvailable()")
+        }
+    }
+
+    /// Meldung in der Hinweisleiste aller Fenster
+    func notifyUI(_ text: String) {
+        guard let d = try? JSONSerialization.data(withJSONObject: [text]), let arr = String(data: d, encoding: .utf8) else { return }
+        broadcast(except: nil, "app.notice && app.notice(\(arr)[0])")
+    }
+
     // MARK: Sicherung
     func autoBackup(force: Bool = false, reply: ((Any?, String?) -> Void)? = nil) {
         guard let s = store else { return }
-        Backup.run(s, force: force, queue: ocrQueue) { r in
+        Backup.run(s, force: force, queue: ocrQueue) { [weak self] r in
+            guard let self else { return }
             switch r {
             case .success(let info): reply?(info, nil)
-            case .failure(let e): reply?(nil, "\(e)"); if reply == nil { NSLog("Laborbuch: Sicherung fehlgeschlagen: \(e)") }
+            case .failure(let e): reply?(nil, "\(e)"); if reply == nil { NSLog("Laborbuch: Sicherung fehlgeschlagen: \(e)"); self.notifyUI("⚠️ Die automatische Sicherung ist fehlgeschlagen: \(e). Bitte Ordner und Speicherplatz prüfen (Einstellungen → Sicherung).") }
             }
         }
     }

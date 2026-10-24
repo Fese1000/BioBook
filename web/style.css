@@ -518,3 +518,9 @@ li:hover>.tabx{visibility:visible}.tabx:hover{opacity:1}
 .cflink{border:1px solid var(--line);border-radius:8px;padding:8px 12px 10px;display:flex;flex-direction:column;gap:7px;margin:0}
 .cflink legend{font-size:11px;color:var(--mut);padding:0 4px;text-transform:uppercase;letter-spacing:.06em}
 .cform label.inl{flex-direction:row;align-items:center;gap:7px;color:var(--ink);font-size:13px}
+
+/* Hinweisleiste */
+#noticebar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 22px;background:var(--sel);border-bottom:1px solid var(--line);font-size:13px}
+#noticebar[hidden]{display:none}
+#noticebar .ntext{flex:1;min-width:200px}
+#noticebar .nclose{padding:3px 9px}

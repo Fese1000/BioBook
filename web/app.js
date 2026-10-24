@@ -1745,6 +1745,30 @@ async function selfTest() {
   document.querySelector(`#list li[data-id="${otherId}"]`).click(); await sleep(500);
   ok((await call('testTabs')).length == nBefore && cur == otherId, 'Neuer Tab ausgeschaltet: öffnet im selben Tab');
   await savePref('newtab', 'on'); window.TEST_TABS = false;
+  // Leise Update-Prüfung: Hinweisleiste
+  await call('testSetUpdate', {version: null}); await updateAvailable();
+  ok($('#noticebar').hidden, 'Update: ohne neue Version keine Meldung');
+  await call('testSetUpdate', {version: '9.9'}); await updateAvailable();
+  ok(!$('#noticebar').hidden && /9\.9/.test($('#noticebar').textContent) && $('#noticebar').querySelectorAll('button').length >= 3, 'Update: neue Version erscheint als Hinweis mit Schaltflächen');
+  [...$('#noticebar').querySelectorAll('button')].find(b => /Später/.test(b.textContent)).click(); await sleep(50);
+  ok($('#noticebar').hidden && !(await call('prefs')).updateSkip, 'Update: „Später“ schließt nur die Leiste');
+  await updateAvailable(); [...$('#noticebar').querySelectorAll('button')].find(b => /überspringen/.test(b.textContent)).click(); await sleep(200);
+  await updateAvailable();
+  ok($('#noticebar').hidden && (await call('prefs')).updateSkip == '9.9', 'Update: übersprungene Version meldet sich nicht wieder');
+  await call('testSetUpdate', {version: '10.0'}); await updateAvailable();
+  ok(!$('#noticebar').hidden && /10\.0/.test($('#noticebar').textContent), 'Update: eine noch neuere Version meldet sich wieder');
+  await call('testSetUpdate', {version: null}); await savePref('updateSkip', ''); $('#noticebar').hidden = true;
+  notice('Sicherung <b>kaputt</b>');
+  ok($('#noticebar').textContent.includes('<b>kaputt</b>') && !$('#noticebar b'), 'Hinweisleiste zeigt Text, kein HTML');
+  $('#noticebar .nclose').click(); await sleep(30);
+  ok($('#noticebar').hidden, 'Hinweisleiste: Schließen');
+  await showSettings(); $('#setUpdCheck').checked = false; $('#setSave').click(); await sleep(400);
+  ok((await call('prefs')).updatecheck == 'off', 'Einstellung: leise Update-Prüfung abschaltbar');
+  await savePref('updatecheck', 'on');
+  // Speichern beim Verlassen des Fensters (vor Ablauf der 0,6 s)
+  editor.commands.focus('end'); editor.commands.insertContent('Autospeichern-Probe'); clearTimeout(saveTimer);
+  window.dispatchEvent(new Event('blur')); await sleep(120);
+  ok(!dirty && /Autospeichern-Probe/.test((await call('load', {id: cur})).draft_json), 'Speichern: beim Verlassen des Fensters sofort, ohne die Ruhezeit abzuwarten');
   showView('doc');
   const two = [...document.querySelectorAll('#list li[data-id]')].map(li => +li.dataset.id).filter(id => id != cur).slice(0, 2);
   if (two.length == 2) {
@@ -1875,10 +1899,14 @@ for (const sel of ['#editor', '#backlinks']) {
 }
 $('#metaProject').addEventListener('change', e => setMeta({project: +e.target.value}));
 $('#metaKind').addEventListener('change', e => setMeta({kind: e.target.value}));
+// Speichern nicht nur nach 0,6 s Ruhe, sondern auch beim Verlassen des Fensters und als Sicherheitsnetz alle 15 s
+window.addEventListener('blur', () => flush());
+document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+setInterval(() => { if (dirty) flush(); }, 15000);
 setInterval(() => { if (changedSinceSnap && Date.now() - lastSnap > SNAPSHOT_MS) snapshot(true); }, 30000);
 
 // Von Swift aufgerufen (Menü, Beenden)
-window.app = {loadPrefs, newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
+window.app = {loadPrefs, updateAvailable, notice, newEntry, flush, snapshot: () => snapshot(false), focusSearch: () => $('#search').focus(), perfTest, selfTest, startRun, settings: showSettings,
   exportBook, exportEntryPDF, importFiles, backupNow, updateProgress, trashEntry,
   openCode, scan: () => call('scan'),
   openEntry: id => { $('#search').value = ''; showView('doc'); return refreshList(id); },
@@ -1922,6 +1950,7 @@ async function start() {
   initEntryTabs();
   initManage();
   initSidebar();
+  updateAvailable();  // falls die leise Prüfung schon etwas gefunden hat (zum Beispiel in einem neuen Tab)
   document.querySelectorAll('#stockNav li[data-stock]').forEach(li => li.insertAdjacentHTML('beforeend', `<button class="tabx" data-hidetab="${li.dataset.stock}" title="Reiter ausblenden – über ⋯ wieder holen">✕</button>`));
   initCalendar();
   initMolBioUI();
