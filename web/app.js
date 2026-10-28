@@ -514,11 +514,13 @@ async function purgeEntry() {
 async function emptyTrash() {
   const n = (await call('trash')).length;
   if (!n || !confirm(`${n} Eintrag/Einträge im Papierkorb endgültig löschen? Das lässt sich nicht rückgängig machen.`)) return;
-  await call('emptyTrash');
-  cur = null; project = null;
+  let purged = 0;
+  try { purged = await call('emptyTrash'); } catch (e) { return alert(e.message); }
+  const left = (await call('trash')).length;  // signierte Einträge und solche mit Buchungen bleiben im Papierkorb
+  cur = null; project = left ? 'trash' : null;
   await loadProjects(); await loadTags(); await refreshList();
-  const first = $('#list li'); if (first) await open(+first.dataset.id);
-  status('Papierkorb geleert');
+  const first = $('#list li[data-id]'); if (first) await open(+first.dataset.id); else { $('#doc').hidden = true; $('#empty').hidden = false; }
+  status(left ? `${purged} gelöscht, ${left} bleiben im Papierkorb (signiert oder mit Buchungen)` : 'Papierkorb geleert');
 }
 
 async function newEntry() {

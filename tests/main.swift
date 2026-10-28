@@ -590,6 +590,13 @@ do {
     let b = try p.savePlan(id: nil, values: ["day": "2026-10-26", "day_end": "2026-10-28", "title": "Transfektion HeLa", "kind": "experiment", "note": "Lipofectamin, 24 h"])
     _ = try p.savePlan(id: nil, values: ["day": "2026-10-27", "time_from": "09:00", "title": "Mikroskop buchen"])
     _ = try p.savePlan(id: nil, values: ["day": "2026-11-05", "title": "später"])
+    // Papierkorb leeren: ein Eintrag mit verknüpftem Termin lässt sich endgültig löschen, der Termin bleibt (ohne Verknüpfung)
+    let peId = try p.create(title: "Seminar-Notizen")
+    let plLinked = try p.savePlan(id: nil, values: ["day": "2026-10-30", "title": "Seminar verknüpft", "entry_id": peId])
+    try p.trashEntry(id: peId)
+    check(try p.emptyTrash() == 1 && (try p.trash()).isEmpty, "Papierkorb leeren: auch ein Eintrag mit verknüpftem Termin wird gelöscht")
+    check((try p.plans(from: "2026-10-30", to: "2026-10-30")).contains { ($0["id"] as? Int) == plLinked && ($0["entry_id"] as? Int) == nil }, "… der Termin bleibt, ohne Verknüpfung")
+    try p.deletePlan(id: plLinked)  // damit die folgenden Wochen-Prüfungen unverändert bleiben
     let week = try p.plans(from: "2026-10-26", to: "2026-11-01")
     check(week.count == 3 && !week.contains { $0["title"] as? String == "später" }, "Planung: nur Pläne der Woche")
     check(week.map { $0["title"] as! String } == ["Transfektion HeLa", "Mikroskop buchen", "Gruppenseminar"], "Planung: sortiert nach Tag, dann Uhrzeit")

@@ -712,6 +712,7 @@ final class Store {
             try query("DELETE FROM link WHERE from_entry = ? OR to_entry = ?", [id, id])
             try query("DELETE FROM run_step WHERE run_id IN (SELECT id FROM run WHERE entry_id = ?)", [id])
             try query("DELETE FROM run WHERE entry_id = ?", [id])
+            try query("UPDATE plan SET entry_id = NULL WHERE entry_id = ?", [id])  // Kalendertermine bleiben, nur ohne Verknüpfung
             try query("DELETE FROM search WHERE rowid = ?", [id])
             try query("DELETE FROM entry WHERE id = ?", [id])
             try query("DELETE FROM tag WHERE id NOT IN (SELECT tag_id FROM entry_tag)")
@@ -726,8 +727,12 @@ final class Store {
     @discardableResult
     func emptyTrash() throws -> Int {
         let ids = try query("SELECT id FROM entry WHERE deleted IS NOT NULL AND signed_no IS NULL").compactMap { $0["id"] as? Int }.filter { try !hasBookings($0) }
-        for i in ids { try purgeEntry(id: i) }
-        return ids.count
+        var purged = 0
+        for i in ids {
+            do { try purgeEntry(id: i); purged += 1 }
+            catch { NSLog("Laborbuch: Papierkorb: Eintrag \(i) bleibt erhalten: \(error)") }  // ein Problemfall hält die übrigen nicht auf
+        }
+        return purged
     }
 
     // MARK: Helfer für Erweiterungen in anderen Dateien
