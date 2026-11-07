@@ -17,7 +17,7 @@ enum Spotlight {
         let text = (row["draft_text"] as? String) ?? ""
         a.contentDescription = String(text.prefix(300))
         a.textContent = String(text.prefix(20_000))
-        a.keywords = ((row["tags"] as? String) ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } + ["Laborbuch"]
+        a.keywords = ((row["tags"] as? String) ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) } + ["BioBook"]
         if let u = row["updated"] as? String { a.contentModificationDate = ISO8601DateFormatter.full.date(from: u) }
         return CSSearchableItem(uniqueIdentifier: "\(book)/\(id)", domainIdentifier: book, attributeSet: a)
     }

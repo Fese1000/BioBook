@@ -1,4 +1,4 @@
-// Quick Look für .laborbuch: Die App legt im Paket QuickLook/Preview.html (Übersicht der letzten Einträge)
+// Quick Look für .biobook: Die App legt im Paket QuickLook/Preview.html (Übersicht der letzten Einträge)
 // und QuickLook/Thumbnail.png ab. macOS zeigt beides in der Leertasten-Vorschau und im Finder an.
 import Cocoa
 

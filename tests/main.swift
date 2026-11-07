@@ -6,7 +6,7 @@ import SQLite3
 var failures = 0
 func check(_ ok: Bool, _ what: String) { print(ok ? "ok   \(what)" : "FAIL \(what)"); if !ok { failures += 1 } }
 
-let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lb-test-\(UUID().uuidString).laborbuch")
+let dir = FileManager.default.temporaryDirectory.appendingPathComponent("lb-test-\(UUID().uuidString).biobook")
 defer { try? FileManager.default.removeItem(at: dir) }
 let s = try Store(root: dir)
 
@@ -183,7 +183,7 @@ try FileManager.default.removeItem(at: raw)
 check((try s.checkLink(sha: rawSha))["status"] as? String == "missing", "Fehlende Rohdatei wird gemeldet")
 
 // Migration: ein Buch im Format von M0 (user_version 0, ohne Projekte) wird aktualisiert und vorher gesichert
-let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).laborbuch")
+let old = FileManager.default.temporaryDirectory.appendingPathComponent("lb-m0-\(UUID().uuidString).biobook")
 defer { try? FileManager.default.removeItem(at: old) }
 try FileManager.default.createDirectory(at: old, withIntermediateDirectories: true)
 var odb: OpaquePointer?
@@ -499,9 +499,9 @@ check(try (try s.search("Golden")).first { $0["id"] as? Int == lab }?["day_last"
 
 // M26: Protokolle am Eintrag, Metadaten, Verknüpft
 let protoGG = try s.create(title: "Golden Gate Assembly", kind: "protocol"), protoTrafo = try s.create(title: "E. coli Transformation", kind: "protocol")
-let lb26 = try s.create(title: "Laborbuch 26")
+let lb26 = try s.create(title: "BioBook 26")
 try s.attach(entry: lb26, other: protoGG)
-_ = try s.saveDraft(id: lb26, title: "Laborbuch 26", json: "{\"type\":\"doc\",\"content\":[]}", text: "", links: [protoTrafo, protoGG])
+_ = try s.saveDraft(id: lb26, title: "BioBook 26", json: "{\"type\":\"doc\",\"content\":[]}", text: "", links: [protoTrafo, protoGG])
 let att26 = try s.attachments(entry: lb26)
 check(try att26.map { $0["title"] as! String } == ["Golden Gate Assembly", "E. coli Transformation"] && att26.map { $0["explicit"] as! Int } == [1, 0], "Angehängtes und im Text verlinktes Protokoll als Reiter")
 check(try (try? s.attach(entry: lb26, other: lb26)) == nil, "Nicht an sich selbst")
@@ -526,7 +526,7 @@ check(try (try s.list().first { $0["id"] as? Int == lb26 }!["opened"] as? String
 _ = try s.setTags(id: lb26, names: ["Hefe"])
 let dup = try s.duplicate(id: lb26)
 let dupE = try s.load(id: dup), dupRow = try s.list().first { $0["id"] as? Int == dup }!
-check(try dupE["title"] as? String == "Laborbuch 26 (Kopie)" && dupE["signed_no"] as? Int == nil && dupRow["revisions"] as? Int == 0 && dupRow["status"] as? String == ""
+check(try dupE["title"] as? String == "BioBook 26 (Kopie)" && dupE["signed_no"] as? Int == nil && dupRow["revisions"] as? Int == 0 && dupRow["status"] as? String == ""
       && (dupE["tags"] as? [String]) == ["Hefe"] && (dupE["meta_json"] as? String)?.contains("BY4741") == true,
       "Duplikat: Inhalt, Tags, Metadaten; ohne Revisionen, Signatur, Status")
 let signedDup = try s.duplicate(id: se)
@@ -554,7 +554,7 @@ t = Date(); _ = try s.list(); print(String(format: "info Liste von 10.000 Eintr�
 
 // Konten: PBKDF2 mit eigenem Salz, nie das Passwort selbst in der Datenbank
 do {
-    let dirA = FileManager.default.temporaryDirectory.appendingPathComponent("lb-acc-\(UUID().uuidString).laborbuch")
+    let dirA = FileManager.default.temporaryDirectory.appendingPathComponent("lb-acc-\(UUID().uuidString).biobook")
     defer { try? FileManager.default.removeItem(at: dirA) }
     let a = try Store(root: dirA)
     check(try a.accountNames().isEmpty, "Konten: anfangs keins")
@@ -581,9 +581,41 @@ do {
     check(try a.accountNames() == ["Felix"], "Konten: Löschen mit Passwort")
 }
 
+// Übernahme aus der Zeit vor der Umbenennung (Laborbuch → BioBook)
+do {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("lb-migr-\(UUID().uuidString)")
+    defer { try? fm.removeItem(at: root) }
+    let old = root.appendingPathComponent("Laborbuch"), new = root.appendingPathComponent("BioBook")
+    try fm.createDirectory(at: old.appendingPathComponent("Standard.laborbuch"), withIntermediateDirectories: true)
+    try fm.createDirectory(at: old.appendingPathComponent("Sicherungen"), withIntermediateDirectories: true)
+    try "daten".write(to: old.appendingPathComponent("Standard.laborbuch/book.db"), atomically: true, encoding: .utf8)
+    check(try LegacyMigration.migrateFolder(old: old, new: new), "Übernahme: Datenordner kopiert")
+    check(fm.fileExists(atPath: new.appendingPathComponent("Standard.biobook/book.db").path) && !fm.fileExists(atPath: new.appendingPathComponent("Standard.laborbuch").path)
+          && fm.fileExists(atPath: new.appendingPathComponent("Sicherungen").path), "Übernahme: Standard-Buch bekommt die neue Endung, Sicherungen sind dabei")
+    check(fm.fileExists(atPath: old.appendingPathComponent("Standard.laborbuch/book.db").path), "Übernahme: alte Daten bleiben unverändert liegen")
+    check(try !LegacyMigration.migrateFolder(old: old, new: new), "Übernahme: zweiter Lauf überschreibt nichts")
+    check(!fm.fileExists(atPath: root.appendingPathComponent("BioBook.migrating").path), "Übernahme: kein Zwischenordner zurückgeblieben")
+    check(LegacyMigration.rewritePath(old.path + "/Standard.laborbuch", oldBase: old.path, newBase: new.path) == new.path + "/Standard.biobook"
+          && LegacyMigration.rewritePath(old.path + "/Sicherungen", oldBase: old.path, newBase: new.path) == new.path + "/Sicherungen"
+          && LegacyMigration.rewritePath("/Users/x/Documents/a.laborbuch", oldBase: old.path, newBase: new.path) == "/Users/x/Documents/a.laborbuch",
+          "Übernahme: Pfade im alten Ordner werden umgeschrieben, andere bleiben")
+    let suite = "lb-migr-test-\(UUID().uuidString)"
+    let ud = UserDefaults(suiteName: suite)!
+    defer { ud.removePersistentDomain(forName: suite) }
+    ud.set("Vorhanden", forKey: "author")
+    let n = LegacyMigration.migrateDefaults(from: ["author": "Alt", "lockMinutes": 30, "lastBook": old.path + "/Standard.laborbuch", "fremd": "nein",
+                                                    "bookPaths": ["b1": old.path + "/Standard.laborbuch", "b2": "/x/y.laborbuch"], "lastBackup:b1": Date(timeIntervalSince1970: 0)],
+                                            into: ud, oldBase: old.path, newBase: new.path)
+    check(n == 4 && ud.string(forKey: "author") == "Vorhanden" && ud.integer(forKey: "lockMinutes") == 30 && ud.object(forKey: "fremd") == nil
+          && ud.string(forKey: "lastBook") == new.path + "/Standard.biobook"
+          && (ud.dictionary(forKey: "bookPaths") as? [String: String]) == ["b1": new.path + "/Standard.biobook", "b2": "/x/y.laborbuch"]
+          && ud.object(forKey: "lastBackup:b1") != nil, "Übernahme: Einstellungen kopiert, vorhandene und fremde Schlüssel bleiben unberührt")
+}
+
 // Kalender-Planung
 do {
-    let dirP = FileManager.default.temporaryDirectory.appendingPathComponent("lb-plan-\(UUID().uuidString).laborbuch")
+    let dirP = FileManager.default.temporaryDirectory.appendingPathComponent("lb-plan-\(UUID().uuidString).biobook")
     defer { try? FileManager.default.removeItem(at: dirP) }
     let p = try Store(root: dirP)
     let a = try p.savePlan(id: nil, values: ["day": "2026-10-27", "time_from": "14:00", "time_to": "15:30", "title": "Gruppenseminar", "kind": "termin"])
@@ -622,7 +654,7 @@ do {
 
 // Planung: Eintrag verlinken; Oberflächen-Einstellungen
 do {
-    let dirQ = FileManager.default.temporaryDirectory.appendingPathComponent("lb-pref-\(UUID().uuidString).laborbuch")
+    let dirQ = FileManager.default.temporaryDirectory.appendingPathComponent("lb-pref-\(UUID().uuidString).biobook")
     defer { try? FileManager.default.removeItem(at: dirQ) }
     let q = try Store(root: dirQ)
     let e1 = try q.create(title: "Ansatz 1")

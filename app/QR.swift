@@ -1,5 +1,5 @@
 // QR-Codes für Etiketten erzeugen (CoreImage) und in Kamerabildern erkennen (Vision); dazu das Kamera-Fenster zum Scannen.
-// Inhalt eines Etiketts: laborbuch://open?book=<BuchID>&t=lot|entity|location|entry&id=<Nummer> (oder nur die ID wie BS-00042)
+// Inhalt eines Etiketts: biobook://open?book=<BuchID>&t=lot|entity|location|entry&id=<Nummer> (oder nur die ID wie BS-00042)
 import AVFoundation
 import Cocoa
 import CoreImage.CIFilterBuiltins
@@ -31,10 +31,10 @@ enum QR {
         return (req.results ?? []).compactMap(\.payloadStringValue)
     }
 
-    /// Erkanntes in ein Ziel übersetzen: laborbuch://-Link oder eine nackte ID (BS-00042, PL-0001)
+    /// Erkanntes in ein Ziel übersetzen: biobook://-Link oder eine nackte ID (BS-00042, PL-0001)
     static func target(_ s: String) -> [String: Any]? {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let u = URLComponents(string: t), u.scheme == "laborbuch" {
+        if let u = URLComponents(string: t), ["biobook", "laborbuch"].contains(u.scheme ?? "") {
             let q = Dictionary(uniqueKeysWithValues: (u.queryItems ?? []).compactMap { i in i.value.map { (i.name, $0) } })
             guard let kind = q["t"], ["lot", "entity", "location", "entry", "culture", "device"].contains(kind), let id = q["id"].flatMap(Int.init) else { return nil }
             return ["t": kind, "id": id, "book": q["book"] ?? ""]
@@ -51,7 +51,7 @@ enum QR {
 final class ScannerWindow: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, NSWindowDelegate {
     private var window: NSWindow?
     private let session = AVCaptureSession()
-    private let queue = DispatchQueue(label: "de.felix.laborbuch.scan")
+    private let queue = DispatchQueue(label: "de.felix.biobook.scan")
     private var found: ((String) -> Void)?
     private var lastCheck = Date.distantPast
     private var done = false

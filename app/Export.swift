@@ -68,7 +68,7 @@ enum FileExport {
 
     static func pdfA(_ pdf: Data) throws -> Data {
         guard let gs = ghostscript else { throw ExportError.tool("Für PDF/A wird Ghostscript gebraucht (im Terminal: brew install ghostscript). Normales PDF geht ohne.") }
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-pdfa-\(UUID().uuidString)")
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("biobook-pdfa-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
         let inp = tmp.appendingPathComponent("in.pdf"), out = tmp.appendingPathComponent("out.pdf")

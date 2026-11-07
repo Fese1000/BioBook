@@ -1,4 +1,4 @@
-// Automatisierung: AppleScript-Befehle (Laborbuch.sdef), laborbuch://-Aktionen für Kurzbefehle und der Dienst „Neuer Laborbuch-Eintrag“.
+// Automatisierung: AppleScript-Befehle (BioBook.sdef), biobook://-Aktionen für Kurzbefehle und der Dienst „Neuer BioBook-Eintrag“.
 // Die eigentliche Arbeit machen die Store-Funktionen in AutomationStore.swift; hier nur die Anbindung an macOS.
 import AppKit
 
@@ -9,7 +9,7 @@ enum Automation {
 
     /// Gemeinsamer Rahmen: Buch holen, Fehler als AppleScript-Fehler melden
     static func run(_ cmd: NSScriptCommand, _ body: (Store) throws -> Any?) -> Any? {
-        guard let s = delegate?.store else { cmd.scriptErrorNumber = -1728; cmd.scriptErrorString = "Kein Laborbuch geöffnet"; return nil }
+        guard let s = delegate?.store else { cmd.scriptErrorNumber = -1728; cmd.scriptErrorString = "Kein BioBook geöffnet"; return nil }
         do { return try body(s) } catch { cmd.scriptErrorNumber = -10000; cmd.scriptErrorString = "\(error)"; return nil }
     }
 }
@@ -53,11 +53,11 @@ enum Automation {
     }
 }
 
-// MARK: laborbuch://-Aktionen und Dienst
+// MARK: biobook://-Aktionen und Dienst
 extension AppDelegate {
-    /// laborbuch://new?title=…&text=…, laborbuch://append?id=…&text=… (mit Rückfrage), laborbuch://search?q=…; true, wenn es eine Aktion war
+    /// biobook://new?title=…&text=…, biobook://append?id=…&text=… (mit Rückfrage), biobook://search?q=…; true, wenn es eine Aktion war
     func handleAction(_ url: URL) -> Bool {
-        guard url.scheme == "laborbuch", let host = url.host, ["new", "append", "search"].contains(host), let s = store else { return false }
+        guard ["biobook", "laborbuch"].contains(url.scheme ?? ""), let host = url.host, ["new", "append", "search"].contains(host), let s = store else { return false }
         let q = Dictionary((URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []).compactMap { i in i.value.map { (i.name, $0) } }, uniquingKeysWith: { a, _ in a })
         let web = docs.first?.web
         do {
@@ -68,7 +68,7 @@ extension AppDelegate {
                 web?.evaluateJavaScript("app.openEntry(\(id))")
             case "append":
                 guard let id = q["id"].flatMap(Int.init), let text = q["text"], !text.isEmpty else { throw StoreError.invalid("id und text angeben") }
-                if !testMode {  // ein Link aus dem Netz soll nicht unbemerkt ins Laborbuch schreiben
+                if !testMode {  // ein Link aus dem Netz soll nicht unbemerkt ins BioBook schreiben
                     let a = NSAlert(); a.messageText = "Text an Eintrag \(id) anhängen?"
                     a.informativeText = String(text.prefix(300)); a.addButton(withTitle: "Anhängen"); a.addButton(withTitle: "Abbrechen")
                     NSApp.activate(ignoringOtherApps: true)
@@ -80,13 +80,13 @@ extension AppDelegate {
                 let js = (try? JSONSerialization.data(withJSONObject: q["q"] ?? "", options: .fragmentsAllowed)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
                 web?.evaluateJavaScript("app.search(\(js))")
             }
-        } catch { if !testMode { alert("Laborbuch", "\(error)") } }
+        } catch { if !testMode { alert("BioBook", "\(error)") } }
         window?.makeKeyAndOrderFront(nil)
         if !testMode { NSApp.activate(ignoringOtherApps: true) }
         return true
     }
 
-    /// Dienste-Menü „Neuer Laborbuch-Eintrag“: markierter Text aus einer anderen App wird ein neuer Eintrag
+    /// Dienste-Menü „Neuer BioBook-Eintrag“: markierter Text aus einer anderen App wird ein neuer Eintrag
     @objc func newEntryFromService(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
         guard let text = pboard.string(forType: .string), !text.isEmpty, let s = store else { error.pointee = "Kein Text ausgewählt"; return }
         do {

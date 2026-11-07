@@ -249,7 +249,7 @@ function tableFromFile() {
 
 // ---------- Tastenkürzel ----------
 const SHORTCUTS = [
-  ['Eintrag', [['⌘N', 'Neuer Eintrag'], ['⌘S', 'Revision sichern'], ['⌘P', 'Als PDF'], ['⇧⌘D', 'Tagesabschnitt „Heute“'], ['⌘F', 'Suche in der Liste'], ['⌥⌘F', 'Suchen & Ersetzen im Eintrag'], ['⌘T / ⌥⌘N', 'Neuer Tab / neues Fenster'], ['⌘L', 'Sperren'], ['⇧⌘E', 'Laborbuch exportieren']]],
+  ['Eintrag', [['⌘N', 'Neuer Eintrag'], ['⌘S', 'Revision sichern'], ['⌘P', 'Als PDF'], ['⇧⌘D', 'Tagesabschnitt „Heute“'], ['⌘F', 'Suche in der Liste'], ['⌥⌘F', 'Suchen & Ersetzen im Eintrag'], ['⌘T / ⌥⌘N', 'Neuer Tab / neues Fenster'], ['⌘L', 'Sperren'], ['⇧⌘E', 'BioBook exportieren']]],
   ['Text', [['⌘B', 'Fett'], ['⌘I', 'Kursiv'], ['⌘U', 'Unterstrichen'], ['⇧⌘S', 'Durchgestrichen'], ['⌘.', 'Hochgestellt'], ['⌘,', 'Tiefgestellt'], ['⇧⌘H', 'Textmarker'], ['⌘K', 'Link'], ['⌘Z / ⇧⌘Z', 'Widerrufen / Wiederholen']]],
   ['Tippen', [['/', 'Einfügen-Befehle (Tabelle, Rechner, Formel …)'], ['[[', 'Verweis auf einen Eintrag'], ['@', 'Registry-Objekt'], ['$x^2$', 'Formel im Text'], ['# + Leerzeichen', 'Überschrift'], ['- / 1. / [ ]', 'Liste / nummeriert / Checkliste']]],
 ];

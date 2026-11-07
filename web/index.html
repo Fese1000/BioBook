@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="de"><head><meta charset="utf-8">
-<title>Laborbuch</title>
+<title>BioBook</title>
 <link rel="stylesheet" href="style.css">
 </head><body>
 <aside>
-  <div id="book" title="Anderes Laborbuch: ⌘O"></div>
+  <div id="book" title="Anderes BioBook: ⌘O"></div>
   <div class="side-head">
     <input id="search" type="search" placeholder="Suchen (⌘F)" autocomplete="off" spellcheck="false">
     <button id="new" class="btn" title="Neuer Eintrag (⌘N)">+</button>
@@ -43,14 +43,14 @@
         <span id="tplinfo"></span>
       </div>
       <div class="metaactions">
+        <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
+        <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
+        <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
         <span class="iconbtns">
           <button class="btn" id="pinBtn" title="Oben in der Liste anheften">📌</button>
           <button class="btn" id="dupBtn" title="Eintrag duplizieren (ohne Signatur und Revisionen)">⧉</button>
           <button class="btn" id="trashBtn" title="In den Papierkorb (lässt sich wiederherstellen)">🗑</button>
         </span>
-        <button class="btn" id="saveTpl" title="Diesen Eintrag als (neue Version einer) Vorlage speichern">Als Vorlage</button>
-        <button class="btn" id="signBtn" title="Eintrag abschließen und mit deinem Schlüssel signieren">🔏 Abschließen</button>
-        <button class="btn on" id="runBtn" title="Schritte nacheinander abarbeiten, mit Zeitstempeln und Timern">▶ Ausführen</button>
       </div>
     </div>
     <div id="etabs"></div>
@@ -74,7 +74,7 @@
   <section id="agenda" hidden></section>
   <section id="calendar" hidden></section>
   <section id="ask" hidden></section>
-  <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="aiBtn" class="link aionly" hidden title="Zusammenfassen, Protokoll aus Stichpunkten, Fragen ans Laborbuch">✨ KI-Assistent</button><button id="histBtn" class="link">Verlauf</button></footer>
+  <footer id="status"><span id="saved"></span><span id="words"></span><span id="revs"></span><button id="aiBtn" class="link aionly" hidden title="Zusammenfassen, Protokoll aus Stichpunkten, Fragen ans BioBook">✨ KI-Assistent</button><button id="histBtn" class="link">Verlauf</button></footer>
 </main>
 <section id="run" hidden></section>
 <section id="annot" hidden></section>

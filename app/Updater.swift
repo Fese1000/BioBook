@@ -3,16 +3,16 @@
 import Cocoa
 
 enum Updater {
-    static let repo = "Fese1000/Laborbuch"
-    static let bundleID = "de.felix.laborbuch"
-    static var asset: String { "Laborbuch-AppleSilicon.dmg" }  // vorerst nur Apple Silicon
+    static let repo = "Fese1000/BioBook"
+    static let bundleID = "de.felix.biobook"
+    static var asset: String { "BioBook-AppleSilicon.dmg" }  // vorerst nur Apple Silicon
 
-    /// Für Tests: LABORBUCH_UPDATE_API (eigene Release-Beschreibung) und passendes Download-Präfix
+    /// Für Tests: BIOBOOK_UPDATE_API (eigene Release-Beschreibung) und passendes Download-Präfix
     static var api: URL {
-        URL(string: ProcessInfo.processInfo.environment["LABORBUCH_UPDATE_API"] ?? "https://api.github.com/repos/\(repo)/releases/latest")!
+        URL(string: ProcessInfo.processInfo.environment["BIOBOOK_UPDATE_API"] ?? "https://api.github.com/repos/\(repo)/releases/latest")!
     }
     static var downloadPrefix: String {
-        ProcessInfo.processInfo.environment["LABORBUCH_UPDATE_PREFIX"] ?? "https://github.com/\(repo)/releases/download/"
+        ProcessInfo.processInfo.environment["BIOBOOK_UPDATE_PREFIX"] ?? "https://github.com/\(repo)/releases/download/"
     }
 
     static var current: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0" }
@@ -46,7 +46,7 @@ enum Updater {
     static func check(done: @escaping (Result<Release?, Error>) -> Void) {
         var req = URLRequest(url: api, timeoutInterval: 15)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        req.setValue("Laborbuch/\(current)", forHTTPHeaderField: "User-Agent")
+        req.setValue("BioBook/\(current)", forHTTPHeaderField: "User-Agent")
         URLSession.shared.dataTask(with: req) { data, resp, err in
             let r: Result<Release?, Error> = Result {
                 if let err { throw err }
@@ -67,7 +67,7 @@ enum Updater {
 
     /// Laden, prüfen, vorbereiten; danach beendet sich die App und das Skript tauscht sie aus
     static func install(_ rel: Release, progress: @escaping (String) -> Void, done: @escaping (Error?) -> Void) {
-        let work = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-update-\(UUID().uuidString)")
+        let work = FileManager.default.temporaryDirectory.appendingPathComponent("biobook-update-\(UUID().uuidString)")
         progress("download")
         URLSession.shared.downloadTask(with: rel.url) { tmp, resp, err in
             let r: Result<URL, Error> = Result {
@@ -83,8 +83,8 @@ enum Updater {
                 try FileManager.default.createDirectory(at: new, withIntermediateDirectories: true)
                 try FileExport.run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint", mnt.path, dmg.path])
                 defer { try? FileExport.run("/usr/bin/hdiutil", ["detach", "-force", mnt.path]) }
-                let app = new.appendingPathComponent("Laborbuch.app")
-                try FileExport.run("/usr/bin/ditto", [mnt.appendingPathComponent("Laborbuch.app").path, app.path])
+                let app = new.appendingPathComponent("BioBook.app")
+                try FileExport.run("/usr/bin/ditto", [mnt.appendingPathComponent("BioBook.app").path, app.path])
                 let info = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist")) as? [String: Any] ?? [:]
                 guard info["CFBundleIdentifier"] as? String == bundleID else { throw StoreError.invalid("Unerwartete App im Update") }
                 guard newer(info["CFBundleShortVersionString"] as? String ?? "0", than: current) else { throw StoreError.invalid("Das Update ist nicht neuer") }
@@ -105,7 +105,7 @@ enum Updater {
     /// Skript, das wartet bis die App beendet ist, sie austauscht und neu startet (bei Fehler bleibt die alte)
     static func swapAfterQuit(new: URL, work: URL) throws {
         let old = appBundle.path, pid = ProcessInfo.processInfo.processIdentifier
-        let relaunch = ProcessInfo.processInfo.environment["LABORBUCH_NO_RELAUNCH"] == nil ? "open \"$OLD\"" : ":"
+        let relaunch = ProcessInfo.processInfo.environment["BIOBOOK_NO_RELAUNCH"] == nil ? "open \"$OLD\"" : ":"
         let script = work.appendingPathComponent("swap.sh")
         try """
         #!/bin/sh

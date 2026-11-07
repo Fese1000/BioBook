@@ -70,11 +70,11 @@ async function exportBook() {
 
   const rows = d.entries.map(e => `<tr><td><a href="${base(e)}.html">${esc(e.title || 'Ohne Titel')}</a></td><td>${esc(KIND_DE[e.kind] || '')}</td>
     <td>${esc(e.project || '')}</td><td>${esc(e.tags || '')}</td><td>${when(e.updated)}</td><td>${sigOf(e.id) ? '🔏' : ''}</td></tr>`).join('');
-  texts.push({path: 'index.html', text: page(`Laborbuch ${d.book}`, `<h1>Laborbuch „${esc(d.book)}“</h1><p>Export vom ${when(d.exported)} · ${d.entries.length} Einträge</p>
+  texts.push({path: 'index.html', text: page(`BioBook ${d.book}`, `<h1>BioBook „${esc(d.book)}“</h1><p>Export vom ${when(d.exported)} · ${d.entries.length} Einträge</p>
     <table><tr><th>Titel</th><th>Art</th><th>Projekt</th><th>Tags</th><th>Geändert</th><th>Signiert</th></tr>${rows}</table>`, '')});
-  texts.push({path: 'index.md', text: `# Laborbuch „${d.book}“\n\nExport vom ${when(d.exported)} · ${d.entries.length} Einträge\n\n| Titel | Art | Projekt | Tags | Geändert |\n| --- | --- | --- | --- | --- |\n`
+  texts.push({path: 'index.md', text: `# BioBook „${d.book}“\n\nExport vom ${when(d.exported)} · ${d.entries.length} Einträge\n\n| Titel | Art | Projekt | Tags | Geändert |\n| --- | --- | --- | --- | --- |\n`
     + d.entries.map(e => `| [${(e.title || 'Ohne Titel').replace(/\|/g, '\\|')}](${base(e)}.md) | ${KIND_DE[e.kind] || ''} | ${e.project || ''} | ${e.tags || ''} | ${when(e.updated)} |`).join('\n') + '\n'});
-  texts.push({path: 'LIESMICH.txt', text: `Export des Laborbuchs „${d.book}“ vom ${when(d.exported)}
+  texts.push({path: 'LIESMICH.txt', text: `Export des BioBooks „${d.book}“ vom ${when(d.exported)}
 
 Lesbar ohne die App:
   index.html            Übersicht im Browser öffnen; jede Zeile führt zum Eintrag
@@ -103,8 +103,8 @@ Verlinkte Rohdaten sind nicht im Export enthalten, nur Pfad und Prüfsumme.
   }
   const crate = {'@context': 'https://w3id.org/ro/crate/1.1/context', '@graph': [
     {'@id': 'ro-crate-metadata.json', '@type': 'CreativeWork', about: {'@id': './'}, conformsTo: {'@id': 'https://w3id.org/ro/crate/1.1'},
-      dateCreated: d.exported, sdPublisher: {'@id': '#laborbuch'}},
-    {'@id': '#laborbuch', '@type': 'Organization', name: 'Laborbuch'},
+      dateCreated: d.exported, sdPublisher: {'@id': '#biobook'}},
+    {'@id': '#biobook', '@type': 'Organization', name: 'BioBook'},
     {'@id': './', '@type': 'Dataset', name: d.book, dateCreated: d.exported, hasPart: parts}, ...graph]};
 
   try {
@@ -122,7 +122,7 @@ async function exportEntryPDF(pdfa) {
   const sig = curSigned ? await call('signedRevision', {id: cur}) : null;
   const last = hist[0];
   const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${PRINT_CSS}</style></head><body>
-    <div class="head"><b>Laborbuch „${esc(book.name)}“</b> · Eintrag Nr. ${cur}${last ? ` · Revision ${last.no}` : ''} · gedruckt ${when(new Date().toISOString())}
+    <div class="head"><b>BioBook „${esc(book.name)}“</b> · Eintrag Nr. ${cur}${last ? ` · Revision ${last.no}` : ''} · gedruckt ${when(new Date().toISOString())}
     ${last ? `<br>Revisions-Hash (SHA-256): <span class="hash">${last.hash}</span>` : '<br>Noch keine Revision gesichert'}
     ${sig ? `<br>Abgeschlossen und signiert von <b>${esc(sig.name)}</b> am ${when(sig.signed_at)}` : ''}</div>
     <h1>${esc($('#title').value)}</h1>${withBibliography(editor.getHTML())}</body></html>`;

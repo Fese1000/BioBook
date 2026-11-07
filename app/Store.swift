@@ -1,4 +1,4 @@
-// Laborbuch-Datei: SQLite (Einträge, Arbeitsstand, unveränderliche Revisionen mit Hash-Kette, Volltextsuche) und Anhänge nach SHA-256.
+// BioBook-Datei: SQLite (Einträge, Arbeitsstand, unveränderliche Revisionen mit Hash-Kette, Volltextsuche) und Anhänge nach SHA-256.
 import CryptoKit
 import Foundation
 import SQLite3
@@ -50,7 +50,7 @@ final class Store {
     /// Bringt ältere Bücher auf den aktuellen Stand. Vorher wird eine Kopie der Datenbank unter backups/ abgelegt.
     private func migrate(backup: Bool) throws {
         let v = try query("PRAGMA user_version").first?["user_version"] as? Int ?? 0
-        if v > Store.schemaVersion { throw StoreError.invalid("Dieses Laborbuch stammt von einer neueren App-Version. Bitte die App aktualisieren.") }
+        if v > Store.schemaVersion { throw StoreError.invalid("Dieses BioBook stammt von einer neueren App-Version. Bitte die App aktualisieren.") }
         if v == Store.schemaVersion { return }
         if backup {
             let dir = root.appendingPathComponent("backups")
@@ -264,7 +264,7 @@ final class Store {
                 }
             }
             if v < 16 {
-                // Laufendes Laborbuch: Zeitraum der Tagesabschnitte (für die Liste)
+                // Laufendes BioBook: Zeitraum der Tagesabschnitte (für die Liste)
                 try exec("ALTER TABLE entry ADD COLUMN day_first TEXT; ALTER TABLE entry ADD COLUMN day_last TEXT;")
             }
             if v < 17 {
@@ -730,7 +730,7 @@ final class Store {
         var purged = 0
         for i in ids {
             do { try purgeEntry(id: i); purged += 1 }
-            catch { NSLog("Laborbuch: Papierkorb: Eintrag \(i) bleibt erhalten: \(error)") }  // ein Problemfall hält die übrigen nicht auf
+            catch { NSLog("BioBook: Papierkorb: Eintrag \(i) bleibt erhalten: \(error)") }  // ein Problemfall hält die übrigen nicht auf
         }
         return purged
     }
@@ -854,7 +854,7 @@ final class Store {
         let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !n.isEmpty else { throw StoreError.invalid("Name des Zeugen fehlt") }
         let rev = try signedRevision(id: id)
-        guard try !query("SELECT 1 FROM attachment WHERE sha256 = ?", [file]).isEmpty else { throw StoreError.invalid("PDF fehlt im Laborbuch") }
+        guard try !query("SELECT 1 FROM attachment WHERE sha256 = ?", [file]).isEmpty else { throw StoreError.invalid("PDF fehlt im BioBook") }
         let at = Store.now()
         try query("INSERT INTO signature(entry_id, rev_no, kind, name, signed_at, file_sha256, hash_found) VALUES(?, ?, 'witness', ?, ?, ?, ?)",
                   [id, rev["no"], n, at, file, hashFound ? 1 : 0])

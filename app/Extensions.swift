@@ -1,4 +1,4 @@
-// Erweiterungen: JavaScript-Dateien im Ordner „Erweiterungen“ (Application Support/Laborbuch). Die App liest nur den Text;
+// Erweiterungen: JavaScript-Dateien im Ordner „Erweiterungen“ (Application Support/BioBook). Die App liest nur den Text;
 // ausgeführt wird er in der Oberfläche in einem abgeschotteten Rahmen (web/extensions.js). Ein- und ausschalten je Datei.
 import AppKit
 
@@ -6,8 +6,8 @@ enum Extensions {
     static var testDisabled = Set<String>()  // Testmodus: Einstellungen der App nicht anfassen
 
     static func folder(test: Bool) -> URL {
-        if test, let d = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] { return URL(fileURLWithPath: d).appendingPathComponent("Erweiterungen") }
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Laborbuch/Erweiterungen")
+        if test, let d = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] { return URL(fileURLWithPath: d).appendingPathComponent("Erweiterungen") }
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("BioBook/Erweiterungen")
     }
 
     static func disabled(test: Bool) -> Set<String> { test ? testDisabled : Set(UserDefaults.standard.stringArray(forKey: "disabledExtensions") ?? []) }

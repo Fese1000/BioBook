@@ -1,4 +1,4 @@
-// KI-Assistent (eigener Anthropic-Schlüssel): Eintrag zusammenfassen, Fragen an das Laborbuch mit Quellen, Protokoll aus Stichpunkten.
+// KI-Assistent (eigener Anthropic-Schlüssel): Eintrag zusammenfassen, Fragen an das BioBook mit Quellen, Protokoll aus Stichpunkten.
 // Nur auf Klick; vorher steht da, was an Anthropic geht. Die Prompt-Bausteine sind reine Funktionen (tests/assistant.test.js).
 (function (root) {
   'use strict';
@@ -92,7 +92,7 @@ function aiConfirm(title, lines) {
     const dlg = $('#locdlg');
     dlg.innerHTML = `<form method="dialog"><h3>${esc(title)}</h3>
       <p>Wird an <b>Anthropic (Claude, ${esc('claude-opus-5-5')})</b> gesendet:</p><ul class="aisend">${lines.map(l => `<li>${l}</li>`).join('')}</ul>
-      <p class="sub">Mit deinem eigenen Schlüssel; Kosten trägt dein Anthropic-Konto. Nichts davon wird im Laborbuch verändert, bis du die Antwort übernimmst.</p>
+      <p class="sub">Mit deinem eigenen Schlüssel; Kosten trägt dein Anthropic-Konto. Nichts davon wird im BioBook verändert, bis du die Antwort übernimmst.</p>
       <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button value="ok" class="btn on">Senden</button></div></form>`;
     dlg.onclose = () => res(dlg.returnValue == 'ok');
     dlg.showModal();
@@ -141,7 +141,7 @@ async function aiProtocol() {
   return r;
 }
 
-/// Frage an das Laborbuch: Suche, Quellen anzeigen, Antwort mit Verweisen
+/// Frage an das BioBook: Suche, Quellen anzeigen, Antwort mit Verweisen
 async function aiAsk(question) {
   const q = String(question || '').trim(); if (!q) return null;
   const words = q.replace(/[^\p{L}\p{N}\s-]/gu, ' ').split(/\s+/).filter(w => w.length > 3);
@@ -152,7 +152,7 @@ async function aiAsk(question) {
   const sources = [];
   for (const id of ids) { const e = await call('load', {id}); sources.push({id, title: e.title, text: await entryPlainText(e)}); }
   const p = AI.qaPrompt(q, sources);
-  if (!await aiConfirm('Frage an das Laborbuch', [`die Frage „${esc(q)}“`, ...p.used.map(s => `[E${s.id}] ${esc(s.title || 'Ohne Titel')}${s.cut ? ' (gekürzt)' : ''}`)])) return null;
+  if (!await aiConfirm('Frage an das BioBook', [`die Frage „${esc(q)}“`, ...p.used.map(s => `[E${s.id}] ${esc(s.title || 'Ohne Titel')}${s.cut ? ' (gekürzt)' : ''}`)])) return null;
   $('#aianswer').innerHTML = '<p class="sub">Claude denkt nach …</p>';
   const r = await aiRun(p, 3000);
   if (!r) { $('#aianswer').innerHTML = ''; return null; }
@@ -175,7 +175,7 @@ const AIState = {last: null};
 async function showAsk() {
   await flush();
   showView('ask'); navCur('ask');
-  $('#ask').innerHTML = `<div class="reghead"><h2>✨ Fragen an das Laborbuch</h2></div>
+  $('#ask').innerHTML = `<div class="reghead"><h2>✨ Fragen an das BioBook</h2></div>
     <form id="askform" class="askform"><input id="askq" placeholder="z. B. Welche Ausbeute hatten die Plasmid-Präps im Oktober?" autocomplete="off"><button class="btn on">Fragen</button></form>
     <p class="sub">Die passenden Einträge werden gesucht; vor dem Senden siehst du, welche an Claude gehen. Die Antwort verweist mit [E…] auf die Einträge.</p>
     <div id="aianswer"></div>`;
@@ -200,7 +200,7 @@ function initAssistant() {
 
 /// Fußzeile: „✨ KI-Assistent“ (nur sichtbar, wenn ein Schlüssel hinterlegt ist)
 function aiMenu(btn) {
-  const items = [['✨', 'Eintrag zusammenfassen', () => aiSummary()], ['✨', 'Protokoll aus Stichpunkten', () => aiProtocol()], ['✨', 'Frage ans Laborbuch …', () => showAsk()]];
+  const items = [['✨', 'Eintrag zusammenfassen', () => aiSummary()], ['✨', 'Protokoll aus Stichpunkten', () => aiProtocol()], ['✨', 'Frage ans BioBook …', () => showAsk()]];
   popMenu(btn, items.map(([i, t], n) => `<div class="opt" data-ai="${n}">${i} ${esc(t)}</div>`).join(''), el => el.addEventListener('mousedown', e => {
     const o = e.target.closest('[data-ai]'); if (!o) return;
     e.preventDefault(); el.close(); items[+o.dataset.ai][2]();

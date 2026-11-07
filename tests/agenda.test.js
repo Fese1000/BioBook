@@ -32,7 +32,7 @@ test('iCalendar: ganztägig, maskiert, gefaltet, feste UID', () => {
   assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.endsWith('END:VCALENDAR\r\n'));
   assert.ok(ics.includes('DTSTART;VALUE=DATE:20261030\r\nDTEND;VALUE=DATE:20261031'));
   assert.ok(ics.includes('SUMMARY:Kalibrierung\\; Pipette\\, P200') && ics.includes('DESCRIPTION:Zeile 1\\nZeile 2'));
-  assert.ok(ics.includes('UID:buch-task-7-0@laborbuch') && ics.includes('DTSTAMP:20261023T080000Z'));
+  assert.ok(ics.includes('UID:buch-task-7-0@biobook') && ics.includes('DTSTAMP:20261023T080000Z'));
   for (const line of ics.split('\r\n')) assert.ok(new TextEncoder().encode(line).length <= 75, `zu lang: ${line}`);
   assert.ok(ics.includes('\r\n Ä'), 'lange Zeile gefaltet');
 });

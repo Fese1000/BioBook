@@ -1,9 +1,9 @@
-# Laborbuch – Bauplan (Arbeitstitel)
+# BioBook – Bauplan (Arbeitstitel)
 
 Stand: 2026-10-22 · Zielgruppe: ich selbst · Plattform: nur Mac (Intel + Apple Silicon, macOS 13+) · Verteilung: DMG
 
 ## 1. Idee in einem Satz
-Das schnelle, lokale Laborbuch für den Mac: eine Datei, die dir gehört, offline, sofortige Suche, unveränderliche Historie mit Signatur, gute Vorlagen und eingebaute Laborrechner.
+Das schnelle, lokale BioBook für den Mac: eine Datei, die dir gehört, offline, sofortige Suche, unveränderliche Historie mit Signatur, gute Vorlagen und eingebaute Laborrechner.
 
 ## 2. Prinzipien
 1. **Local-first.** Alles liegt in einer Datei auf dem Mac. Kein Konto, kein Server, keine Cloud-Pflicht.
@@ -37,9 +37,9 @@ Mehrbenutzer/Sync, Rollen, 21 CFR Part 11-Zertifizierung, Windows/Linux, Web-Ver
 **Risiko:** Der Editor in WKWebView ist die wichtigste Entscheidung. M0 prüft das mit einem Wegwerf-Prototyp (Tippen, Bilder einfügen, Tabellen, 5.000 Wörter ohne Ruckeln). Fällt er durch, Plan B: native `NSTextView` mit eigenem Block-Modell.
 
 ## 5. Dateiformat
-Ein Laborbuch ist ein Ordner (Paket) `Name.laborbuch`:
+Ein BioBook ist ein Ordner (Paket) `Name.biobook`:
 ```
-Name.laborbuch/
+Name.biobook/
   db.sqlite          # alle Daten
   files/ab/abcdef…   # Anhänge nach SHA-256
   meta.json          # Formatversion, Anlagedatum, Buch-ID
@@ -139,16 +139,16 @@ Netz nur auf Klick und nur zu festen Adressen (Crossref, PubMed, Anthropic); Sch
 | M19 ✅ | Aufgaben und Termine: Aufgaben mit Fälligkeit im Eintrag (Checkliste mit Datum), Übersicht „Heute / Diese Woche“ über alles Fällige (Aufgaben, Geräte, Mycoplasma, Ablauf, Bestellungen), Export als .ics für Kalender/Erinnerungen | Aufgabe mit Datum erscheint in der Übersicht, ebenso fällige Kalibrierung und ablaufende Charge; .ics lässt sich in Kalender importieren. **Erledigt 2026-10-23:** deutsche Datumsangaben inkl. Wochentage; .ics nach RFC 5545 (Faltung, Maskierung, feste UIDs) getestet; Import in Apple Kalender selbst nicht automatisch geprüft |
 | M20 ✅ | Gerätedateien: Plattenleser-Export (CSV/TSV, 96/384-Raster oder Liste) auf die Platte legen (Werte und Heatmap), NanoDrop-Export in Ergebniszeilen, qPCR-Ct-Tabellen | Plattenleser-CSV mit 96 Werten als Heatmap; NanoDrop-Export füllt eine Plasmid-Präp-Tabelle. **Erledigt 2026-10-23:** dazu qPCR (CFX/QuantStudio) mit Referenzgen und ΔCt; Testdateien nach typischen Exporten gebaut – mit echten Dateien der Geräte im Labor noch prüfen |
 | M21 ✅ | Chemie: SMILES eingeben oder zeichnen → Strukturformel, Summenformel, Molmasse; Verknüpfung mit Chemikalien in der Registry und dem Einwaage-Rechner | SMILES von Tris ergibt C4H11NO3, 121,14 g/mol und ein Strukturbild; Einwaage-Rechner übernimmt die Molmasse. **Erledigt 2026-10-23:** eigener SMILES-Parser (13 Stoffe gegen Literaturwerte), Bild mit SmilesDrawer (MIT); Zeichnen per Maus noch nicht – Eingabe als SMILES (z. B. aus PubChem) |
-| M22 ✅ | Kurzbefehle und AppleScript: `laborbuch://`-Aktionen (neuer Eintrag, Text anhängen, suchen), AppleScript-Wörterbuch (Einträge lesen/anlegen), Dienste-Menü „Ins Laborbuch“ | Kurzbefehl legt Eintrag mit Text an; AppleScript legt Einträge an. **Erledigt 2026-10-23:** eigene Befehle `create entry`, `append text`, `find entries`, `entry text` statt `make new entry` (ohne Objektmodell); per Apple Event in der App getestet. Offen: die lesbaren Befehlsnamen einmal im Skripteditor mit der installierten App prüfen (Xcode-Werkzeuge fehlen hier) |
-| M23 ✅ | KI-Assistent mit eigenem Schlüssel: Eintrag zusammenfassen, Fragen an das Laborbuch (Suche + Antwort mit Quellen), Protokoll aus Stichpunkten; nur auf Klick, zeigt vorher, was gesendet wird | Ohne Schlüssel unsichtbar; mit Schlüssel Zusammenfassung eines Eintrags mit Verweisen; Schlüssel nur im Schlüsselbund. **Erledigt 2026-10-23:** Claude Opus 5.5 über die Messages API (roh per HTTP, Fallback bei Ablehnung), Vorschau vor dem Senden, Verweise [E…] als Links; im Test mit hinterlegten Antworten. Offen: einmal mit echtem Schlüssel ausprobieren |
+| M22 ✅ | Kurzbefehle und AppleScript: `biobook://`-Aktionen (neuer Eintrag, Text anhängen, suchen), AppleScript-Wörterbuch (Einträge lesen/anlegen), Dienste-Menü „Ins BioBook“ | Kurzbefehl legt Eintrag mit Text an; AppleScript legt Einträge an. **Erledigt 2026-10-23:** eigene Befehle `create entry`, `append text`, `find entries`, `entry text` statt `make new entry` (ohne Objektmodell); per Apple Event in der App getestet. Offen: die lesbaren Befehlsnamen einmal im Skripteditor mit der installierten App prüfen (Xcode-Werkzeuge fehlen hier) |
+| M23 ✅ | KI-Assistent mit eigenem Schlüssel: Eintrag zusammenfassen, Fragen an das BioBook (Suche + Antwort mit Quellen), Protokoll aus Stichpunkten; nur auf Klick, zeigt vorher, was gesendet wird | Ohne Schlüssel unsichtbar; mit Schlüssel Zusammenfassung eines Eintrags mit Verweisen; Schlüssel nur im Schlüsselbund. **Erledigt 2026-10-23:** Claude Opus 5.5 über die Messages API (roh per HTTP, Fallback bei Ablehnung), Vorschau vor dem Senden, Verweise [E…] als Links; im Test mit hinterlegten Antworten. Offen: einmal mit echtem Schlüssel ausprobieren |
 | M24 ✅ | Erweiterungen: eigene Blöcke/Rechner als JavaScript-Dateien im Ordner „Erweiterungen“ mit begrenzter Schnittstelle (kein Dateisystem, kein Netz), ein- und ausschaltbar | Beispiel-Erweiterung (Zellzahl-Rechner) erscheint als Block; Fehler in einer Erweiterung stören die App nicht. **Erledigt 2026-10-23:** Worker in Sandbox-Rahmen (CSP ohne Netz), App-Brücke nur für die Hauptseite; getestet mit Syntaxfehler, Endlosschleife, Netz- und Brückenzugriff |
 
-## 10e. Meilensteine Phase 4b (Abgleich mit Benchling und anderen Laborbüchern, 2026-10-23)
-Ergebnis des Vergleichs: Die großen Bereiche sind da; es fehlen die Arbeitsweise „ein laufendes Laborbuch mit Tagen“, angehängte Protokolle, Editor-Standards, Eintragsverwaltung und Benchlings Molekularbiologie-Werkzeuge.
+## 10e. Meilensteine Phase 4b (Abgleich mit Benchling und anderen BioBooksn, 2026-10-23)
+Ergebnis des Vergleichs: Die großen Bereiche sind da; es fehlen die Arbeitsweise „ein laufendes BioBook mit Tagen“, angehängte Protokolle, Editor-Standards, Eintragsverwaltung und Benchlings Molekularbiologie-Werkzeuge.
 
 | M | Inhalt | Fertig, wenn … |
 | --- | --- | --- |
-| M25 ✅ | Laufendes Laborbuch: Tagesabschnitte im Eintrag (einklappbar), „+ Heute“, Zeitraum des Eintrags in der Liste, Suche und „Fällig“ springen zur Stelle | Eintrag mit drei Tagen; „+ Heute“ legt den Tag einmal an; Liste zeigt „30.06.–15.10.2026“; Suchtreffer im dritten Tag wird angesprungen. **Erledigt 2026-10-23:** dazu Zitate im Markdown-Export repariert (fehlten bisher) |
+| M25 ✅ | Laufendes BioBook: Tagesabschnitte im Eintrag (einklappbar), „+ Heute“, Zeitraum des Eintrags in der Liste, Suche und „Fällig“ springen zur Stelle | Eintrag mit drei Tagen; „+ Heute“ legt den Tag einmal an; Liste zeigt „30.06.–15.10.2026“; Suchtreffer im dritten Tag wird angesprungen. **Erledigt 2026-10-23:** dazu Zitate im Markdown-Export repariert (fehlten bisher) |
 | M26 ✅ | Protokolle am Eintrag: Vorlagen als Reiter anhängen, im Text verweisen, Eintrag und Protokoll nebeneinander; Reiter „Verknüpft“ (Objekte, Chargen, Sequenzen, Einträge); eigene Felder je Eintrag | Golden-Gate-Protokoll hängt am Eintrag, öffnet sich daneben; „Verknüpft“ listet Plasmid und Charge; Metadaten bleiben beim Speichern. **Erledigt 2026-10-23:** Protokolle sind Einträge der Art „Protokoll“; rechts ist immer nur ein Fenster offen (Protokoll oder Verlauf) |
 | M27 ✅ | Editor-Standards: Hoch-/Tiefstellen, Unterstreichen, Link, Textfarbe/Textmarker, Trennlinie, Formeln (LaTeX), Suchen & Ersetzen, Einfügemenü und „/“-Befehle, Excel als Tabelle, Tastenkürzel-Übersicht | H₂O und 10⁶ im Text und im PDF; Formel wird gesetzt; „/“ fügt Blöcke ein; .xlsx wird Tabelle. **Erledigt 2026-10-23:** offizielle TipTap-Erweiterungen und KaTeX ins Offline-Bündel; Formeln als MathML (keine Schriftdateien); eigener .xlsx-Leser, gegen openpyxl-Datei getestet; Werkzeugleiste von 7 auf 2 Zeilen |
 | M28 ✅ | Einträge verwalten: duplizieren, Status mit Farbe, anheften, zuletzt geöffnet, sortieren/filtern, gespeicherte Suchen, Versionen vergleichen, mehrere Einträge auf einmal, Prüfung vor dem Abschließen | Duplikat ohne Signatur; Filter „fehlgeschlagen“; Vergleich zeigt eingefügte und gelöschte Stellen. **Erledigt 2026-10-23:** Wort-Diff nach Myers (auch mit Zufallstexten getestet); dabei zwei Fehler behoben: KI-Status in den Einstellungen und eine doppelte Element-ID der Statuszeile |

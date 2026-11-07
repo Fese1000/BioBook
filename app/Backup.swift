@@ -6,11 +6,11 @@ enum Backup {
     static let keep = 14
     static let interval: TimeInterval = 24 * 3600
 
-    /// Sicherungsordner: Einstellung, sonst Application Support; für Tests LABORBUCH_BACKUPDIR
+    /// Sicherungsordner: Einstellung, sonst Application Support; für Tests BIOBOOK_BACKUPDIR
     static func baseDir() -> URL {
-        if let t = ProcessInfo.processInfo.environment["LABORBUCH_BACKUPDIR"] { return URL(fileURLWithPath: t) }
+        if let t = ProcessInfo.processInfo.environment["BIOBOOK_BACKUPDIR"] { return URL(fileURLWithPath: t) }
         if let p = UserDefaults.standard.string(forKey: "backupDir") { return URL(fileURLWithPath: p) }
-        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Laborbuch/Sicherungen")
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("BioBook/Sicherungen")
     }
 
     static func dir(for s: Store) -> URL { baseDir().appendingPathComponent("\(s.name) (\(s.bookID.prefix(8)))") }
@@ -38,7 +38,7 @@ enum Backup {
                 case .failure(let e): done(.failure(e))
                 case .success(let (copied, kept)):
                     // in Tests nichts in die Einstellungen der App schreiben
-                    if ProcessInfo.processInfo.environment["LABORBUCH_BACKUPDIR"] == nil { UserDefaults.standard.set(Date(), forKey: "lastBackup:\(bookID)") }
+                    if ProcessInfo.processInfo.environment["BIOBOOK_BACKUPDIR"] == nil { UserDefaults.standard.set(Date(), forKey: "lastBackup:\(bookID)") }
                     done(.success(["dir": dir.path, "db": db.lastPathComponent, "copied": copied, "kept": kept]))
                 }
             }

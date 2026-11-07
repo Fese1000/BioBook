@@ -4,7 +4,7 @@ const PW_MIN = 8;
 async function accountsHTML() {
   const names = await call('accounts').catch(() => []);
   return `<h4>Konten</h4>
-    <p class="sub">Lokale Konten dieses Laborbuchs (Name + Passwort). Das Passwort wird nicht gespeichert, nur ein Hash mit eigenem Salz. Vergessene Passwörter lassen sich nicht wiederherstellen.</p>
+    <p class="sub">Lokale Konten dieses BioBooks (Name + Passwort). Das Passwort wird nicht gespeichert, nur ein Hash mit eigenem Salz. Vergessene Passwörter lassen sich nicht wiederherstellen.</p>
     <div id="accList">${names.map(n => `<p class="row accrow" data-acc="${esc(n)}"><span style="flex:1">${esc(n)}</span>
       <button type="button" class="btn" data-accpw="${esc(n)}">Passwort ändern</button><button type="button" class="btn danger" data-accdel="${esc(n)}">Löschen</button></p>`).join('') || '<p class="sub">Noch kein Konto.</p>'}</div>
     <div id="accForm" class="row" style="flex-wrap:wrap;gap:6px"></div>

@@ -42,7 +42,7 @@ final class WitnessPDF: NSObject, WKNavigationDelegate {
 
     private func printToPDF() {
         guard let web, let window else { return }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-zeuge-\(UUID().uuidString).pdf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("biobook-zeuge-\(UUID().uuidString).pdf")
         outURL = url
         let info = NSPrintInfo(dictionary: [.jobSavingURL: url])
         info.jobDisposition = .save
@@ -69,10 +69,10 @@ final class WitnessPDF: NSObject, WKNavigationDelegate {
         defer { try? FileManager.default.removeItem(at: url) }
         guard let doc = PDFDocument(url: url) else { return finish(.failure(StoreError.invalid("PDF ist leer"))) }
         var attrs = doc.documentAttributes ?? [:]
-        attrs[PDFDocumentAttribute.titleAttribute] = "Laborbuch – Zeugen-PDF"
-        attrs[PDFDocumentAttribute.subjectAttribute] = "Laborbuch Revisions-Hash SHA-256: \(revHash)"
-        attrs[PDFDocumentAttribute.keywordsAttribute] = ["laborbuch", revHash]
-        attrs[PDFDocumentAttribute.creatorAttribute] = "Laborbuch"
+        attrs[PDFDocumentAttribute.titleAttribute] = "BioBook – Zeugen-PDF"
+        attrs[PDFDocumentAttribute.subjectAttribute] = "BioBook Revisions-Hash SHA-256: \(revHash)"
+        attrs[PDFDocumentAttribute.keywordsAttribute] = ["biobook", revHash]
+        attrs[PDFDocumentAttribute.creatorAttribute] = "BioBook"
         doc.documentAttributes = attrs
         guard let data = doc.dataRepresentation() else { return finish(.failure(StoreError.invalid("PDF konnte nicht geschrieben werden"))) }
         finish(.success(data))

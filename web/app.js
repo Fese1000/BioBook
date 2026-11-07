@@ -1,4 +1,4 @@
-// Laborbuch – Oberfläche und Logik. Daten gehen nur über die Brücke an Swift (window.webkit.messageHandlers.lab).
+// BioBook – Oberfläche und Logik. Daten gehen nur über die Brücke an Swift (window.webkit.messageHandlers.lab).
 'use strict';
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -244,7 +244,7 @@ function insertFiles(files, pos) {
   if (!files.length || preview) return false;  // keine Datei: Editor macht das Übliche
   (async () => {
     for (const f of files) {
-      if (f.size > MAX_FILE) { alert(`„${f.name}“ ist größer als 50 MB und wurde nicht übernommen.\n\nGroße Rohdaten bitte mit „🔗 Rohdaten“ verlinken: Sie bleiben am Ort, das Laborbuch merkt sich die Prüfsumme und meldet Änderungen.`); continue; }
+      if (f.size > MAX_FILE) { alert(`„${f.name}“ ist größer als 50 MB und wurde nicht übernommen.\n\nGroße Rohdaten bitte mit „🔗 Rohdaten“ verlinken: Sie bleiben am Ort, das BioBook merkt sich die Prüfsumme und meldet Änderungen.`); continue; }
       status(`Speichert „${f.name}“ …`);
       const sha = await upload(f);
       const node = f.type.startsWith('image/') ? {type: 'image', attrs: {src: `lab://files/${sha}`, alt: f.name}}
@@ -940,7 +940,7 @@ async function selfTest() {
   const lab = await labelFor('lot', lotA.id);
   const qr = await call('qr', {text: lab.url});
   const decoded = await call('testDecodeQR', {base64: qr});
-  ok(decoded[0] == lab.url && /^laborbuch:\/\/open\?book=.+&t=lot&id=\d+$/.test(lab.url), 'QR-Code erzeugt und wie ein Kamerabild erkannt');
+  ok(decoded[0] == lab.url && /^biobook:\/\/open\?book=.+&t=lot&id=\d+$/.test(lab.url), 'QR-Code erzeugt und wie ein Kamerabild erkannt');
   ok(await openCode(decoded[0]) && !$('#stock').hidden && $('#stock .reghead h2').textContent.includes(lab.code), 'Gescannter Code öffnet die Charge');
   const pdfLab = await printLabels([lab, await labelFor('entity', plasmid.id), await labelFor('location', bx)], 'a4_3x8', 'Etiketten Test');
   ok(pdfLab?.pages == 1, `Etiketten als PDF (${pdfLab?.pages} Seite)`);
@@ -1327,7 +1327,7 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm21-chemie.png'}).catch(() => {});
   showView('doc');
 
-  // M22: AppleScript, Kurzbefehle (laborbuch://), Dienste
+  // M22: AppleScript, Kurzbefehle (biobook://), Dienste
   const as = await call('testAppleScript', {source: `tell current application
     set n to «event LBokCrEn» given «class titl»:"Aus AppleScript", «class ctxt»:"Zeile 1"
     «event LBokApTx» "Zeile 2" given «class entr»:n
@@ -1339,16 +1339,16 @@ async function selfTest() {
   let asErr = '';
   try { await call('testAppleScript', {source: `tell current application to «event LBokApTx» "x" given «class entr»:${signedOne.id}`}); } catch (e) { asErr = e.message; }
   ok(/abgeschlossen/.test(asErr), 'AppleScript schreibt nicht in abgeschlossene Einträge');
-  await call('testOpenURL', {url: 'laborbuch://new?title=Kurzbefehl&text=' + encodeURIComponent('Erste Zeile\nZweite Zeile')}); await sleep(500);
+  await call('testOpenURL', {url: 'biobook://new?title=Kurzbefehl&text=' + encodeURIComponent('Erste Zeile\nZweite Zeile')}); await sleep(500);
   const kbId = cur;
-  ok($('#title').value == 'Kurzbefehl' && editor.getText().includes('Zweite Zeile'), 'laborbuch://new legt einen Eintrag an und öffnet ihn');
-  await call('testOpenURL', {url: `laborbuch://append?id=${kbId}&text=${encodeURIComponent('Messung 42')}`}); await sleep(500);
-  ok(cur == kbId && editor.getText().includes('Messung 42'), 'laborbuch://append hängt Text an, das offene Fenster zeigt ihn');
-  await call('testOpenURL', {url: 'laborbuch://search?q=Kurzbefehl'}); await sleep(400);
-  ok($('#search').value == 'Kurzbefehl' && document.querySelector(`#list li[data-id="${kbId}"]`), 'laborbuch://search sucht im Laborbuch');
+  ok($('#title').value == 'Kurzbefehl' && editor.getText().includes('Zweite Zeile'), 'biobook://new legt einen Eintrag an und öffnet ihn');
+  await call('testOpenURL', {url: `biobook://append?id=${kbId}&text=${encodeURIComponent('Messung 42')}`}); await sleep(500);
+  ok(cur == kbId && editor.getText().includes('Messung 42'), 'biobook://append hängt Text an, das offene Fenster zeigt ihn');
+  await call('testOpenURL', {url: 'biobook://search?q=Kurzbefehl'}); await sleep(400);
+  ok($('#search').value == 'Kurzbefehl' && document.querySelector(`#list li[data-id="${kbId}"]`), 'biobook://search sucht im BioBook');
   $('#search').value = ''; await refreshList();
   const svcMsg = await call('testService', {text: 'Notiz aus Safari\nmit zweiter Zeile'}); await sleep(500);
-  ok(!svcMsg && $('#title').value == 'Notiz aus Safari' && editor.getText().includes('mit zweiter Zeile'), 'Dienst „Neuer Laborbuch-Eintrag“ übernimmt markierten Text');
+  ok(!svcMsg && $('#title').value == 'Notiz aus Safari' && editor.getText().includes('mit zweiter Zeile'), 'Dienst „Neuer BioBook-Eintrag“ übernimmt markierten Text');
   showView('doc');
 
   // M23: KI-Assistent (Antworten im Test hinterlegt, kein Netz, nie der echte Schlüsselbund)
@@ -1384,7 +1384,7 @@ async function selfTest() {
   await aiAsk($('#askq').value); await sleep(100);
   const askReq = await call('testAiLastRequest');
   ok(document.querySelector(`#aianswer a.aicite[data-entry="${srcId}"]`) && !document.querySelector('#aianswer a[data-entry="999999"]') && /Quellen: /.test($('#aianswer').textContent),
-    'Frage an das Laborbuch: Antwort mit Verweis auf den Eintrag, erfundene Kennung kein Link');
+    'Frage an das BioBook: Antwort mit Verweis auf den Eintrag, erfundene Kennung kein Link');
   ok((askReq.messages[0].content.match(/<eintrag id="E/g) || []).length <= 8 && askReq.messages[0].content.includes(`id="E${srcId}"`), 'Mitgesendet: höchstens 8 gefundene Einträge');
   await call('testAiReply', {reply: {model: 'claude-opus-5-5', stop_reason: 'refusal', content: [], usage: {}}});
   let aiRefused = ''; try { await call('aiAsk', {system: 'x', user: 'y'}); } catch (e) { aiRefused = e.message; }
@@ -1409,10 +1409,10 @@ async function selfTest() {
     'Zellzahl: 150 Zellen in 4 Quadraten × 2 → 7,50 × 10⁵/ml, Viabilität 88,2 %, gesamt 7,50 × 10⁶');
   changed(); await flush();
   ok(editor.getText().includes('Lebende Zellen: 7,50 × 10⁵ Zellen/ml'), 'Ergebnis steht im Text des Eintrags');
-  await call('testWriteExtension', {file: 'kaputt.js', code: 'laborbuch.register({id: "kaputt", blocks: [}'});
-  await call('testWriteExtension', {file: 'schleife.js', code: 'laborbuch.register({id: "schleife", name: "Schleife", blocks: [{id: "b", title: "Hängt", fields: [], compute() { while (true) {} }}]});'});
-  await call('testWriteExtension', {file: 'netz.js', code: 'fetch("lab://app/index.html").then(() => laborbuch.register({id: "netz", blocks: []}));'});
-  await call('testWriteExtension', {file: 'bruecke.js', code: 'webkit.messageHandlers.lab.postMessage({cmd: "list"}).then(() => laborbuch.register({id: "bruecke", blocks: []}));'});
+  await call('testWriteExtension', {file: 'kaputt.js', code: 'biobook.register({id: "kaputt", blocks: [}'});
+  await call('testWriteExtension', {file: 'schleife.js', code: 'biobook.register({id: "schleife", name: "Schleife", blocks: [{id: "b", title: "Hängt", fields: [], compute() { while (true) {} }}]});'});
+  await call('testWriteExtension', {file: 'netz.js', code: 'fetch("lab://app/index.html").then(() => biobook.register({id: "netz", blocks: []}));'});
+  await call('testWriteExtension', {file: 'bruecke.js', code: 'webkit.messageHandlers.lab.postMessage({cmd: "list"}).then(() => biobook.register({id: "bruecke", blocks: []}));'});
   await loadExtensions(); await sleep(300);
   ok(EXT_ERRORS.some(e => e.file == 'kaputt.js') && EXT.has('zellzahl') && EXT.has('schleife') && !EXT.has('netz') && !EXT.has('bruecke'),
     'Kaputte Erweiterung gemeldet; Netz und App-Brücke sind für Erweiterungen nicht erreichbar');
@@ -1438,7 +1438,7 @@ async function selfTest() {
   await call('testSnapshot', {name: 'm24-erweiterung.png'}).catch(() => {});
   showView('doc');
 
-  // M25: Laufendes Laborbuch mit Tagesabschnitten
+  // M25: Laufendes BioBook mit Tagesabschnitten
   const tday25 = Days.iso(new Date());
   const para = t => ({type: 'paragraph', content: [{type: 'text', text: t}]});
   const lbId = await call('create', {title: 'Nanoreactor Lab Book'}); await refreshList(lbId);
@@ -1970,7 +1970,7 @@ async function start() {
   renderToolbar();
   const book = await call('book');
   $('#book').textContent = book.name;
-  $('#book').title = `${book.path}\nAnderes Laborbuch: ⌘O`;
+  $('#book').title = `${book.path}\nAnderes BioBook: ⌘O`;
   $('#metaKind').innerHTML = book.kinds.map(k => `<option value="${k}">${KINDS[k] || k}</option>`).join('');
   await loadPrefs();
   await loadProjects();

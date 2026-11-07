@@ -1,6 +1,6 @@
 // Seitenleiste: Abschnitte lassen sich einklappen (Zustand bleibt). Der Kalender ist eine eigene Ansicht (calendar.js).
 
-const FOLD_KEY = 'laborbuch.fold';
+const FOLD_KEY = 'biobook.fold';
 const foldState = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) || '{}'); } catch { return {}; } };
 
 function setFolded(sec, folded) {

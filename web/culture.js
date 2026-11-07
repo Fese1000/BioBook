@@ -245,7 +245,7 @@ async function taskDialog(task) {
     <label class="rf"><span>Bezeichnung</span><input id="tTitle" value="${esc(task?.title || '')}" placeholder="optional, z. B. Kalibrierung extern (DAkkS)"></label>
     <label class="rf"><span>Intervall</span><div><input id="tInt" value="${task?.interval_days ?? 365}" inputmode="numeric" style="width:70px"> Tage</div></label>
     <label class="rf"><span>Nächste Fälligkeit</span><input id="tDue" type="date" value="${esc(task?.next_due || '')}"></label>
-    <p class="sub">Leer: heute + Intervall. Nach „Erledigt“ rechnet das Laborbuch die nächste Fälligkeit selbst aus.</p>
+    <p class="sub">Leer: heute + Intervall. Nach „Erledigt“ rechnet das BioBook die nächste Fälligkeit selbst aus.</p>
     <p id="tMsg" class="bad"></p>
     <div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button type="button" class="btn on" id="tSave">Sichern</button></div></form>`;
   dlg.showModal();

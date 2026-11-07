@@ -19,6 +19,6 @@ test('Links zeigen auf die richtige Datenbank; Holen nur für Nukleotid und UniP
   assert.equal(pm.url, 'https://pubmed.ncbi.nlm.nih.gov/1/');
 });
 
-test('Keine Treffer in Laborbuch-Codes, Zahlen und Wörtern', () => {
+test('Keine Treffer in BioBook-Codes, Zahlen und Wörtern', () => {
   assert.deepEqual(ids('PL-0001, BS-00012, KU-00001, 250 µl, 12345, PCR, DMEM, T75, ABC12, X1234'), []);
 });

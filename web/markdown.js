@@ -1,4 +1,4 @@
-// Markdown ↔ Laborbuch: Einträge (ProseMirror-JSON) als Markdown exportieren, Markdown für den Import in HTML umwandeln.
+// Markdown ↔ BioBook: Einträge (ProseMirror-JSON) als Markdown exportieren, Markdown für den Import in HTML umwandeln.
 // Reine Funktionen ohne Oberfläche, getestet in tests/markdown.test.js.
 (function (root) {
   'use strict';

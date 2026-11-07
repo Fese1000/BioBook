@@ -1,5 +1,5 @@
 // Erweiterungen: eigene Rechner-Blöcke als JavaScript-Datei. Jede Erweiterung läuft in einem abgeschotteten Rahmen
-// (sandbox="allow-scripts", eigener Ursprung, CSP default-src 'none'): kein Netz, keine Dateien, kein Zugriff auf das Laborbuch –
+// (sandbox="allow-scripts", eigener Ursprung, CSP default-src 'none'): kein Netz, keine Dateien, kein Zugriff auf das BioBook –
 // die App-Brücke nimmt aus Rahmen ohnehin nichts an. Sie bekommt nur die Feldwerte und liefert Ergebniszeilen zurück.
 'use strict';
 
@@ -8,11 +8,11 @@ const EXT_ERRORS = [];        // {file, message}
 const EXT_PENDING = new Map(); // reqId → {resolve, reject, timer}
 let EXT_REQ = 0;
 
-/// Laufzeit im Worker: laborbuch.register(def) meldet die Blöcke; compute läuft nur hier. Netz-Funktionen sind zusätzlich abgeschaltet.
+/// Laufzeit im Worker: biobook.register(def) meldet die Blöcke; compute läuft nur hier. Netz-Funktionen sind zusätzlich abgeschaltet.
 const EXT_WORKER_RT = `
   for (const k of ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'indexedDB', 'caches']) { try { self[k] = undefined; } catch {} }
   const defs = {};
-  self.laborbuch = {register(def) {
+  self.biobook = {register(def) {
     if (!def || typeof def.id != 'string') throw new Error('register: id fehlt');
     defs[def.id] = def;
     postMessage({type: 'register', def: JSON.parse(JSON.stringify({id: def.id, name: def.name, version: def.version,
@@ -185,7 +185,7 @@ const ExtNode = TT.Node.create({
 async function extSettingsHTML() {
   const list = await call('extensions').catch(() => []);
   return `<h4>Erweiterungen</h4>
-    <p class="sub">Eigene Rechner-Blöcke als .js-Datei im Ordner „Erweiterungen“. Sie laufen abgeschottet: kein Netz, keine Dateien, kein Zugriff auf das Laborbuch.</p>
+    <p class="sub">Eigene Rechner-Blöcke als .js-Datei im Ordner „Erweiterungen“. Sie laufen abgeschottet: kein Netz, keine Dateien, kein Zugriff auf das BioBook.</p>
     ${list.map(x => { const loaded = [...EXT.values()].find(e => e.file == x.file), err = EXT_ERRORS.find(e => e.file == x.file);
       return `<label class="row"><input type="checkbox" data-extfile="${esc(x.file)}" ${x.enabled ? 'checked' : ''}> ${esc(loaded ? `${loaded.name} ${loaded.version}` : x.file)}
         ${err ? `<span class="bad">Fehler: ${esc(err.message)}</span>` : x.enabled && !loaded ? '<span class="bad">nicht geladen</span>' : ''}</label>`; }).join('') || '<p class="sub">Noch keine.</p>'}

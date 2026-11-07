@@ -1,4 +1,4 @@
-// Etiketten mit QR-Code (PDF für Etikettenbögen) und Öffnen per Code: Kamera, Handscanner (tippt wie eine Tastatur), laborbuch://-Link.
+// Etiketten mit QR-Code (PDF für Etikettenbögen) und Öffnen per Code: Kamera, Handscanner (tippt wie eine Tastatur), biobook://-Link.
 'use strict';
 
 const LABEL_LAYOUTS = {
@@ -9,7 +9,7 @@ const LABEL_LAYOUTS = {
 /// Inhalt eines Etiketts: Link (für jede Scan-App) und gut lesbare ID
 async function labelFor(t, id) {
   const book = await call('bookID');
-  const url = `laborbuch://open?book=${encodeURIComponent(book)}&t=${t}&id=${id}`;
+  const url = `biobook://open?book=${encodeURIComponent(book)}&t=${t}&id=${id}`;
   if (t == 'lot') { const l = await call('lot', {id});
     return {url, code: l.code, title: l.name, lines: [l.lot_no && `Ch. ${l.lot_no}`, l.expiry && `bis ${l.expiry}`, l.location_path && `${l.location_path}${l.position ? ' ' + l.position : ''}`].filter(Boolean)}; }
   if (t == 'entity') { const e = await call('entity', {id}); return {url, code: e.code, title: e.name, lines: [e.type_name]}; }
@@ -62,7 +62,7 @@ async function labelDialog(targets, name) {
 async function openCode(code) {
   const t = await call('resolveCode', {code});
   if (!t) { status(`Unbekannter Code: ${code}`); return false; }
-  if (t.otherBook) { status('Dieses Etikett gehört zu einem anderen Laborbuch'); return false; }
+  if (t.otherBook) { status('Dieses Etikett gehört zu einem anderen BioBook'); return false; }
   if (t.t == 'lot') await showLot(t.id);
   else if (t.t == 'entity') await showEntity(t.id);
   else if (t.t == 'location') { stockLoc = t.id; await showStock('locations'); }
@@ -77,7 +77,7 @@ function initLabels() {
   $('#search').addEventListener('keydown', async e => {
     if (e.key != 'Enter') return;
     const v = e.target.value.trim();
-    if (/^(laborbuch:\/\/|(BS|KU|GE)-\d{5}$|[A-Z]{1,4}-\d{4}$)/.test(v) && await openCode(v)) { e.target.value = ''; refreshList(); }
+    if (/^(biobook:\/\/|(BS|KU|GE)-\d{5}$|[A-Z]{1,4}-\d{4}$)/.test(v) && await openCode(v)) { e.target.value = ''; refreshList(); }
   });
   document.addEventListener('click', e => {
     const d = e.target.dataset;

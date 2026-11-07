@@ -71,12 +71,12 @@
   }
 
   /// Ganztägige Termine; uid bleibt je Objekt gleich, damit ein erneuter Import aktualisiert statt verdoppelt
-  function toICS(items, {book = 'Laborbuch', now = new Date()} = {}) {
+  function toICS(items, {book = 'BioBook', now = new Date()} = {}) {
     const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Laborbuch//Faelligkeiten//DE', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${esc(`Laborbuch ${book}`)}`];
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BioBook//Faelligkeiten//DE', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${esc(`BioBook ${book}`)}`];
     for (const it of items) {
       const d = it.due.replace(/-/g, '');
-      lines.push('BEGIN:VEVENT', `UID:${esc(it.uid)}@laborbuch`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${addDays(it.due, 1).replace(/-/g, '')}`,
+      lines.push('BEGIN:VEVENT', `UID:${esc(it.uid)}@biobook`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`, `DTEND;VALUE=DATE:${addDays(it.due, 1).replace(/-/g, '')}`,
         `SUMMARY:${esc(it.title)}`, ...(it.sub ? [`DESCRIPTION:${esc(it.sub)}`] : []), 'TRANSP:TRANSPARENT', 'END:VEVENT');
     }
     lines.push('END:VCALENDAR');
@@ -160,7 +160,7 @@ async function showAgenda() {
 
 async function agendaICS() {
   const today = todayISO(), items = await call('agenda', {until: Agenda.addDays(today, 365), today}), book = await call('book');
-  const r = await call('saveText', {name: `Laborbuch ${book.name} – fällig.ics`, text: Agenda.toICS(items, {book: book.name})});
+  const r = await call('saveText', {name: `BioBook ${book.name} – fällig.ics`, text: Agenda.toICS(items, {book: book.name})});
   if (r) status(`${items.length} Termine gespeichert: ${r.path} – in Kalender per Doppelklick importieren`);
   return r;
 }

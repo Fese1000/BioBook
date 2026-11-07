@@ -1,4 +1,4 @@
-/* Laborbuch – ruhig, gut lesbar, folgt Hell/Dunkel des Systems */
+/* BioBook – ruhig, gut lesbar, folgt Hell/Dunkel des Systems */
 :root{--bg:#fbfaf7;--side:#f1efe9;--ink:#1f1d1a;--mut:#77716a;--line:#dedad2;--acc:#2f6f5e;--accfg:#fff;--sel:#e3eee9;--code:#f1efe9;
  --serif:"New York",ui-serif,Georgia,serif;--mono:ui-monospace,"SF Mono",Menlo,monospace}
 @media(prefers-color-scheme:dark){:root{--bg:#1b1c1e;--side:#151617;--ink:#e8e6e1;--mut:#9a958d;--line:#33353a;--acc:#6cc2a6;--accfg:#10261f;--sel:#22332d;--code:#25272b}}
@@ -565,5 +565,5 @@ dialog#settings input:not([type=checkbox]){padding:6px 9px;border-radius:6px}
 
 /* Listen der Seitenleiste nicht zusammendrücken (sonst überlappen sie bei wenig Platz) */
 #types,#stockNav,#calNav,#savedlist,#tags,#templates,#projects{flex:none}
-#meta .iconbtns{border-right:0;padding-right:0;margin-right:2px}
+#meta .iconbtns{border-right:0;padding-right:0;margin-right:0;margin-left:6px}
 #projects li,#types li,#stockNav li,#calNav li{padding-top:5px;padding-bottom:5px}

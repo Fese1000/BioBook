@@ -1,5 +1,5 @@
 {
-  "name": "laborbuch-tools",
+  "name": "biobook-tools",
   "private": true,
   "description": "Nur zum Bündeln des Editors nach web/vendor/tiptap.js (npm run bundle)",
   "scripts": {

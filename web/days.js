@@ -1,4 +1,4 @@
-// Laufendes Laborbuch: Tagesabschnitte im Eintrag („Dienstag, 30.6.2026“), einklappbar; „+ Heute“ legt den Tag einmal an.
+// Laufendes BioBook: Tagesabschnitte im Eintrag („Dienstag, 30.6.2026“), einklappbar; „+ Heute“ legt den Tag einmal an.
 // Der Zeitraum (erster bis letzter Tag) geht beim Speichern mit und steht in der Liste. Reine Hilfen oben (tests/days.test.js).
 (function (root) {
   'use strict';

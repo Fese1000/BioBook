@@ -5,7 +5,8 @@ import Security
 
 enum Assistant {
     static let model = "claude-opus-5-5"
-    static let service = "de.felix.laborbuch.anthropic"
+    static let service = "de.felix.biobook.anthropic"
+    static let legacyService = "de.felix.laborbuch.anthropic"  // vor der Umbenennung (Laborbuch → BioBook)
     static var testKey: String?                      // Testmodus: nie der echte Schlüsselbund
     static var testReply: [String: Any]?              // Testmodus: hinterlegte Antwort statt Netz
     static var lastRequest: [String: Any]?            // Testmodus: was gesendet worden wäre
@@ -16,7 +17,16 @@ enum Assistant {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                 kSecAttrAccount as String: "api-key", kSecReturnData as String: true]
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
+        if SecItemCopyMatching(q as CFDictionary, &out) != errSecSuccess {
+            // Schlüssel aus der Zeit vor der Umbenennung übernehmen; der alte Eintrag bleibt als Rückfall
+            let old: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: legacyService,
+                                      kSecAttrAccount as String: "api-key", kSecReturnData as String: true]
+            var oldOut: CFTypeRef?
+            guard SecItemCopyMatching(old as CFDictionary, &oldOut) == errSecSuccess, let od = oldOut as? Data, let s = String(data: od, encoding: .utf8) else { return nil }
+            try? setKey(s, test: false)
+            return s
+        }
+        guard let d = out as? Data else { return nil }
         return String(data: d, encoding: .utf8)
     }
 
@@ -28,7 +38,7 @@ enum Assistant {
         SecItemDelete(base as CFDictionary)
         guard let key, !key.isEmpty else { return }
         var add = base
-        add[kSecAttrLabel as String] = "Laborbuch – Anthropic-API-Schlüssel"
+        add[kSecAttrLabel as String] = "BioBook – Anthropic-API-Schlüssel"
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         add[kSecValueData as String] = Data(key.utf8)
         let st = SecItemAdd(add as CFDictionary, nil)

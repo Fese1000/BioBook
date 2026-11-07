@@ -42,7 +42,7 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ w: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
-/// Ein Fenster (oder Tab) mit eigener Oberfläche; alle zeigen dasselbe Laborbuch
+/// Ein Fenster (oder Tab) mit eigener Oberfläche; alle zeigen dasselbe BioBook
 final class DocWindow {
     let window: NSWindow
     let web: WKWebView
@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     var scheme: SchemeHandler!
     var locker: Locker!
     var pendingOpen: URL?  // per Doppelklick im Finder übergeben, bevor das Fenster steht
-    let ocrQueue = DispatchQueue(label: "de.felix.laborbuch.ocr", qos: .utility)
+    let ocrQueue = DispatchQueue(label: "de.felix.biobook.ocr", qos: .utility)
     var ocrRunning = false
     var testStarted = false
     var testNet: [String: String] = [:]  // Testmodus: Antworten statt Netz (Quelle:Kennung → Text)
@@ -69,11 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     let testMode = ["--selftest", "--perftest", "--updatetest"].contains { CommandLine.arguments.contains($0) }
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        NSApp.servicesProvider = self  // Dienste-Menü „Neuer Laborbuch-Eintrag“
+        NSApp.servicesProvider = self  // Dienste-Menü „Neuer BioBook-Eintrag“
+        if !testMode { LegacyMigration.run() }  // Daten und Einstellungen aus der Zeit als „Laborbuch“ übernehmen
         let start = pendingOpen ?? Self.lastBook() ?? Self.defaultBook()
         do { store = try Store(root: start) } catch {
             // Letztes Buch fehlt oder ist kaputt: auf das Standard-Buch ausweichen statt die App zu beenden
-            do { store = try Store(root: Self.defaultBook()) } catch { fail("Laborbuch lässt sich nicht öffnen: \(error)") }
+            do { store = try Store(root: Self.defaultBook()) } catch { fail("BioBook lässt sich nicht öffnen: \(error)") }
             alert("„\(start.lastPathComponent)“ lässt sich nicht öffnen", "\(error)")
         }
         remember()
@@ -110,10 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         w.contentView = web
         w.delegate = self
         w.isReleasedWhenClosed = false
-        w.tabbingIdentifier = "laborbuch"
+        w.tabbingIdentifier = "biobook"
         if docs.isEmpty {
-            w.setFrameAutosaveName("LaborbuchMain")
-            if !w.setFrameUsingName("LaborbuchMain") { w.center() }
+            w.setFrameAutosaveName("BioBookMain")
+            if !w.setFrameUsingName("BioBookMain") { w.center() }
         } else if let last = current?.window {
             w.setFrame(last.frame, display: false)
             w.setFrameTopLeftPoint(w.cascadeTopLeft(from: NSPoint(x: last.frame.minX, y: last.frame.maxY)))
@@ -155,22 +156,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         for d in docs where d.web !== sender { d.web.evaluateJavaScript(js) }
     }
 
-    // MARK: Laborbücher – ein Buch ist ein Ordner-Paket „Name.laborbuch“
+    // MARK: BioBooks – ein Buch ist ein Ordner-Paket „Name.biobook“
     static func defaultBook() -> URL {
-        if let p = ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] { return URL(fileURLWithPath: p) }  // für Tests
+        if let p = ProcessInfo.processInfo.environment["BIOBOOK_BOOK"] { return URL(fileURLWithPath: p) }  // für Tests
+        if let f = LegacyMigration.fallbackBook { return f }  // Übernahme nicht möglich: Buch bleibt am alten Ort
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Laborbuch/Standard.laborbuch")
+            .appendingPathComponent("BioBook/Standard.biobook")
     }
 
     static func lastBook() -> URL? {
-        if ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] != nil { return nil }
+        if ProcessInfo.processInfo.environment["BIOBOOK_BOOK"] != nil { return nil }
         guard let p = UserDefaults.standard.string(forKey: "lastBook"), FileManager.default.fileExists(atPath: p) else { return nil }
         return URL(fileURLWithPath: p)
     }
 
     func remember() {
         if let s = store { try? QuickLookWriter.write(s) }
-        guard let s = store, ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] == nil else { return }
+        guard let s = store, ProcessInfo.processInfo.environment["BIOBOOK_BOOK"] == nil else { return }
         UserDefaults.standard.set(s.root.path, forKey: "lastBook")
         var paths = UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String] ?? [:]
         paths[s.bookID] = s.root.path  // damit ein Treffer aus Spotlight das richtige Buch findet
@@ -185,13 +187,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
               let ident = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String, let t = Spotlight.parse(ident) else { return false }
         if store?.bookID == t.book { web.evaluateJavaScript("app.openEntry(\(t.entry))"); return true }
         guard let path = (UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String])?[t.book] else {
-            alert("Laborbuch nicht gefunden", "Das Buch zu diesem Treffer ist auf diesem Mac nicht bekannt."); return true
+            alert("BioBook nicht gefunden", "Das Buch zu diesem Treffer ist auf diesem Mac nicht bekannt."); return true
         }
         switchBook(to: URL(fileURLWithPath: path), entry: t.entry)
         return true
     }
 
-    func updateTitle() { for d in docs { d.window.title = store.map { "\($0.name) – Laborbuch" } ?? "Laborbuch" } }
+    func updateTitle() { for d in docs { d.window.title = store.map { "\($0.name) – BioBook" } ?? "BioBook" } }
 
     /// Alle Fenster speichern lassen, dann weiter
     func flushAll(_ then: @escaping () -> Void) {
@@ -202,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     /// Wechselt das Buch: offenen Stand sichern, neues Buch öffnen, Oberfläche neu laden.
     func switchBook(to url: URL, entry: Int? = nil) {
-        guard url.pathExtension == "laborbuch" else { return alert("Kein Laborbuch", "Bitte einen Ordner mit der Endung .laborbuch wählen.") }
+        guard Self.bookExtensions.contains(url.pathExtension) else { return alert("Kein BioBook", "Bitte einen Ordner mit der Endung .biobook (oder dem älteren .laborbuch) wählen.") }
         if url.standardizedFileURL == store?.root.standardizedFileURL { return }
         let open = { [self] in
             do {
@@ -220,18 +222,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc func newBook() {
         let p = NSSavePanel()
-        p.title = "Neues Laborbuch"
-        p.nameFieldStringValue = "Neues Laborbuch.laborbuch"
+        p.title = "Neues BioBook"
+        p.nameFieldStringValue = "Neues BioBook.biobook"
         p.allowedContentTypes = [Self.bookType]
         guard p.runModal() == .OK, var url = p.url else { return }
-        if url.pathExtension != "laborbuch" { url.appendPathExtension("laborbuch") }
+        if url.pathExtension != "biobook" { url.appendPathExtension("biobook") }
         if FileManager.default.fileExists(atPath: url.path) { return alert("Gibt es schon", "„\(url.lastPathComponent)“ existiert bereits. Zum Öffnen ⌘O verwenden.") }
         switchBook(to: url)
     }
 
     @objc func openBook() {
         let p = NSOpenPanel()
-        p.title = "Laborbuch öffnen"
+        p.title = "BioBook öffnen"
         p.allowedContentTypes = [Self.bookType]
         p.canChooseDirectories = false  // das Paket erscheint dank Dokumenttyp als eine Datei
         if p.runModal() == .OK, let url = p.url { switchBook(to: url) }
@@ -239,14 +241,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc func revealBook() { if let s = store { NSWorkspace.shared.activateFileViewerSelecting([s.root]) } }
 
-    static let bookType = UTType("de.felix.laborbuch.book") ?? .package
+    static let bookType = UTType("de.felix.biobook.book") ?? .package
+    /// Neue Bücher heißen .biobook; ältere mit .laborbuch bleiben les- und öffnbar
+    static let bookExtensions = ["biobook", "laborbuch"]
+    static let linkSchemes = ["biobook", "laborbuch"]
 
     func application(_ app: NSApplication, open urls: [URL]) {
-        if let u = urls.first(where: { $0.scheme == "laborbuch" }) {
-            if handleAction(u) { return }  // laborbuch://new|append|search (Kurzbefehle)
+        if let u = urls.first(where: { Self.linkSchemes.contains($0.scheme ?? "") }) {
+            if handleAction(u) { return }  // biobook://new|append|search (Kurzbefehle)
             return openScanned(u.absoluteString)  // Link vom Etikett
         }
-        if let u = urls.first(where: { $0.pathExtension == "laborbuch" }) { switchBook(to: u) }
+        if let u = urls.first(where: { Self.bookExtensions.contains($0.pathExtension) }) { switchBook(to: u) }
     }
 
     /// Gescannten Code öffnen; gehört er zu einem anderen bekannten Buch, wird erst gewechselt
@@ -254,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard let t = QR.target(code) else { return alert("Unbekannter Code", code) }
         if let b = t["book"] as? String, !b.isEmpty, b != store?.bookID {
             guard let path = (UserDefaults.standard.dictionary(forKey: "bookPaths") as? [String: String])?[b] else {
-                return alert("Anderes Laborbuch", "Dieses Etikett gehört zu einem Laborbuch, das auf diesem Mac nicht bekannt ist.")
+                return alert("Anderes BioBook", "Dieses Etikett gehört zu einem BioBook, das auf diesem Mac nicht bekannt ist.")
             }
             switchBook(to: URL(fileURLWithPath: path))
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.openScanned(code) }
@@ -292,7 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func fail(_ msg: String) {
-        let a = NSAlert(); a.messageText = "Laborbuch"; a.informativeText = msg; a.runModal(); NSApp.terminate(nil)
+        let a = NSAlert(); a.messageText = "BioBook"; a.informativeText = msg; a.runModal(); NSApp.terminate(nil)
     }
 
     // MARK: Brücke – feste Befehlsliste, jede Eingabe wird geprüft
@@ -348,7 +353,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "deleteAccount": try s.deleteAccount(name: try str("name"), password: try str("password")); replyHandler(true, nil)
             case "lockNow": locker.lock(); replyHandler(true, nil)
             case "signEntry":
-                if testMode && ProcessInfo.processInfo.environment["LABORBUCH_KEYFILE"] == nil { throw StoreError.invalid("Tests brauchen LABORBUCH_KEYFILE (nie den echten Schlüsselbund)") }
+                if testMode && ProcessInfo.processInfo.environment["BIOBOOK_KEYFILE"] == nil { throw StoreError.invalid("Tests brauchen BIOBOOK_KEYFILE (nie den echten Schlüsselbund)") }
                 let key = try Keys.signingKey()
                 replyHandler(try s.signEntry(id: try int("id"), key: key, name: Settings.author), nil)
             case "signedRevision": replyHandler(try s.signedRevision(id: try int("id")), nil)
@@ -377,10 +382,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "linkFiles":
                 // Rohdaten am Ort lassen: Prüfsumme im Hintergrund berechnen (große Dateien), dann verlinken
                 let urls: [URL]
-                if let t = a["testPaths"] as? [String], ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] != nil { urls = t.map { URL(fileURLWithPath: $0) } }
+                if let t = a["testPaths"] as? [String], ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] != nil { urls = t.map { URL(fileURLWithPath: $0) } }
                 else {
                     let p = NSOpenPanel()
-                    p.title = "Rohdaten verlinken (bleiben am Ort, nur die Prüfsumme kommt ins Laborbuch)"
+                    p.title = "Rohdaten verlinken (bleiben am Ort, nur die Prüfsumme kommt ins BioBook)"
                     p.allowsMultipleSelection = true; p.canChooseDirectories = false
                     guard p.runModal() == .OK else { return replyHandler([], nil) }
                     urls = p.urls
@@ -389,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 ocrQueue.async {
                     let hashed = urls.map { u in (u, try? Store.sha256(fileAt: u)) }
                     DispatchQueue.main.async {
-                        guard let s = self.store, s.root == root else { return replyHandler(nil, "Laborbuch gewechselt") }
+                        guard let s = self.store, s.root == root else { return replyHandler(nil, "BioBook gewechselt") }
                         do {
                             replyHandler(try hashed.map { u, sha in
                                 guard let sha else { throw StoreError.invalid("Nicht lesbar: \(u.path)") }
@@ -416,7 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     }
                 }
             case "ocrText": replyHandler(try s.ocrText(try str("sha256")) ?? NSNull(), nil)
-            // Nur im Testmodus mit LABORBUCH_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
+            // Nur im Testmodus mit BIOBOOK_TESTOUT: Dateien anlegen/ändern und eine iPhone-Übernahme nachstellen
             case "testProgress":  // Testmodus: Zwischenstand sofort ausgeben (hängt ein Test, sieht man wo)
                 guard testMode else { throw StoreError.invalid("Nur im Testmodus") }
                 FileHandle.standardError.write(Data("… \(try str("line"))\n".utf8))
@@ -487,7 +492,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     ask()
                 }
             case "testWriteText", "testWriteBase64", "testReadText", "testList":
-                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
+                guard testMode, let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
                 let base = URL(fileURLWithPath: dir)
                 if cmd == "testList" { return replyHandler(FileManager.default.enumerator(atPath: base.path)?.allObjects as? [String] ?? [], nil) }
                 let url = try FileExport.safe(try str(cmd == "testReadText" ? "path" : "name"), in: base)
@@ -496,7 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 try data.write(to: url)
                 replyHandler(url.path, nil)
             case "testSnapshot":  // Testmodus: Bild der Oberfläche ablegen (zum Ansehen neuer Ansichten)
-                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], let wv = m.webView else { throw StoreError.invalid("Nur im Testmodus") }
+                guard testMode, let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"], let wv = m.webView else { throw StoreError.invalid("Nur im Testmodus") }
                 let url = try FileExport.safe(try str("name"), in: URL(fileURLWithPath: dir))
                 wv.takeSnapshot(with: nil) { img, err in
                     guard let img, let tiff = img.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else {
@@ -505,9 +510,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     do { try png.write(to: url); replyHandler(url.path, nil) } catch { replyHandler(nil, "\(error)") }
                 }
             case "testWriteFile", "testModifyFile", "testReceive":
-                guard testMode, let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
+                guard testMode, let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] else { throw StoreError.invalid("Nur im Testmodus") }
                 if cmd == "testReceive" {
-                    let pb = NSPasteboard(name: NSPasteboard.Name("laborbuch-test-\(UUID().uuidString)"))
+                    let pb = NSPasteboard(name: NSPasteboard.Name("biobook-test-\(UUID().uuidString)"))
                     let img = NSImage(size: NSSize(width: 64, height: 48)); img.lockFocus(); NSColor.systemTeal.setFill(); NSRect(x: 0, y: 0, width: 64, height: 48).fill(); img.unlockFocus()
                     pb.clearContents(); pb.writeObjects([img])
                     replyHandler(readSelection(from: pb), nil)
@@ -590,7 +595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 replyHandler(try s.resultRows(schema: try int("schema"), project: a["project"] as? Int, from: a["from"] as? String, to: a["to"] as? String), nil)
             case "saveText":  // z. B. CSV aus der Auswertung
                 let name = URL(fileURLWithPath: try str("name")).lastPathComponent, data = Data(try str("text").utf8)
-                if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], testMode {
+                if let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"], testMode {
                     let u = URL(fileURLWithPath: dir).appendingPathComponent(name); try data.write(to: u); return replyHandler(["path": u.path], nil)
                 }
                 let p = NSSavePanel(); p.nameFieldStringValue = name
@@ -643,18 +648,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 }
                 let url: URL
                 switch src {
-                case "ncbi-nuccore": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gbwithparts&retmode=text&tool=Laborbuch&id=\(id)")!
+                case "ncbi-nuccore": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&rettype=gbwithparts&retmode=text&tool=BioBook&id=\(id)")!
                 case "uniprot": url = URL(string: "https://rest.uniprot.org/uniprotkb/\(id).json")!
                 case "crossref":
                     var allowed = CharacterSet.alphanumerics; allowed.insert(charactersIn: "-._~")
                     url = URL(string: "https://api.crossref.org/works/\(id.addingPercentEncoding(withAllowedCharacters: allowed)!)")!
-                case "pubmed": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&tool=Laborbuch&id=\(id)")!
+                case "pubmed": url = URL(string: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&retmode=json&tool=BioBook&id=\(id)")!
                 case "zotero":  // lokale Schnittstelle der Zotero-App (nur auf diesem Mac)
                     url = URL(string: "http://localhost:23119/api/users/0/items?format=csljson&limit=25&q=\(id.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!)")!
                 default: throw StoreError.invalid("Unbekannte Quelle")
                 }
                 var req = URLRequest(url: url, timeoutInterval: 25)
-                req.setValue("Laborbuch (macOS)", forHTTPHeaderField: "User-Agent")
+                req.setValue("BioBook (macOS)", forHTTPHeaderField: "User-Agent")
                 URLSession.shared.dataTask(with: req) { data, resp, err in
                     DispatchQueue.main.async {
                         if let e = err as? URLError {
@@ -765,10 +770,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                     NSWorkspace.shared.open(u); return replyHandler(true, nil)
                 }
                 let src = s.fileURL(sha)
-                guard FileManager.default.fileExists(atPath: src.path) else { throw StoreError.invalid("Datei fehlt im Laborbuch") }
+                guard FileManager.default.fileExists(atPath: src.path) else { throw StoreError.invalid("Datei fehlt im BioBook") }
                 var name = URL(fileURLWithPath: (a["name"] as? String) ?? "Anhang").lastPathComponent
                 if name.isEmpty || name.hasPrefix(".") { name = "Anhang" + name }
-                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("Laborbuch/\(sha.prefix(16))")
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("BioBook/\(sha.prefix(16))")
                 try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
                 let dst = dir.appendingPathComponent(name)
                 try? FileManager.default.removeItem(at: dst)
@@ -908,7 +913,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard let self else { return }
             switch r {
             case .success(let info): reply?(info, nil)
-            case .failure(let e): reply?(nil, "\(e)"); if reply == nil { NSLog("Laborbuch: Sicherung fehlgeschlagen: \(e)"); self.notifyUI("⚠️ Die automatische Sicherung ist fehlgeschlagen: \(e). Bitte Ordner und Speicherplatz prüfen (Einstellungen → Sicherung).") }
+            case .failure(let e): reply?(nil, "\(e)"); if reply == nil { NSLog("BioBook: Sicherung fehlgeschlagen: \(e)"); self.notifyUI("⚠️ Die automatische Sicherung ist fehlgeschlagen: \(e). Bitte Ordner und Speicherplatz prüfen (Einstellungen → Sicherung).") }
             }
         }
     }
@@ -917,7 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // MARK: Export und Import
     func exportTarget(_ a: [String: Any]) -> URL? {
-        if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"], testMode { return URL(fileURLWithPath: dir) }
+        if let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"], testMode { return URL(fileURLWithPath: dir) }
         let p = NSOpenPanel()
         p.title = "Ordner für den Export wählen"; p.prompt = "Exportieren"
         p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
@@ -939,7 +944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             try FileManager.default.createDirectory(at: dir.appendingPathComponent("data"), withIntermediateDirectories: true)
             try dump.write(to: dir.appendingPathComponent("data/book.json"))
             if let eln = a["eln"] as? [String: Any], let folder = eln["folder"] as? String, let meta = eln["metadata"] as? String {
-                let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-eln-\(UUID().uuidString)")
+                let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("biobook-eln-\(UUID().uuidString)")
                 defer { try? FileManager.default.removeItem(at: tmp) }
                 let root = try FileExport.safe(folder, in: tmp)
                 try FileExport.write(meta, to: root.appendingPathComponent("ro-crate-metadata.json"))
@@ -991,7 +996,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         ocrQueue.async {
             let texts = scans.map { ($0.0, $0.2 == "application/pdf" || $0.2.hasPrefix("image/") ? OCR.recognize(url: $0.1, mime: $0.2) : "") }
             DispatchQueue.main.async {
-                guard let s = self.store, s.root == root else { return reply(nil, "Laborbuch gewechselt") }
+                guard let s = self.store, s.root == root else { return reply(nil, "BioBook gewechselt") }
                 for (i, t) in texts {
                     items[i]["text"] = t
                     if let sha = (items[i]["file"] as? [String: Any])?["sha256"] as? String { try? s.setOCR(sha: sha, text: t) }
@@ -1003,7 +1008,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     /// .eln (RO-Crate): jeder Datensatz unter dem Wurzelordner wird ein Eintrag; Dateien kommen als Anhänge ins Buch
     func readELN(_ zip: URL, _ s: Store) throws -> [[String: Any]] {
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("laborbuch-import-\(UUID().uuidString)")
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("biobook-import-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: tmp) }
         try FileExport.unzip(zip, to: tmp)
         guard let metaURL = FileManager.default.enumerator(at: tmp, includingPropertiesForKeys: nil)?
@@ -1041,10 +1046,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     // MARK: Zeugen-PDF speichern und wieder einlesen
-    /// In Tests (LABORBUCH_TESTOUT) ohne Dialog in einen Ordner schreiben
+    /// In Tests (BIOBOOK_TESTOUT) ohne Dialog in einen Ordner schreiben
     func savePDF(_ data: Data, name: String, reply: @escaping (Any?, String?) -> Void) {
         let safe = URL(fileURLWithPath: name).lastPathComponent.replacingOccurrences(of: ":", with: "-")
-        if let dir = ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] {
+        if let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] {
             let url = URL(fileURLWithPath: dir).appendingPathComponent(safe)
             do { try data.write(to: url); reply(["path": url.path, "bytes": data.count, "pages": PDFDocument(data: data)?.pageCount ?? 0], nil) } catch { reply(nil, "\(error)") }
             return
@@ -1059,7 +1064,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func pickPDF(testPath: String?) -> URL? {
-        if let t = testPath, ProcessInfo.processInfo.environment["LABORBUCH_TESTOUT"] != nil { return URL(fileURLWithPath: t) }
+        if let t = testPath, ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] != nil { return URL(fileURLWithPath: t) }
         let p = NSOpenPanel()
         p.title = "Unterschriebenes Zeugen-PDF wählen"
         p.allowedContentTypes = [.pdf]
@@ -1085,13 +1090,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 m.addItem(i)
             }
         }
-        add("Laborbuch", [("Einstellungen …", #selector(showSettings), ","), ("Jetzt sperren", #selector(lockNow), "l"), ("-", nil, ""),
-                          ("Laborbuch beenden", #selector(NSApplication.terminate(_:)), "q")])
+        add("BioBook", [("Einstellungen …", #selector(showSettings), ","), ("Jetzt sperren", #selector(lockNow), "l"), ("-", nil, ""),
+                          ("BioBook beenden", #selector(NSApplication.terminate(_:)), "q")])
         add("Ablage", [("Neuer Eintrag", #selector(newEntry), "n"), ("Revision sichern", #selector(snapshotNow), "s"), ("-", nil, ""),
-                       ("Neues Laborbuch …", #selector(newBook), "N"), ("Laborbuch öffnen …", #selector(openBook), "o"),
+                       ("Neues BioBook …", #selector(newBook), "N"), ("BioBook öffnen …", #selector(openBook), "o"),
                        ("Im Finder zeigen", #selector(revealBook), ""), ("-", nil, ""),
                        ("Vom iPhone oder iPad importieren", nil, "IMPORT"), ("Importieren …", #selector(importFiles), "I"),
-                       ("Laborbuch exportieren …", #selector(exportBook), "E"), ("Eintrag als PDF …", #selector(entryPDF), "p"),
+                       ("BioBook exportieren …", #selector(exportBook), "E"), ("Eintrag als PDF …", #selector(entryPDF), "p"),
                        ("Eintrag als PDF/A …", #selector(entryPDFA), ""), ("In den Papierkorb", #selector(trashEntry), ""), ("Etikett scannen …", #selector(scanLabel), "K"), ("Jetzt sichern", #selector(backupNow), ""), ("-", nil, ""),
                        ("Schließen", #selector(NSWindow.performClose(_:)), "w")])
         add("Bearbeiten", [("Widerrufen", Selector(("undo:")), "z"), ("Wiederholen", Selector(("redo:")), "Z"), ("-", nil, ""),
@@ -1168,11 +1173,11 @@ app.delegate = delegate
 app.setActivationPolicy(.regular)
 app.run()
 
-/// Fehlerprotokoll unter ~/Library/Logs/Laborbuch/app.log (für die Fehlersuche, ohne Inhalte der Einträge)
+/// Fehlerprotokoll unter ~/Library/Logs/BioBook/app.log (für die Fehlersuche, ohne Inhalte der Einträge)
 enum Log {
-    static let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/Laborbuch/app.log")
+    static let url = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("Logs/BioBook/app.log")
     static func error(_ msg: String) {
-        if ProcessInfo.processInfo.environment["LABORBUCH_BOOK"] != nil { return }  // Tests schreiben nicht ins Protokoll der App
+        if ProcessInfo.processInfo.environment["BIOBOOK_BOOK"] != nil { return }  // Tests schreiben nicht ins Protokoll der App
         let line = "\(Store.now()) [\(Updater.current)] \(msg)\n"
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }

@@ -1,7 +1,7 @@
-// Beispiel-Erweiterung für das Laborbuch: Zellzahl aus der Neubauer-Zählkammer.
-// Erweiterungen laufen abgeschottet (kein Netz, keine Dateien, kein Zugriff auf das Laborbuch);
+// Beispiel-Erweiterung für das BioBook: Zellzahl aus der Neubauer-Zählkammer.
+// Erweiterungen laufen abgeschottet (kein Netz, keine Dateien, kein Zugriff auf das BioBook);
 // sie bekommen nur die Werte ihrer Felder und liefern Ergebniszeilen zurück.
-laborbuch.register({
+biobook.register({
   id: 'zellzahl',
   name: 'Zellzahl (Neubauer)',
   version: '1.0',

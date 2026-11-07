@@ -27,7 +27,7 @@ async function calLoad() {
 function calItems() {
   const [from, to] = calRange();
   const plans = SideCal.spread(CAL.plans, p => p.day, p => p.day_end, from, to);
-  // lange Spannen (Laufendes Laborbuch) nur am ersten und letzten Tag zeigen, sonst steht der Eintrag in jeder Zelle
+  // lange Spannen (Laufendes BioBook) nur am ersten und letzten Tag zeigen, sonst steht der Eintrag in jeder Zelle
   const ends = (r, i) => (a => a.length ? a[i] : '')(SideCal.entrySpan(r)), long = r => SideCal.entrySpan(r).length && SideCal.entrySpan(r)[0] && Math.round((SideCal.parse(ends(r, 1)) - SideCal.parse(ends(r, 0))) / 86400000) > 3;
   const ents = SideCal.spread(CAL.rows.flatMap(r => long(r) ? [{...r, _at: ends(r, 0)}, {...r, _at: ends(r, 1)}] : [r]), r => r._at || SideCal.entrySpan(r)[0], r => r._at || SideCal.entrySpan(r)[1], from, to);
   const due = {}; for (const d of CAL.due) (due[d.due] ||= []).push(d);

@@ -1,4 +1,4 @@
-// Lokale Konten im Laborbuch: Name und Passwort liegen nur im Buch selbst (kein Server). Das Passwort wird nie gespeichert,
+// Lokale Konten im BioBook: Name und Passwort liegen nur im Buch selbst (kein Server). Das Passwort wird nie gespeichert,
 // sondern als PBKDF2-HMAC-SHA256 mit eigenem Zufallssalz je Konto; geprüft wird in konstanter Zeit.
 // Touch ID gehört zur App-Sperre (Locker), nicht hierher.
 import Foundation

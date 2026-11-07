@@ -7,7 +7,7 @@
   const fail = m => { throw new Error(m); };
   const entry = id => db.entries.find(e => e.id == id) || fail(`Eintrag ${id} gibt es nicht`);
   const H = {
-    book: () => ({name: 'Testbuch', path: '/tmp/Testbuch.laborbuch', kinds: ['experiment', 'note', 'protocol']}),
+    book: () => ({name: 'Testbuch', path: '/tmp/Testbuch.biobook', kinds: ['experiment', 'note', 'protocol']}),
     projects: () => db.projects.map(p => ({...p, entries: db.entries.filter(e => e.project_id == p.id).length}))
       .sort((a, b) => a.archived - b.archived || a.name.localeCompare(b.name)),
     createProject: a => { if (!a.name?.trim()) fail('Projektname fehlt'); const p = {id: db.nextP++, name: a.name.trim(), color: '', archived: 0}; db.projects.push(p); return p.id; },

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
-<dictionary title="Laborbuch" xmlns:xi="http://www.w3.org/2003/XInclude">
+<dictionary title="BioBook" xmlns:xi="http://www.w3.org/2003/XInclude">
   <xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
-  <suite name="Laborbuch" code="LBok" description="Einträge anlegen, ergänzen, finden und lesen">
+  <suite name="BioBook" code="LBok" description="Einträge anlegen, ergänzen, finden und lesen">
     <command name="create entry" code="LBokCrEn" description="Legt einen Eintrag an und liefert seine Nummer.">
       <cocoa class="LBCreateEntryCommand"/>
       <parameter name="titled" code="titl" type="text" optional="yes" description="Titel (sonst die erste Zeile des Textes)"><cocoa key="title"/></parameter>

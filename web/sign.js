@@ -74,7 +74,7 @@ const PRINT_CSS = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;
 function witnessHTML(r, book) {
   const css = PRINT_CSS;
   return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${css}</style></head><body>
-    <div class="head"><b>Laborbuch „${esc(book)}“</b> · Eintrag Nr. ${cur} · Revision ${r.no}<br>
+    <div class="head"><b>BioBook „${esc(book)}“</b> · Eintrag Nr. ${cur} · Revision ${r.no}<br>
       Abgeschlossen und signiert von <b>${esc(r.name)}</b> am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})<br>
       Revisions-Hash (SHA-256): <span class="hash">${r.hash}</span></div>
     <h1>${esc($('#title').value)}</h1>
@@ -133,12 +133,12 @@ async function showSettings() {
     <p class="sub">Täglich automatisch nach <code id="bkDir">${esc(s.backupDir)}</code><br>Letzte Sicherung: <span id="bkLast">${s.lastBackup ? when(s.lastBackup) : 'noch keine'}</span></p>
     <p class="row"><button type="button" class="btn" id="bkChoose">Anderen Ordner wählen …</button><button type="button" class="btn" id="bkNow">Jetzt sichern</button></p>
     <h4>Updates</h4>
-    <p class="sub">Laborbuch ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
+    <p class="sub">BioBook ${esc(s.version)} · <span id="upMsg">neue Versionen kommen über GitHub-Releases</span></p>
     <label class="row"><input type="checkbox" id="setUpdCheck" ${PREFS.updatecheck != 'off' ? 'checked' : ''}> Beim Start und alle paar Stunden leise nach Updates suchen und einen Hinweis zeigen</label>
     <p class="row"><button type="button" class="btn" id="upCheck">Nach Updates suchen</button><button type="button" class="btn on" id="upGo" hidden>Aktualisieren und neu starten</button></p>
     </section>
     <section class="spane" data-pane="ai" ${SET_PANE == 'ai' ? '' : 'hidden'}><h4>KI-Assistent</h4>
-    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das Laborbuch. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
+    <p class="sub" id="aiState">${s.ai ? 'Eingerichtet – Schlüssel im Schlüsselbund. Zusammenfassen, Protokoll und „Fragen“ sind sichtbar.' : 'Aus. Mit einem eigenen Anthropic-API-Schlüssel (console.anthropic.com) erscheinen Zusammenfassen, Protokoll aus Stichpunkten und Fragen an das BioBook. Gesendet wird nur auf Klick, nach einer Vorschau.'}</p>
     <p class="row"><input id="aiKey" type="password" placeholder="${s.ai ? 'neuer Schlüssel …' : 'sk-ant-…'}" autocomplete="off" style="flex:1"><button type="button" class="btn" id="aiSave">Schlüssel sichern</button>${s.ai ? '<button type="button" class="btn danger" id="aiDel">Entfernen</button>' : ''}</p>
     </section>
     <section class="spane" data-pane="ext" ${SET_PANE == 'ext' ? '' : 'hidden'}>
