@@ -13,6 +13,8 @@ build() {  # $1 = arm64|x86_64
   rm -rf "$stage"; mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
   cp -R "$SRC/web" "$app/Contents/Resources/"
   cp "$SRC/app/AppIcon.icns" "$SRC/app/BioBook.sdef" "$app/Contents/Resources/"
+  mkdir -p "$app/Contents/Resources/de.lproj"   # Titel des Dienste-Menüeintrags auf Deutsch
+  printf '"New BioBook entry" = "Neuer BioBook-Eintrag";\n' > "$app/Contents/Resources/de.lproj/InfoPlist.strings"
   cp -R "$SRC/app/Erweiterungen" "$app/Contents/Resources/"
   swiftc -O -target "$arch-apple-macos13" "$SRC"/app/*.swift -o "$app/Contents/MacOS/BioBook"
   cat > "$app/Contents/Info.plist" <<PL
@@ -25,6 +27,8 @@ build() {  # $1 = arm64|x86_64
 <key>CFBundleExecutable</key><string>BioBook</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>de</string></array>
 <key>CFBundleVersion</key><string>$VERSION</string>
 <key>CFBundleShortVersionString</key><string>$VERSION</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
@@ -43,7 +47,7 @@ build() {  # $1 = arm64|x86_64
 <key>NSAppleScriptEnabled</key><true/>
 <key>OSAScriptingDefinition</key><string>BioBook.sdef</string>
 <key>NSServices</key><array><dict>
-  <key>NSMenuItem</key><dict><key>default</key><string>Neuer BioBook-Eintrag</string></dict>
+  <key>NSMenuItem</key><dict><key>default</key><string>New BioBook entry</string></dict>
   <key>NSMessage</key><string>newEntryFromService</string>
   <key>NSPortName</key><string>BioBook</string>
   <key>NSSendTypes</key><array><string>public.utf8-plain-text</string><string>NSStringPboardType</string></array>

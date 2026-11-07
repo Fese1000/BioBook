@@ -80,7 +80,7 @@ final class ScannerWindow: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         out.setSampleBufferDelegate(self, queue: queue)
         if session.canAddOutput(out) { session.addOutput(out) }
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 400), styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Etikett scannen – Code vor die Kamera halten"
+        w.title = L("Etikett scannen – Code vor die Kamera halten")
         w.isReleasedWhenClosed = false
         w.delegate = self
         let view = NSView()

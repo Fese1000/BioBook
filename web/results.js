@@ -165,7 +165,7 @@ function chartSVG(rows, yF, xF) {
   const ticks = niceTicks(y0r, y1r, 5), y0 = ticks[0], y1 = ticks.at(-1);
   const sx = x => L + (x - x0) / (x1 - x0) * (W - L - R), sy = y => T + (1 - (y - y0) / (y1 - y0)) * (H - T - B);
   const xt = xF ? niceTicks(x0, x1, 6) : [...new Set(pts.map(p => p.x))].length <= 6 ? [...new Set(pts.map(p => p.x))] : niceTicks(x0, x1, 5);
-  const xl = v => xF ? Calc.fmt(v) : new Date(v).toLocaleDateString('de-DE', {day: '2-digit', month: '2-digit', year: '2-digit'});
+  const xl = v => xF ? Calc.fmt(v) : new Date(v).toLocaleDateString(I18N.locale, {day: '2-digit', month: '2-digit', year: '2-digit'});
   const sorted = [...pts].sort((a, b) => a.x - b.x);
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yF.label)}">
     ${ticks.map(t => `<line class="grid" x1="${L}" x2="${W - R}" y1="${sy(t)}" y2="${sy(t)}"/><text class="tick" x="${L - 8}" y="${sy(t) + 4}" text-anchor="end">${Calc.fmt(t)}</text>`).join('')}

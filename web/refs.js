@@ -274,7 +274,7 @@ function initLiterature() {
     const a = e.target.closest('a[data-ext]'); if (a) { e.preventDefault(); return openExternal(a.href); }
     const el = e.target.closest('a.elink'); if (el) { e.preventDefault(); showView('doc'); cur = null; return open(+el.dataset.entry); }
     if (d.litimport !== undefined) return picker.click();
-    if (d.litexport !== undefined) { const rs = (await call('references')).map(refData); const r = await call('saveText', {name: 'Literatur.bib', text: Refs.toBibTeX(rs)}); if (r) status(`Gespeichert: ${r.path}`); return r; }
+    if (d.litexport !== undefined) { const rs = (await call('references')).map(refData); const r = await call('saveText', {name: T('Literatur.bib'), text: Refs.toBibTeX(rs)}); if (r) status(`Gespeichert: ${r.path}`); return r; }
     if (d.litfetch !== undefined) {
       $('#litmsg').textContent = 'Hole …';
       try { const r = await fetchReference($('#litfetch').value); LIT_CUR = r.id; await renderLiterature(); $('#litmsg').textContent = r.existing ? 'War schon in der Bibliothek' : 'Hinzugefügt'; }

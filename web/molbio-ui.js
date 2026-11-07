@@ -20,7 +20,7 @@ function seqEditDialog(el) {
     <label class="rf"><span>Position</span><input id="seAt" inputmode="numeric" value="1" style="width:90px"></label>
     <label class="rf" id="seLenRow"><span>Anzahl Basen</span><input id="seLen" inputmode="numeric" value="1" style="width:90px"></label>
     <label class="rf" id="seTxtRow"><span>Basen</span><input id="seTxt" spellcheck="false" autocomplete="off" style="font-family:var(--mono);width:100%"></label>
-    <p class="sub">Features rechts der Stelle wandern mit; Features im gelöschten Bereich werden gekürzt oder entfernt. ${st.seq.length.toLocaleString('de-DE')} bp.</p>
+    <p class="sub">Features rechts der Stelle wandern mit; Features im gelöschten Bereich werden gekürzt oder entfernt. ${st.seq.length.toLocaleString(I18N.locale)} bp.</p>
     <p id="seMsg" class="bad"></p><div class="dlgbtns"><button value="cancel" class="btn">Abbrechen</button><button type="button" class="btn on" id="seOk">Anwenden</button></div></form>`;
   const sync = () => { const op = $('#seOp').value; $('#seLenRow').hidden = op == 'insert'; $('#seTxtRow').hidden = op == 'delete'; };
   $('#seOp').onchange = sync; sync();
@@ -31,7 +31,7 @@ function seqEditDialog(el) {
       const rec = MolBio.editSequence({seq: st.seq, circular: st.ann.circular, features: st.ann.features}, op);
       await saveSequence(st, rec);
       dlg.close(); await renderSeqPanel(el);
-      status(`Sequenz geändert: ${rec.seq.length.toLocaleString('de-DE')} bp`);
+      status(`Sequenz geändert: ${rec.seq.length.toLocaleString(I18N.locale)} bp`);
     } catch (e) { $('#seMsg').textContent = e.message; }
   };
 }
@@ -110,11 +110,11 @@ async function partOf(o) {
 async function cloningDialog(el) {
   const st = SEQ_STATE.get(el), objs = await call('sequenceObjects');
   const others = objs.filter(o => !(o.entity == st.entity && o.field == st.field));
-  const opt = (sel) => `<option value="">—</option>${others.map((o, i) => `<option value="${i}" ${sel == i ? 'selected' : ''}>${esc(`${o.code} ${o.name} (${o.length.toLocaleString('de-DE')} bp)`)}</option>`).join('')}`;
+  const opt = (sel) => `<option value="">—</option>${others.map((o, i) => `<option value="${i}" ${sel == i ? 'selected' : ''}>${esc(`${o.code} ${o.name} (${o.length.toLocaleString(I18N.locale)} bp)`)}</option>`).join('')}`;
   const enz = Object.keys(Bio.ENZYMES);
   const dlg = $('#locdlg');
   dlg.innerHTML = `<form method="dialog" class="clonedlg"><h3>Klonierung simulieren</h3>
-    <p class="sub">Vektor: <b>${esc(st.code)} ${esc(st.name)}</b> (${st.seq.length.toLocaleString('de-DE')} bp)</p>
+    <p class="sub">Vektor: <b>${esc(st.code)} ${esc(st.name)}</b> (${st.seq.length.toLocaleString(I18N.locale)} bp)</p>
     <label class="rf"><span>Methode</span><select id="clM"><option value="rl">Restriktion und Ligation</option><option value="gibson">Gibson</option><option value="gg">Golden Gate</option></select></label>
     <div id="clRL"><label class="rf"><span>Insert</span><select id="clIns">${opt()}</select></label>
       <label class="rf"><span>Enzyme</span><div><select id="clE1">${enz.map(n => `<option ${n == 'EcoRI' ? 'selected' : ''}>${n}</option>`).join('')}</select>
@@ -142,7 +142,7 @@ async function cloningDialog(el) {
         product = m == 'gibson' ? MolBio.gibson(parts) : MolBio.goldenGate(parts, $('#clGG').value);
         product.how = m == 'gibson' ? 'Gibson-Assembly' : `Golden Gate mit ${$('#clGG').value}`;
       }
-      $('#clOut').innerHTML = `<p><b>${product.seq.length.toLocaleString('de-DE')} bp</b>, ringförmig · ${product.features.length} Feature(s) übernommen</p><ul class="sub">${product.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+      $('#clOut').innerHTML = `<p><b>${product.seq.length.toLocaleString(I18N.locale)} bp</b>, ringförmig · ${product.features.length} Feature(s) übernommen</p><ul class="sub">${product.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>
         <div class="seqmapbox small">${ringMap({seq: product.seq, name: 'Neues Plasmid', features: product.features, size: 300})}</div>
         <label class="rf"><span>Name</span><input id="clName" value="${esc(`${st.name} + Insert`)}"></label>`;
       $('#clSave').disabled = false;

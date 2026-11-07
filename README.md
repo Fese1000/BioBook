@@ -13,7 +13,7 @@
   <img src="docs/screenshots/calendar.png" width="49%" alt="Calendar with experiments and due items">
 </p>
 
-> The screenshots show synthetic test data. **The user interface is currently in German.** An English interface is not available yet (see [Status](#status-and-limitations)).
+> The screenshots show the German interface with synthetic test data. **BioBook is available in German and English:** choose *Settings (⌘,) › Language* ("Automatisch / Automatic" follows the system language, German on German systems and English otherwise). See [Interface language](#interface-language) for what is and is not translated.
 
 ## Why BioBook
 
@@ -29,6 +29,7 @@
 - Running lab book: day sections ("Tuesday, 30.6.2026") that can be collapsed, a "Today" shortcut and a period shown in the list.
 - Entry kinds (experiment, note, protocol), status (running, done, failed, paused), tags, projects, pinning, duplication, saved searches, bulk actions and a trash with restore.
 - Tabs and multiple windows, several notebooks, Spotlight and Quick Look support.
+- Interface in German and English, switchable in the settings.
 
 **Records you can trust**
 - Immutable revisions with a verified hash chain; compare any old revision with the current state.
@@ -83,6 +84,17 @@ Requirements: macOS 13 or later, Apple Silicon. Intel builds are prepared (`./ma
 
 BioBook was called *Laborbuch* until November 2026. On first launch the app **copies** `~/Library/Application Support/Laborbuch` to `BioBook` (the default notebook becomes `Standard.biobook`) and takes over the settings of the old bundle ID `de.felix.laborbuch`. The signing key and the Anthropic key are taken over from the old Keychain items on first use (macOS asks once for your password). Nothing is deleted, the old data stays as a fallback. Notebooks ending in `.laborbuch` and links starting with `laborbuch://` keep working; new notebooks use `.biobook` and `biobook://`. The format identifiers `laborbuch-signatur-v1` (signatures) and `laborbuch-export-1` (export) are intentionally unchanged, otherwise existing signatures could no longer be verified.
 
+## Interface language
+
+*Settings (⌘,) › Language* offers **Automatic**, **Deutsch** and **English**. Switching reloads the windows; menus and system dialogs change immediately.
+
+German is the source language of the code; English comes from the dictionary `web/lang/en.json` (German text → English text), which is shared by the web interface and the native menus and dialogs. What is **not** translated:
+
+- Everything you write yourself: entry text, titles, names of registry objects and so on. Day section headings ("Tuesday, …") and dates follow the language.
+- The machine-readable header keys of the Markdown export (`titel:`, `art:` …) and the folder names `Sicherungen` (backups) and `Erweiterungen` (extensions) in the data folder.
+- Number formats in calculators and results (decimal comma is accepted and shown).
+- Some rarely seen messages may still appear in German. The English texts were checked against the app's own self-test (which reports every text without an English counterpart), but not by a native speaker. Corrections are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Automation
 
 - **URL scheme** (usable in the Shortcuts app with "Open URL"): `biobook://new?title=…&text=…`, `biobook://append?id=…&text=…` (asks for confirmation) and `biobook://search?q=…`.
@@ -111,7 +123,7 @@ The editor is bundled in `web/vendor/tiptap.js`. Rebuild it only when updating d
 # Swift: storage, hash chain, search, templates, runs, migration
 swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift \
   app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift \
-  app/EntryManage.swift app/Account.swift app/Planner.swift app/Prefs.swift app/Migration.swift tests/main.swift \
+  app/EntryManage.swift app/Account.swift app/Planner.swift app/Prefs.swift app/Migration.swift app/Localization.swift tests/main.swift \
   -o /tmp/biobook-tests && /tmp/biobook-tests
 
 # JavaScript: calculators, sequences, statistics, import/export formats, ...
@@ -129,7 +141,7 @@ Numerical code is checked against reference implementations where possible (Prim
 | Path | Purpose |
 | --- | --- |
 | `app/` | Swift: window and WebView shell (`main.swift`), SQLite store with hash-chained revisions (`Store.swift`), registry, inventory, cell culture, orders, keys and signatures, backup, updater, migration, AppleScript |
-| `web/` | The user interface and logic in JavaScript (editor, calculators, sequence tools, statistics, import/export) |
+| `web/` | The user interface and logic in JavaScript (editor, calculators, sequence tools, statistics, import/export); `web/i18n.js` and `web/lang/en.json` are the language layer |
 | `web/vendor/` | Bundled third-party code (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) |
 | `tests/` | Swift storage tests, JavaScript unit tests, fixtures |
 | `tools/` | Editor bundling and icon generation |
@@ -137,7 +149,7 @@ Numerical code is checked against reference implementations where possible (Prim
 
 ## Status and limitations
 
-- **German user interface only.** Translating it is welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
+- The interface exists in German and English only; see [Interface language](#interface-language) for the limits.
 - macOS on Apple Silicon only; the app is ad-hoc signed and not notarised.
 - Signatures and timestamps are evidence, not a certification under GLP or 21 CFR Part 11.
 - Single user, local only. Team sync and roles are not planned for now.

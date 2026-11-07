@@ -98,7 +98,7 @@ async function ordersCSV() {
   const q = v => /[;"\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
   const rows = [['Nr.', 'Artikel', 'Anzahl', 'Menge je Stück', 'Einheit', 'Lieferant', 'Katalognr.', 'Preis', 'Status', 'Notiz'],
     ...list.map(p => [p.id, p.name, p.qty, p.amount ? Calc.fmt(+p.amount) : '', p.unit, p.supplier, p.catalog, p.price, p.status, p.note])];
-  const r = await call('saveText', {name: `Bestellliste ${today()}.csv`, text: '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')});
+  const r = await call('saveText', {name: T(`Bestellliste ${today()}.csv`), text: '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')});
   if (r) status(`Bestellliste gespeichert: ${r.path}`);
   return r;
 }

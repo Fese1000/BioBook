@@ -13,7 +13,7 @@ enum Spotlight {
     static func item(book: String, row: [String: Any]) -> CSSearchableItem? {
         guard let id = row["id"] as? Int else { return nil }
         let a = CSSearchableItemAttributeSet(contentType: .text)
-        a.title = (row["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Ohne Titel"
+        a.title = (row["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? L("Ohne Titel")
         let text = (row["draft_text"] as? String) ?? ""
         a.contentDescription = String(text.prefix(300))
         a.textContent = String(text.prefix(20_000))

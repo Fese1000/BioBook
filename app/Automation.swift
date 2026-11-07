@@ -69,8 +69,8 @@ extension AppDelegate {
             case "append":
                 guard let id = q["id"].flatMap(Int.init), let text = q["text"], !text.isEmpty else { throw StoreError.invalid("id und text angeben") }
                 if !testMode {  // ein Link aus dem Netz soll nicht unbemerkt ins BioBook schreiben
-                    let a = NSAlert(); a.messageText = "Text an Eintrag \(id) anhängen?"
-                    a.informativeText = String(text.prefix(300)); a.addButton(withTitle: "Anhängen"); a.addButton(withTitle: "Abbrechen")
+                    let a = NSAlert(); a.messageText = L("Text an Eintrag \(id) anhängen?")
+                    a.informativeText = String(text.prefix(300)); a.addButton(withTitle: L("Anhängen")); a.addButton(withTitle: L("Abbrechen"))
                     NSApp.activate(ignoringOtherApps: true)
                     guard a.runModal() == .alertFirstButtonReturn else { return true }
                 }

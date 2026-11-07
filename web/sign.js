@@ -73,15 +73,15 @@ const PRINT_CSS = `body{font:11pt/1.5 -apple-system,"Helvetica Neue",sans-serif;
 /// HTML für das Zeugen-PDF: Kopf mit Hash und Signatur, Inhalt, Felder für Unterschriften
 function witnessHTML(r, book) {
   const css = PRINT_CSS;
-  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${css}</style></head><body>
-    <div class="head"><b>BioBook „${esc(book)}“</b> · Eintrag Nr. ${cur} · Revision ${r.no}<br>
-      Abgeschlossen und signiert von <b>${esc(r.name)}</b> am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})<br>
-      Revisions-Hash (SHA-256): <span class="hash">${r.hash}</span></div>
+  return `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><style>${css}</style></head><body>
+    <div class="head"><b>${T(`BioBook „${esc(book)}“`)}</b> ${T(`· Eintrag Nr. ${cur} · Revision ${r.no}`)}<br>
+      ${T('Abgeschlossen und signiert von')} <b>${esc(r.name)}</b> ${T(`am ${when(r.signed_at)} (Ed25519, Schlüssel ${esc(r.fingerprint)})`)}<br>
+      ${T('Revisions-Hash (SHA-256):')} <span class="hash">${r.hash}</span></div>
     <h1>${esc($('#title').value)}</h1>
     ${withBibliography(editor.getHTML())}
-    <div class="sign"><b>Gegenzeichnung</b><br>Ich habe den oben stehenden Eintrag gelesen und verstanden.<br>
-      Er gehört zur Revision mit dem SHA-256-Hash <span class="hash">${r.hash}</span>.
-      <div class="line"><div>Name des Zeugen</div><div>Datum</div><div>Unterschrift</div></div></div>
+    <div class="sign"><b>${T('Gegenzeichnung')}</b><br>${T('Ich habe den oben stehenden Eintrag gelesen und verstanden.')}<br>
+      ${T('Er gehört zur Revision mit dem SHA-256-Hash')} <span class="hash">${r.hash}</span>.
+      <div class="line"><div>${T('Name des Zeugen')}</div><div>${T('Datum')}</div><div>${T('Unterschrift')}</div></div></div>
   </body></html>`;
 }
 
@@ -89,7 +89,7 @@ async function makeWitnessPDF() {
   const [r, book] = await Promise.all([call('signedRevision', {id: cur}), call('book')]);
   status('Zeugen-PDF wird erstellt …');
   try {
-    const out = await call('witnessPDF', {id: cur, html: witnessHTML(r, book.name), name: `Zeuge – ${$('#title').value || 'Eintrag'} (Rev ${r.no}).pdf`});
+    const out = await call('witnessPDF', {id: cur, html: witnessHTML(r, book.name), name: T(`Zeuge – ${$('#title').value || T('Eintrag')} (Rev ${r.no}).pdf`)});
     status(out ? `Zeugen-PDF gespeichert: ${out.path}` : 'Zeugen-PDF nicht gespeichert');
     return out;
   } catch (e) { status(''); alert('Zeugen-PDF fehlgeschlagen: ' + e.message); }
@@ -117,6 +117,7 @@ async function showSettings() {
       .map(([k, t]) => `<button type="button" class="snav ${k == SET_PANE ? 'on' : ''}" data-spane="${k}" role="tab">${t}</button>`).join('')}</nav>
     <div class="setpanes">
     <section class="spane" data-pane="look" ${SET_PANE == 'look' ? '' : 'hidden'}><h4>Aussehen</h4>
+    <label class="row" data-noi18n>Sprache / Language <select id="setLang"><option value="auto" ${s.language == 'auto' ? 'selected' : ''}>Automatisch / Automatic</option><option value="de" ${s.language == 'de' ? 'selected' : ''}>Deutsch</option><option value="en" ${s.language == 'en' ? 'selected' : ''}>English</option></select></label>
     <label class="row">Farbschema <select id="setTheme">${['system', ...Themes.ids.filter(i => i != 'system' && !Themes.THEMES[i].dark), ...Themes.ids.filter(i => Themes.THEMES[i].dark)]
       .map(i => `<option value="${i}" ${(PREFS.theme || 'system') == i ? 'selected' : ''}>${esc(Themes.THEMES[i].name)}${Themes.THEMES[i].vars ? (Themes.THEMES[i].dark ? ' ◐' : ' ○') : ''}</option>`).join('')}</select></label>
     <label class="row"><input type="checkbox" id="setNewTab" ${tabsOnOpen() ? 'checked' : ''}> Einträge und Ansichten aus der Seitenleiste in einem neuen Tab öffnen (⌘-Klick auf einen Eintrag geht immer)</label>
@@ -179,7 +180,9 @@ async function showSettings() {
   dlg.onclose = async () => {
     if (dlg.returnValue != 'ok') return applyTheme(PREFS.theme || 'system');
     await savePref('theme', $('#setTheme').value); await savePref('newtab', $('#setNewTab').checked ? 'on' : 'off'); await savePref('updatecheck', $('#setUpdCheck').checked ? 'on' : 'off');
-    await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0)});
+    const newLang = $('#setLang').value;
+    await call('setSettings', {author: $('#setAuthor').value, lockEnabled: $('#setLock').checked, lockMinutes: Math.round(+$('#setLockMin').value || 0), language: newLang});
+    if (newLang != s.language) return location.reload();  // die Sprache gilt ab dem Neuladen der Seite
     status('Einstellungen gesichert');
   };
 }

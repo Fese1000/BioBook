@@ -7,7 +7,7 @@
   function dayLabel(date) {
     const [y, m, d] = String(date).split('-').map(Number);
     if (!y || !m || !d) return String(date || 'Ohne Datum');
-    return new Date(y, m - 1, d).toLocaleDateString('de-DE', {weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric'});
+    return new Date(y, m - 1, d).toLocaleDateString(root.I18N ? root.I18N.locale : 'de-DE', {weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric'});
   }
   /// Zeitraum für die Liste: „30.06.–15.10.2026“, über Jahre „30.12.2025–02.01.2026“, ein Tag „30.06.2026“
   function rangeLabel(first, last) {

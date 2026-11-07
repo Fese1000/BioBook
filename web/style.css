@@ -567,3 +567,6 @@ dialog#settings input:not([type=checkbox]){padding:6px 9px;border-radius:6px}
 #types,#stockNav,#calNav,#savedlist,#tags,#templates,#projects{flex:none}
 #meta .iconbtns{border-right:0;padding-right:0;margin-right:0;margin-left:6px}
 #projects li,#types li,#stockNav li,#calNav li{padding-top:5px;padding-bottom:5px}
+
+/* Sprachschicht: bis die Übersetzung geladen ist, nichts Deutsches aufblitzen lassen */
+html.i18n-wait body{visibility:hidden}

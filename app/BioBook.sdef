@@ -2,27 +2,27 @@
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="BioBook" xmlns:xi="http://www.w3.org/2003/XInclude">
   <xi:include href="file:///System/Library/ScriptingDefinitions/CocoaStandard.sdef" xpointer="xpointer(/dictionary/suite)"/>
-  <suite name="BioBook" code="LBok" description="Einträge anlegen, ergänzen, finden und lesen">
-    <command name="create entry" code="LBokCrEn" description="Legt einen Eintrag an und liefert seine Nummer.">
+  <suite name="BioBook" code="LBok" description="Create, extend, find and read entries">
+    <command name="create entry" code="LBokCrEn" description="Creates an entry and returns its number.">
       <cocoa class="LBCreateEntryCommand"/>
-      <parameter name="titled" code="titl" type="text" optional="yes" description="Titel (sonst die erste Zeile des Textes)"><cocoa key="title"/></parameter>
-      <parameter name="with text" code="ctxt" type="text" optional="yes" description="Inhalt; jede Zeile wird ein Absatz"><cocoa key="text"/></parameter>
-      <result type="integer" description="Nummer des neuen Eintrags"/>
+      <parameter name="titled" code="titl" type="text" optional="yes" description="Title (otherwise the first line of the text)"><cocoa key="title"/></parameter>
+      <parameter name="with text" code="ctxt" type="text" optional="yes" description="Content; every line becomes a paragraph"><cocoa key="text"/></parameter>
+      <result type="integer" description="Number of the new entry"/>
     </command>
-    <command name="append text" code="LBokApTx" description="Hängt Text unten an einen Eintrag an (nicht bei abgeschlossenen Einträgen).">
+    <command name="append text" code="LBokApTx" description="Appends text to the end of an entry (not for finished entries).">
       <cocoa class="LBAppendTextCommand"/>
-      <direct-parameter type="text" description="anzuhängender Text"/>
-      <parameter name="to entry" code="entr" type="integer" description="Nummer des Eintrags"><cocoa key="entry"/></parameter>
+      <direct-parameter type="text" description="text to append"/>
+      <parameter name="to entry" code="entr" type="integer" description="Number of the entry"><cocoa key="entry"/></parameter>
       <result type="boolean"/>
     </command>
-    <command name="find entries" code="LBokFind" description="Volltextsuche; liefert „Nummer: Titel“ je Treffer.">
+    <command name="find entries" code="LBokFind" description="Full-text search; returns “number: title” for each match.">
       <cocoa class="LBFindEntriesCommand"/>
-      <direct-parameter type="text" description="Suchbegriff"/>
+      <direct-parameter type="text" description="Search term"/>
       <result><type type="text" list="yes"/></result>
     </command>
-    <command name="entry text" code="LBokGtTx" description="Titel und Text eines Eintrags.">
+    <command name="entry text" code="LBokGtTx" description="Title and text of an entry.">
       <cocoa class="LBEntryTextCommand"/>
-      <direct-parameter type="integer" description="Nummer des Eintrags"/>
+      <direct-parameter type="integer" description="Number of the entry"/>
       <result type="text"/>
     </command>
   </suite>

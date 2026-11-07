@@ -101,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let cfg = WKWebViewConfiguration()
         cfg.setURLSchemeHandler(scheme, forURLScheme: "lab")
         cfg.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "lab")
+        cfg.userContentController.addUserScript(WKUserScript(source: Lang.pageScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let web = WKWebView(frame: .zero, configuration: cfg)
         web.uiDelegate = self
         web.navigationDelegate = self
@@ -222,8 +223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc func newBook() {
         let p = NSSavePanel()
-        p.title = "Neues BioBook"
-        p.nameFieldStringValue = "Neues BioBook.biobook"
+        p.title = L("Neues BioBook")
+        p.nameFieldStringValue = L("Neues BioBook") + ".biobook"
         p.allowedContentTypes = [Self.bookType]
         guard p.runModal() == .OK, var url = p.url else { return }
         if url.pathExtension != "biobook" { url.appendPathExtension("biobook") }
@@ -233,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc func openBook() {
         let p = NSOpenPanel()
-        p.title = "BioBook öffnen"
+        p.title = L("BioBook öffnen")
         p.allowedContentTypes = [Self.bookType]
         p.canChooseDirectories = false  // das Paket erscheint dank Dokumenttyp als eine Datei
         if p.runModal() == .OK, let url = p.url { switchBook(to: url) }
@@ -273,8 +274,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     @objc func scanLabel() { web.evaluateJavaScript("app.scan()") }
 
+    /// Sprache gewechselt: neue Fenster und Menüs bekommen sie sofort, die Seiten laden danach neu
+    func applyLanguage() {
+        for d in docs {
+            let c = d.web.configuration.userContentController
+            c.removeAllUserScripts()
+            c.addUserScript(WKUserScript(source: Lang.pageScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
+        buildMenu(); updateTitle()
+    }
+
     func alert(_ title: String, _ text: String) {
-        let a = NSAlert(); a.messageText = title; a.informativeText = text; a.runModal()
+        let a = NSAlert(); a.messageText = L(title); a.informativeText = L(text); a.runModal()
     }
 
     /// `--perftest` / `--selftest`: Test in der echten WebView ausführen, Ergebnis ausgeben, beenden (Abnahme ohne Bedienung).
@@ -283,7 +294,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if CommandLine.arguments.contains("--updatetest") { testStarted = true; return runUpdateTest() }
         let args = CommandLine.arguments
         let js = args.contains("--perftest") ? "window.TESTING = true; await app.perfTest(); return window.perfResult.join('\\n')"
-            : args.contains("--selftest") ? "await new Promise(r => setTimeout(r, 300)); return (await app.selfTest()).join('\\n')" : nil
+            : args.contains("--selftest") ? "await new Promise(r => setTimeout(r, 300)); const r = (await app.selfTest()).join('\\n'); return window.I18N && (I18N.lang == 'en' || window.I18N_SHADOW) ? r + '\\n##UNTRANSLATED\\n' + I18N.untranslated().join('\\n') : r" : nil
         guard let js else { return }
         testStarted = true
         w.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { r in
@@ -297,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func fail(_ msg: String) {
-        let a = NSAlert(); a.messageText = "BioBook"; a.informativeText = msg; a.runModal(); NSApp.terminate(nil)
+        let a = NSAlert(); a.messageText = "BioBook"; a.informativeText = L(msg); a.runModal(); NSApp.terminate(nil)
     }
 
     // MARK: Brücke – feste Befehlsliste, jede Eingabe wird geprüft
@@ -327,11 +338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "completeStep": replyHandler(try s.completeStep(run: try int("run"), step: try int("step"), note: (a["note"] as? String) ?? ""), nil)
             case "finishRun": replyHandler(try s.finishRun(run: try int("run"), aborted: a["aborted"] as? Bool ?? false), nil)
             case "settings":
-                replyHandler(["author": Settings.author, "lockEnabled": Settings.lockEnabled, "lockMinutes": Settings.lockMinutes,
+                replyHandler(["language": Lang.setting, "languageCode": Lang.code, "author": Settings.author, "lockEnabled": Settings.lockEnabled, "lockMinutes": Settings.lockMinutes,
                               "fingerprint": Keys.fingerprint() ?? NSNull(), "backupDir": Backup.dir(for: s).path, "version": Updater.current,
                               "lastBackup": Backup.last(for: s).map { ISO8601DateFormatter().string(from: $0) } ?? NSNull()], nil)
             case "setSettings":
                 if let n = a["author"] as? String { Settings.author = n }
+                if let lang = a["language"] as? String, lang != Lang.setting { Lang.setting = lang; applyLanguage(); broadcast(except: m.webView, "location.reload()") }
                 if let l = a["lockEnabled"] as? Bool { Settings.lockEnabled = l }
                 if let m = a["lockMinutes"] as? Int { Settings.lockMinutes = m }
                 replyHandler(true, nil)
@@ -385,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
                 if let t = a["testPaths"] as? [String], ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] != nil { urls = t.map { URL(fileURLWithPath: $0) } }
                 else {
                     let p = NSOpenPanel()
-                    p.title = "Rohdaten verlinken (bleiben am Ort, nur die Prüfsumme kommt ins BioBook)"
+                    p.title = L("Rohdaten verlinken (bleiben am Ort, nur die Prüfsumme kommt ins BioBook)")
                     p.allowsMultipleSelection = true; p.canChooseDirectories = false
                     guard p.runModal() == .OK else { return replyHandler([], nil) }
                     urls = p.urls
@@ -525,7 +537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             case "backupNow": autoBackup(force: true, reply: replyHandler)
             case "chooseBackupDir":
                 let p = NSOpenPanel()
-                p.title = "Ordner für Sicherungen (z. B. externe Platte oder iCloud Drive)"; p.prompt = "Wählen"
+                p.title = L("Ordner für Sicherungen (z. B. externe Platte oder iCloud Drive)"); p.prompt = L("Wählen")
                 p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
                 guard p.runModal() == .OK, let u = p.url else { return replyHandler(NSNull(), nil) }
                 UserDefaults.standard.set(u.path, forKey: "backupDir")
@@ -924,7 +936,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func exportTarget(_ a: [String: Any]) -> URL? {
         if let dir = ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"], testMode { return URL(fileURLWithPath: dir) }
         let p = NSOpenPanel()
-        p.title = "Ordner für den Export wählen"; p.prompt = "Exportieren"
+        p.title = L("Ordner für den Export wählen"); p.prompt = L("Exportieren")
         p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
         return p.runModal() == .OK ? p.url : nil
     }
@@ -965,7 +977,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         if let t = a["testPaths"] as? [String], testMode { urls = t.map { URL(fileURLWithPath: $0) } }
         else {
             let p = NSOpenPanel()
-            p.title = "Importieren: .eln (eLabFTW u. a.), Markdown, Word, RTF, ODT, HTML, PDF oder Bilder (Scans)"
+            p.title = L("Importieren: .eln (eLabFTW u. a.), Markdown, Word, RTF, ODT, HTML, PDF oder Bilder (Scans)")
             p.allowsMultipleSelection = true; p.canChooseDirectories = false
             guard p.runModal() == .OK else { return reply([], nil) }
             urls = p.urls
@@ -1066,7 +1078,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     func pickPDF(testPath: String?) -> URL? {
         if let t = testPath, ProcessInfo.processInfo.environment["BIOBOOK_TESTOUT"] != nil { return URL(fileURLWithPath: t) }
         let p = NSOpenPanel()
-        p.title = "Unterschriebenes Zeugen-PDF wählen"
+        p.title = L("Unterschriebenes Zeugen-PDF wählen")
         p.allowedContentTypes = [.pdf]
         return p.runModal() == .OK ? p.url : nil
     }
@@ -1076,15 +1088,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let main = NSMenu()
         func add(_ title: String, _ items: [(String, Selector?, String)]) {
             let item = NSMenuItem(); main.addItem(item)
-            let m = NSMenu(title: title); item.submenu = m
+            let m = NSMenu(title: L(title)); item.submenu = m
             for (t, sel, key) in items {
                 if t == "-" { m.addItem(.separator()); continue }
                 if key == "IMPORT" {  // macOS füllt das Untermenü (Foto aufnehmen, Dokumente scannen, Skizze)
-                    let i = NSMenuItem(title: t, action: nil, keyEquivalent: "")
+                    let i = NSMenuItem(title: L(t), action: nil, keyEquivalent: "")
                     i.identifier = NSMenuItem.importFromDeviceIdentifier
                     m.addItem(i); continue
                 }
-                let i = NSMenuItem(title: t, action: sel, keyEquivalent: key)
+                let i = NSMenuItem(title: L(t), action: sel, keyEquivalent: key)
                 if ["Z", "N", "I", "E", "K"].contains(key) { i.keyEquivalentModifierMask = [.command, .shift] }
                 if key == "NW" { i.keyEquivalent = "n"; i.keyEquivalentModifierMask = [.command, .option] }
                 m.addItem(i)
@@ -1146,7 +1158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
     // MARK: WebView – Dialoge und externe Links
     func webView(_ w: WKWebView, runJavaScriptConfirmPanelWithMessage m: String, initiatedByFrame f: WKFrameInfo, completionHandler done: @escaping (Bool) -> Void) {
-        let a = NSAlert(); a.messageText = m; a.addButton(withTitle: "OK"); a.addButton(withTitle: "Abbrechen")
+        let a = NSAlert(); a.messageText = m; a.addButton(withTitle: L("OK")); a.addButton(withTitle: L("Abbrechen"))
         done(a.runModal() == .alertFirstButtonReturn)
     }
     func webView(_ w: WKWebView, runJavaScriptAlertPanelWithMessage m: String, initiatedByFrame f: WKFrameInfo, completionHandler done: @escaping () -> Void) {
@@ -1157,7 +1169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         field.stringValue = defaultText ?? ""
         a.accessoryView = field
-        a.addButton(withTitle: "OK"); a.addButton(withTitle: "Abbrechen")
+        a.addButton(withTitle: L("OK")); a.addButton(withTitle: L("Abbrechen"))
         a.window.initialFirstResponder = field
         done(a.runModal() == .alertFirstButtonReturn ? field.stringValue : nil)
     }

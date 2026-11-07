@@ -5,7 +5,16 @@
 
   const SOURCE_CHARS = 6000, MAX_SOURCES = 8;
 
-  const SYSTEM = {
+  const EN = root.I18N && root.I18N.lang === 'en';   // englische Oberfläche: englische Anweisungen, Antwort auf Englisch
+  const SYSTEM_EN = {
+    summary: 'You help in a laboratory notebook. Summarise the entry factually in English: aim, procedure, key results with numbers and units, open points. '
+      + 'Do not invent anything; leave out what is not in the entry. At most 8 short bullet points, no introduction.',
+    qa: 'You answer questions about a laboratory notebook only from the entries sent along. Support every statement with the entry ID in square brackets, e.g. [E12]. '
+      + 'If the answer is not in the entries, say so clearly. Answer in English, concisely, with numbers and units as they appear in the entry.',
+    protocol: 'You write a laboratory protocol in English from bullet points: headings "Aim", "Materials", "Procedure" (numbered steps with amounts, times, temperatures), "Notes". '
+      + 'Keep all details from the bullet points unchanged; only add usual intermediate steps and mark every addition with "(added)". No running text before or after.',
+  };
+  const SYSTEM_DE = {
     summary: 'Du hilfst in einem Labor-Notizbuch. Fasse den Eintrag auf Deutsch sachlich zusammen: Ziel, Durchführung, wichtigste Ergebnisse mit Zahlen und Einheiten, offene Punkte. '
       + 'Erfinde nichts; was im Eintrag nicht steht, lässt du weg. Höchstens 8 kurze Stichpunkte, keine Einleitung.',
     qa: 'Du beantwortest Fragen zu einem Labor-Notizbuch nur anhand der mitgeschickten Einträge. Jede Aussage belegst du mit der Kennung des Eintrags in eckigen Klammern, z. B. [E12]. '
@@ -13,6 +22,7 @@
     protocol: 'Du schreibst aus Stichpunkten ein Laborprotokoll auf Deutsch: Überschriften „Ziel“, „Material“, „Durchführung“ (nummerierte Schritte mit Mengen, Zeiten, Temperaturen), „Hinweise“. '
       + 'Übernimm alle Angaben aus den Stichpunkten unverändert; ergänze nur übliche Zwischenschritte und markiere jede Ergänzung mit „(ergänzt)“. Kein Fließtext davor oder danach.',
   };
+  const SYSTEM = EN ? SYSTEM_EN : SYSTEM_DE;
 
   const clip = (t, n) => { const s = String(t || ''); return s.length > n ? {text: s.slice(0, n), cut: true} : {text: s, cut: false}; };
 
@@ -118,7 +128,7 @@ async function aiSummary() {
   await flush();
   const p = AI.summaryPrompt({title: $('#title').value, text: editor.getText({blockSeparator: '\n'})});
   if (!p.chars) return alert('Der Eintrag ist leer.');
-  if (!await aiConfirm('Eintrag zusammenfassen', [`dieser Eintrag: „${esc($('#title').value || 'Ohne Titel')}“ (${p.chars.toLocaleString('de-DE')} Zeichen${p.cut ? ', gekürzt' : ''})`])) return null;
+  if (!await aiConfirm('Eintrag zusammenfassen', [`dieser Eintrag: „${esc($('#title').value || 'Ohne Titel')}“ (${p.chars.toLocaleString(I18N.locale)} Zeichen${p.cut ? ', gekürzt' : ''})`])) return null;
   const r = await aiRun(p, 2000); if (!r) return null;
   AIState.last = {kind: 'summary', text: r.text};
   aiResultBox(AI.mdToHTML(r.text, esc), editor.isEditable ? '<button class="btn on" data-aiinsert>Als Zusammenfassung in den Eintrag</button>' : '',
@@ -133,7 +143,7 @@ async function aiProtocol() {
   const bullets = sel || editor.getText({blockSeparator: '\n'});
   if (!bullets.trim()) return alert('Erst Stichpunkte schreiben (oder markieren).');
   const p = AI.protocolPrompt(bullets);
-  if (!await aiConfirm('Protokoll aus Stichpunkten', [`${sel ? 'die markierten Stichpunkte' : 'der Text dieses Eintrags'} (${p.chars.toLocaleString('de-DE')} Zeichen)`])) return null;
+  if (!await aiConfirm('Protokoll aus Stichpunkten', [`${sel ? 'die markierten Stichpunkte' : 'der Text dieses Eintrags'} (${p.chars.toLocaleString(I18N.locale)} Zeichen)`])) return null;
   const r = await aiRun(p, 6000); if (!r) return null;
   AIState.last = {kind: 'protocol', text: r.text};
   aiResultBox(AI.mdToHTML(r.text, esc), editor.isEditable ? '<button class="btn on" data-aiinsert>Unten in den Eintrag einfügen</button>' : '',
@@ -189,7 +199,7 @@ function initAssistant() {
     const d = e.target.dataset;
     if (d.aiclose !== undefined) { $('#aibox').hidden = true; return; }
     if (d.aiinsert !== undefined && AIState.last) {
-      const today = new Date().toLocaleDateString('de-DE');
+      const today = new Date().toLocaleDateString(I18N.locale);
       const head = AIState.last.kind == 'summary' ? `KI-Zusammenfassung (Claude, ${today}) – bitte prüfen` : `Protokoll-Entwurf von Claude (${today}) – bitte prüfen`;
       editor.chain().focus('end').insertContent([{type: 'heading', attrs: {level: 3}, content: [{type: 'text', text: head}]}, ...AI.mdToDoc(AIState.last.text)]).run();
       $('#aibox').hidden = true;

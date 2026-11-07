@@ -9,6 +9,7 @@ const slug = s => String(s || 'eintrag').toLowerCase().replace(/ä/g, 'ae').repl
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50) || 'eintrag';
 const safeName = s => String(s || 'datei').replace(/[\/\\:\u0000-\u001f]/g, '_').replace(/^\.+/, '_').slice(0, 100);
 const KIND_DE = {experiment: 'Experiment', note: 'Notiz', protocol: 'Protokoll'};
+const kindName = k => T(KIND_DE[k] || '');   // sichtbarer Name der Art in der Sprache der Oberfläche (Kopfdaten in Markdown bleiben deutsch)
 
 // ---------- Export des ganzen Buches ----------
 async function exportBook() {
@@ -42,10 +43,10 @@ async function exportBook() {
     return doc.body.innerHTML;
   };
 
-  const page = (title, body, prefix) => `<!doctype html><html lang="de"><head><meta charset="utf-8"><title>${esc(title)}</title>
+  const page = (title, body, prefix) => `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>${PRINT_CSS} body{max-width:820px;margin:32px auto;padding:0 20px} nav{font-size:10pt;margin-bottom:14pt} nav a{color:#2f6f5e}
 @media(prefers-color-scheme:dark){body{background:#1b1c1e;color:#e8e6e1}.head{border-color:#555}td,th{border-color:#555}a{color:#6cc2a6}}</style></head>
-<body><nav><a href="${prefix}index.html">← Übersicht</a></nav>${body}</body></html>`;
+<body><nav><a href="${prefix}index.html">${T('← Übersicht')}</a></nav>${body}</body></html>`;
 
   // Verweise mit aktuellen Titeln (gespeichert ist der Titel zum Zeitpunkt des Einfügens)
   const withTitles = json => { const walk = n => { if (n.type == 'mention' && n.attrs) n.attrs.label = byId.get(+n.attrs.id)?.title || n.attrs.label; (n.content || []).forEach(walk); }; walk(json); return json; };
@@ -53,28 +54,42 @@ async function exportBook() {
   for (const e of d.entries) {
     const json = withTitles(e.draft_json ? JSON.parse(e.draft_json) : {type: 'doc', content: []});
     const sig = sigOf(e.id);
-    const meta = [`Nr. ${e.id}`, KIND_DE[e.kind] || e.kind, e.project && `Projekt: ${e.project}`, e.tags && `Tags: ${e.tags}`,
-      `erstellt ${when(e.created)}`, `geändert ${when(e.updated)}`, `${e.revisions} Revisionen`].filter(Boolean).join(' · ');
-    const sigLine = sig ? `<br>Abgeschlossen und signiert von <b>${esc(sig.name)}</b> am ${when(sig.signed_at)} (Revision ${sig.rev_no})`
-      + witnesses(e.id).map(w => `<br>Gegengezeichnet von ${esc(w.name)} (${when(w.signed_at)})`).join('') : '';
-    const head = `<div class="head">${esc(meta)}${e.last_hash ? `<br>Letzte Revision SHA-256: <span class="hash">${e.last_hash}</span>` : ''}${sigLine}</div>`;
-    texts.push({path: base(e) + '.html', text: page(e.title || 'Ohne Titel', `${head}<h1>${esc(e.title || 'Ohne Titel')}</h1>${entryHTML(json, '../')}`, '../')});
+    const meta = [T(`Nr. ${e.id}`), kindName(e.kind) || e.kind, e.project && `${T('Projekt')}: ${e.project}`, e.tags && `Tags: ${e.tags}`,
+      T(`erstellt ${when(e.created)}`), T(`geändert ${when(e.updated)}`), T(`${e.revisions} Revisionen`)].filter(Boolean).join(' · ');
+    const sigLine = sig ? `<br>${T('Abgeschlossen und signiert von')} <b>${esc(sig.name)}</b> ${T(`am ${when(sig.signed_at)} (Revision ${sig.rev_no})`)}`
+      + witnesses(e.id).map(w => `<br>${T(`Gegengezeichnet von ${esc(w.name)} (${when(w.signed_at)})`)}`).join('') : '';
+    const head = `<div class="head">${esc(meta)}${e.last_hash ? `<br>${T('Letzte Revision SHA-256:')} <span class="hash">${e.last_hash}</span>` : ''}${sigLine}</div>`;
+    texts.push({path: base(e) + '.html', text: page(e.title || T('Ohne Titel'), `${head}<h1>${esc(e.title || T('Ohne Titel'))}</h1>${entryHTML(json, '../')}`, '../')});
     const front = ['---', `id: ${e.id}`, `titel: ${JSON.stringify(e.title || '')}`, `art: ${KIND_DE[e.kind] || e.kind}`,
       e.project && `projekt: ${JSON.stringify(e.project)}`, e.tags && `tags: [${e.tags.split(', ').map(t => JSON.stringify(t)).join(', ')}]`,
       `erstellt: ${e.created}`, `geaendert: ${e.updated}`, `revisionen: ${e.revisions}`, e.last_hash && `letzter_hash: ${e.last_hash}`,
       sig && `signiert: ${JSON.stringify(`${sig.name}, ${sig.signed_at}, Revision ${sig.rev_no}`)}`, '---', ''].filter(Boolean).join('\n');
     const md = MD.toMarkdown(json, {file: (sha, name) => att.has(sha) ? '../' + fileName(att.get(sha)) : name,
       entry: id => byId.has(+id) ? `${base(byId.get(+id)).split('/')[1]}.md` : '#', calc: (k, data) => calcSummary(k, data).text, dayLabel: Days.dayLabel});
-    texts.push({path: base(e) + '.md', text: `${front}\n# ${e.title || 'Ohne Titel'}\n\n${md}`});
+    texts.push({path: base(e) + '.md', text: `${front}\n# ${e.title || T('Ohne Titel')}\n\n${md}`});
   }
 
-  const rows = d.entries.map(e => `<tr><td><a href="${base(e)}.html">${esc(e.title || 'Ohne Titel')}</a></td><td>${esc(KIND_DE[e.kind] || '')}</td>
+  const rows = d.entries.map(e => `<tr><td><a href="${base(e)}.html">${esc(e.title || T('Ohne Titel'))}</a></td><td>${esc(kindName(e.kind))}</td>
     <td>${esc(e.project || '')}</td><td>${esc(e.tags || '')}</td><td>${when(e.updated)}</td><td>${sigOf(e.id) ? '🔏' : ''}</td></tr>`).join('');
-  texts.push({path: 'index.html', text: page(`BioBook ${d.book}`, `<h1>BioBook „${esc(d.book)}“</h1><p>Export vom ${when(d.exported)} · ${d.entries.length} Einträge</p>
-    <table><tr><th>Titel</th><th>Art</th><th>Projekt</th><th>Tags</th><th>Geändert</th><th>Signiert</th></tr>${rows}</table>`, '')});
-  texts.push({path: 'index.md', text: `# BioBook „${d.book}“\n\nExport vom ${when(d.exported)} · ${d.entries.length} Einträge\n\n| Titel | Art | Projekt | Tags | Geändert |\n| --- | --- | --- | --- | --- |\n`
-    + d.entries.map(e => `| [${(e.title || 'Ohne Titel').replace(/\|/g, '\\|')}](${base(e)}.md) | ${KIND_DE[e.kind] || ''} | ${e.project || ''} | ${e.tags || ''} | ${when(e.updated)} |`).join('\n') + '\n'});
-  texts.push({path: 'LIESMICH.txt', text: `Export des BioBooks „${d.book}“ vom ${when(d.exported)}
+  texts.push({path: 'index.html', text: page(`BioBook ${d.book}`, `<h1>${T(`BioBook „${esc(d.book)}“`)}</h1><p>${T(`Export vom ${when(d.exported)} · ${d.entries.length} Einträge`)}</p>
+    <table><tr><th>${T('Titel')}</th><th>${T('Art')}</th><th>${T('Projekt')}</th><th>Tags</th><th>${T('Geändert')}</th><th>${T('Signiert')}</th></tr>${rows}</table>`, '')});
+  texts.push({path: 'index.md', text: `# ${T(`BioBook „${d.book}“`)}\n\n${T(`Export vom ${when(d.exported)} · ${d.entries.length} Einträge`)}\n\n| ${T('Titel')} | ${T('Art')} | ${T('Projekt')} | Tags | ${T('Geändert')} |\n| --- | --- | --- | --- | --- |\n`
+    + d.entries.map(e => `| [${(e.title || T('Ohne Titel')).replace(/\|/g, '\\|')}](${base(e)}.md) | ${kindName(e.kind)} | ${e.project || ''} | ${e.tags || ''} | ${when(e.updated)} |`).join('\n') + '\n'});
+  texts.push(I18N.lang == 'en'
+    ? {path: 'README.txt', text: `Export of the BioBook "${d.book}" from ${when(d.exported)}
+
+Readable without the app:
+  index.html            open the overview in a browser; every row leads to the entry
+  entries/*.html|.md    every entry as a web page and as Markdown (with header data)
+  files/                all attachments with their original names (prefixed with the first 12 characters of the SHA-256 checksum)
+  data/book.json        complete data: entries, all revisions with hash chain, signatures, templates, runs
+  ${d.book}.eln          exchange format (RO-Crate), e.g. for eLabFTW
+
+Verify: every revision carries hash = SHA-256(prev_hash, entry, number, time, title, content, separated by line breaks).
+Signatures are Ed25519 over "laborbuch-signatur-v1", entry, revision, hash, name, time (public keys in book.json).
+Linked raw data is not part of the export, only path and checksum.
+`}
+    : {path: 'LIESMICH.txt', text: `Export des BioBooks „${d.book}“ vom ${when(d.exported)}
 
 Lesbar ohne die App:
   index.html            Übersicht im Browser öffnen; jede Zeile führt zum Eintrag
@@ -98,7 +113,7 @@ Verlinkte Rohdaten sind nicht im Export enthalten, nur Pfad und Prüfsumme.
     const fileNodes = files.map(a => ({'@id': `./${dir}/${safeName(a.name)}`, '@type': 'File', name: a.name, encodingFormat: a.mime, contentSize: String(a.size), sha256: a.sha256}));
     files.forEach(a => elnCopies.push({sha: a.sha256, path: `${dir}/${safeName(a.name)}`}));
     parts.push({'@id': `./${dir}/`});
-    graph.push({'@id': `./${dir}/`, '@type': 'Dataset', name: e.title || 'Ohne Titel', text: H.getHTML(), dateCreated: e.created, dateModified: e.updated,
+    graph.push({'@id': `./${dir}/`, '@type': 'Dataset', name: e.title || T('Ohne Titel'), text: H.getHTML(), dateCreated: e.created, dateModified: e.updated,
       genre: KIND_DE[e.kind] || e.kind, ...(e.tags ? {keywords: e.tags} : {}), hasPart: fileNodes.map(f => ({'@id': f['@id']}))}, ...fileNodes);
   }
   const crate = {'@context': 'https://w3id.org/ro/crate/1.1/context', '@graph': [
@@ -121,10 +136,10 @@ async function exportEntryPDF(pdfa) {
   const [hist, book] = await Promise.all([call('history', {id: cur}), call('book')]);
   const sig = curSigned ? await call('signedRevision', {id: cur}) : null;
   const last = hist[0];
-  const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>${PRINT_CSS}</style></head><body>
-    <div class="head"><b>BioBook „${esc(book.name)}“</b> · Eintrag Nr. ${cur}${last ? ` · Revision ${last.no}` : ''} · gedruckt ${when(new Date().toISOString())}
-    ${last ? `<br>Revisions-Hash (SHA-256): <span class="hash">${last.hash}</span>` : '<br>Noch keine Revision gesichert'}
-    ${sig ? `<br>Abgeschlossen und signiert von <b>${esc(sig.name)}</b> am ${when(sig.signed_at)}` : ''}</div>
+  const html = `<!doctype html><html lang="${I18N.lang}"><head><meta charset="utf-8"><style>${PRINT_CSS}</style></head><body>
+    <div class="head"><b>${T(`BioBook „${esc(book.name)}“`)}</b> ${T(`· Eintrag Nr. ${cur}${last ? ` · Revision ${last.no}` : ''} · gedruckt ${when(new Date().toISOString())}`)}
+    ${last ? `<br>${T('Revisions-Hash (SHA-256):')} <span class="hash">${last.hash}</span>` : `<br>${T('Noch keine Revision gesichert')}`}
+    ${sig ? `<br>${T('Abgeschlossen und signiert von')} <b>${esc(sig.name)}</b> ${T(`am ${when(sig.signed_at)}`)}` : ''}</div>
     <h1>${esc($('#title').value)}</h1>${withBibliography(editor.getHTML())}</body></html>`;
   status(pdfa ? 'PDF/A wird erstellt …' : 'PDF wird erstellt …');
   try {
@@ -150,7 +165,7 @@ async function importFiles(testPaths) {
   try { items = await call('importPick', testPaths ? {testPaths} : {}); } catch (e) { return alert('Import fehlgeschlagen: ' + e.message); }
   if (!items?.length) return [];
   await flush();
-  const H = headless(), ids = [], today = new Date().toLocaleDateString('de-DE');
+  const H = headless(), ids = [], today = new Date().toLocaleDateString(I18N.locale);
   for (const it of items) {
     const html = it.kind == 'markdown' ? MD.fromMarkdown(it.text) : it.html || '';
     H.commands.setContent(sanitizeImport(html), {emitUpdate: false});

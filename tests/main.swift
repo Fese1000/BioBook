@@ -581,6 +581,18 @@ do {
     check(try a.accountNames() == ["Felix"], "Konten: Löschen mit Passwort")
 }
 
+// Sprache: Wörterbuch Deutsch → Englisch (dieselbe Datei wie in der Oberfläche)
+do {
+    let d = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: "web/lang/en.json"))) as! [String: String]
+    let p = Lang.parse(d)
+    func tr(_ s: String) -> String { Lang.translate(s, exact: p.exact, patterns: p.patterns) }
+    check(d.count > 1000 && !d.values.contains { $0.trimmingCharacters(in: .whitespaces).isEmpty }, "Sprache: Wörterbuch geladen, keine leeren Werte")
+    check(tr("Papierkorb leeren") == "Empty trash" && tr("  Speichern \n") == "  Save \n", "Sprache: exakte Treffer, Leerraum bleibt")
+    check(tr("3 Einträge") == "3 entries" && tr("„Test“ lässt sich nicht öffnen") == "“Test” cannot be opened", "Sprache: Muster mit Platzhaltern")
+    check(tr("Position A3 ist schon belegt (Taq)") == "Position A3 is already occupied (Taq)", "Sprache: mehrere Platzhalter")
+    check(tr("Nur ein Termin xyz") == "Nur ein Termin xyz", "Sprache: unbekannter Text bleibt")
+}
+
 // Übernahme aus der Zeit vor der Umbenennung (Laborbuch → BioBook)
 do {
     let fm = FileManager.default

@@ -160,7 +160,7 @@ async function showAgenda() {
 
 async function agendaICS() {
   const today = todayISO(), items = await call('agenda', {until: Agenda.addDays(today, 365), today}), book = await call('book');
-  const r = await call('saveText', {name: `BioBook ${book.name} – fällig.ics`, text: Agenda.toICS(items, {book: book.name})});
+  const r = await call('saveText', {name: T(`BioBook ${book.name} – fällig.ics`), text: Agenda.toICS(items, {book: book.name})});
   if (r) status(`${items.length} Termine gespeichert: ${r.path} – in Kalender per Doppelklick importieren`);
   return r;
 }

@@ -6,7 +6,7 @@ const FEAT_COLORS = {CDS: '#2a78d6', gene: '#2a78d6', ORF: '#7fb0e8', promoter: 
   primer_bind: '#8e5bd0', protein_bind: '#8e5bd0', RBS: '#3a8f5c', misc_feature: '#8a8a8a'};
 const featColor = f => f.color || FEAT_COLORS[f.type] || '#8a8a8a';
 const SEQ_PENDING = {};  // Feld → Anmerkung aus einem Import, wird beim Speichern des Objekts übernommen
-const bp = n => `${n.toLocaleString('de-DE')} bp`;
+const bp = n => `${n.toLocaleString(I18N.locale)} bp`;
 
 function niceStep(len, target = 8) {
   const raw = len / target, p = 10 ** Math.floor(Math.log10(raw));

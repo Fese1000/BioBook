@@ -23,7 +23,7 @@ function extractSteps(doc) {
   return strict.length ? strict : loose;
 }
 
-const hhmm = iso => new Date(iso).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+const hhmm = iso => new Date(iso).toLocaleTimeString(I18N.locale, {hour: '2-digit', minute: '2-digit'});
 const clock = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(x).padStart(2, '0')}`; };
 const since = (a, b) => clock((new Date(b) - new Date(a)) / 1000);
@@ -108,7 +108,7 @@ async function finishRun(aborted) {
   if (aborted && !confirm('Lauf abbrechen? Das Ablaufprotokoll wird trotzdem angehängt.')) return;
   const r = await call('finishRun', {run: RUN.id, aborted});
   const done = Object.fromEntries(r.done.map(d => [d.step_no, d]));
-  const day = new Date(r.started).toLocaleDateString('de-DE', {dateStyle: 'medium'});
+  const day = new Date(r.started).toLocaleDateString(I18N.locale, {dateStyle: 'medium'});
   const cell = t => ({type: 'tableCell', content: [{type: 'paragraph', content: t ? [{type: 'text', text: String(t)}] : []}]});
   const head = t => ({type: 'tableHeader', content: [{type: 'paragraph', content: [{type: 'text', text: t}]}]});
   const rows = RUN.steps.map((s, i) => ({type: 'tableRow', content: [cell(`${i + 1}. ${s}`), cell(done[i + 1] ? hhmm(done[i + 1].done_at) : '—'),

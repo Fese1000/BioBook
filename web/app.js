@@ -3,7 +3,7 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const call = (cmd, args = {}) => window.webkit.messageHandlers.lab.postMessage({cmd, args});
-const when = iso => new Date(iso).toLocaleString('de-DE', {dateStyle: 'medium', timeStyle: 'short'});
+const when = iso => new Date(iso).toLocaleString(I18N.locale, {dateStyle: 'medium', timeStyle: 'short'});
 
 const SNAPSHOT_MS = 5 * 60 * 1000;  // spätestens alle 5 Minuten eine unveränderliche Revision
 const KINDS = {experiment: 'Experiment', note: 'Notiz', protocol: 'Protokoll'};
@@ -615,7 +615,7 @@ function status(t) { $('#saved').textContent = t; }
 
 async function updateCounts() {
   if (!cur) return;
-  $('#words').textContent = `${editor.storage.characterCount.words().toLocaleString('de-DE')} Wörter`;
+  $('#words').textContent = `${editor.storage.characterCount.words().toLocaleString(I18N.locale)} Wörter`;
 }
 
 // ---------- Verlauf ----------
@@ -1505,7 +1505,7 @@ async function selfTest() {
   const edId = await call('create', {title: 'Editor-Standards'}); await refreshList(edId);
   editor.commands.setContent({type: 'doc', content: [para('H2O und 10 hoch 6 Zellen')]});
   const selWord = (w, k = 0) => { const h = findHits(editor.state.doc, w)[k]; editor.commands.setTextSelection(h); };
-  const tool = t => [...document.querySelectorAll('#toolbar button')].find(b => b.title.startsWith(t) || b.textContent.trim() == t);
+  const tool = t => [...document.querySelectorAll('#toolbar button')].find(b => b.title.startsWith(t) || b.textContent.trim() == t || b.title.startsWith(T(t)) || b.textContent.trim() == T(t));
   selWord('2'); tool('Tiefgestellt').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
   selWord('6'); tool('Hochgestellt').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
   selWord('Zellen'); tool('Unterstrichen').dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
@@ -1621,6 +1621,7 @@ async function selfTest() {
   document.querySelector('#settings [data-spane="sec"]').click();
   ok(visiblePanes().join() == 'sec' && document.querySelector('#settings .snav.on').dataset.spane == 'sec' && $('#setAuthor').offsetParent && $('#accNew').offsetParent, 'Einstellungen: Reiter „Sicherheit“ zeigt Signatur, Sperre und Konten');
   await call('testSnapshot', {name: 'm32-einstellungen.png'}).catch(() => {});
+  ok(!!$('#setLang') && [...$('#setLang').options].map(o => o.value).join() == 'auto,de,en' && $('#setLang').value == 'auto', 'Einstellungen: Sprache wählbar (automatisch, Deutsch, English)');
   document.querySelector('#settings [data-spane="backup"]').click();
   ok(visiblePanes().join() == 'backup' && $('#upCheck').offsetParent && $('#bkNow').offsetParent && !$('#accNew').offsetParent, 'Einstellungen: Reiter „Sicherung & Updates“');
   await showSettings(); await sleep(50);

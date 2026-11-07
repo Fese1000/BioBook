@@ -45,7 +45,7 @@ function calDraw() {
   const week = CAL.mode == 'week', y = +CAL.anchor.slice(0, 4), m = +CAL.anchor.slice(5, 7) - 1;
   const days = week ? SideCal.weekOf(CAL.anchor).map(iso => ({iso, day: +iso.slice(8), inMonth: true})) : SideCal.monthGrid(y, m).flatMap(w => w.days);
   const title = week ? `KW ${SideCal.isoWeek(SideCal.parse(SideCal.weekOf(CAL.anchor)[3]))} · ${Days.rangeLabel(SideCal.weekOf(CAL.anchor)[0], SideCal.weekOf(CAL.anchor)[6])}` : SideCal.label(y, m);
-  const label = d => week ? new Date(+d.iso.slice(0, 4), +d.iso.slice(5, 7) - 1, d.day).toLocaleDateString('de-DE', {weekday: 'short', day: 'numeric', month: 'numeric'})
+  const label = d => week ? new Date(+d.iso.slice(0, 4), +d.iso.slice(5, 7) - 1, d.day).toLocaleDateString(I18N.locale, {weekday: 'short', day: 'numeric', month: 'numeric'})
     : d.day == 1 ? `1. ${SideCal.MONTHS[+d.iso.slice(5, 7) - 1].slice(0, 3)}` : String(d.day);
   const cell = d => {
     const all = [...(items.plans[d.iso] || []).map(p => ['plan', p]), ...(items.due[d.iso] || []).map(x => ['due', x]), ...(items.ents[d.iso] || []).map(r => ['entry', r])];

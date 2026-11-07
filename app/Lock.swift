@@ -53,9 +53,9 @@ final class Locker {
         o.material = .underWindowBackground
         o.blendingMode = .withinWindow
         o.state = .active
-        let title = NSTextField(labelWithString: "🔒  BioBook ist gesperrt")
+        let title = NSTextField(labelWithString: L("🔒  BioBook ist gesperrt"))
         title.font = .systemFont(ofSize: 22, weight: .semibold)
-        let hint = NSTextField(labelWithString: "Mit Touch ID oder dem Anmeldepasswort entsperren")
+        let hint = NSTextField(labelWithString: L("Mit Touch ID oder dem Anmeldepasswort entsperren"))
         hint.textColor = .secondaryLabelColor
         let btn = NSButton(title: "Entsperren", target: self, action: #selector(unlock))
         btn.bezelStyle = .rounded
@@ -79,7 +79,7 @@ final class Locker {
             // Ohne Touch ID und ohne Passwort-Abfrage (sollte auf dem Mac nicht vorkommen): nicht ausgesperrt bleiben
             return finishUnlock()
         }
-        ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "das BioBook zu entsperren") { ok, _ in
+        ctx.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: L("das BioBook zu entsperren")) { ok, _ in
             DispatchQueue.main.async { if ok { self.finishUnlock() } }
         }
     }
