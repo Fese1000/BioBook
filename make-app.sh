@@ -60,7 +60,7 @@ build() {  # $1 = arm64|x86_64
 PL
   codesign --force --deep --sign "${CODESIGN_ID:--}" "$app"
   if [ $DMG = 1 ]; then
-    ln -s /Applications "$stage/Programme"
+    ln -s /Applications "$stage/Applications"
     rm -f "$DIST/BioBook-$label.dmg"
     hdiutil create -quiet -volname BioBook -srcfolder "$stage" -ov -format UDZO "$DIST/BioBook-$label.dmg"
     echo "Fertig: $DIST/BioBook-$label.dmg"
