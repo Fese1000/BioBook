@@ -1,144 +1,152 @@
 # BioBook
 
-Ein schnelles, lokales BioBook für den Mac. Stand: **1.0** (Phase 1, M0–M7) plus **Phase 2 (M8–M13)** und **Phase 3 (M14–M17)** und **Phase 4 (M18–M24)**, dazu **Phase 4b (M25–M29)** (noch nicht veröffentlicht); vorerst nur für Apple Silicon, siehe [BAUPLAN.md](BAUPLAN.md).
+**A fast, local electronic lab notebook for the Mac.** One file you own, works fully offline, instant search, immutable history with signatures, and a lot of molecular-biology tooling built in.
 
-## Installieren
-`BioBook-AppleSilicon.dmg` öffnen und die App nach „Programme“ ziehen (macOS 13 oder neuer, Apple Silicon). Die App ist nur ad hoc signiert: Beim ersten Start einer heruntergeladenen Kopie fragt macOS nach. Ab macOS 15 einmal öffnen, dann Systemeinstellungen › Datenschutz & Sicherheit › „Trotzdem öffnen“; unter macOS 13/14 Rechtsklick › Öffnen.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platform: macOS 13+](https://img.shields.io/badge/macOS-13%2B-lightgrey)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-arm64-lightgrey)
 
-Updates: Einstellungen (⌘,) › „Nach Updates suchen“. Die App lädt das DMG der neuesten Version von GitHub (`Fese1000/BioBook`), prüft SHA-256, Bundle-ID, Version und Signatur, tauscht sich aus und startet neu. Bei einem Fehler bleibt die alte Version.
+![An entry with day sections, revision history and the registry in the sidebar](docs/screenshots/entry-with-days.png)
 
-## Was schon geht
-- Registry (Seitenleiste „Registry“): Typen wie Plasmid, Primer, Stamm, Zelllinie, Antikörper, Chemikalie – oder eigene mit eigenen Feldern (Text, Zahl, Datum, Auswahl, Sequenz, Ja/Nein, Link). Jedes Objekt bekommt eine fortlaufende ID wie `PL-0042`; jede Änderung landet im Verlauf. Sequenzfelder zeigen Länge, GC-Anteil und Tm. Im Eintrag verweist `@` auf ein Objekt; das Objekt zeigt „Verwendet in“.
-- Bestand (Seitenleiste „📦 Bestand“): Standorte als Baum (Raum › Gerät › Regal › Box mit Raster), Chargen mit Menge, Einheit, Chargennummer, Ablaufdatum, Mindestbestand, GHS-Gefahren und Sicherheitsdatenblatt. Jede Mengenänderung ist eine unveränderliche Buchung. Im Eintrag bucht der Block „📦 Verbrauch“ eine Menge ab (mit Einheitenumrechnung, stornierbar); die Buchung verweist auf den Eintrag. Abgelaufene, bald ablaufende und knappe Chargen werden gemeldet.
-- Strukturierte Ergebnisse (Block „📊 Ergebnisse“): Tabellen nach festen Schemata mit Feldern, Einheiten und berechneten Feldern per Formel (z. B. Ausbeute = konz × volumen / 1000); mitgeliefert sind Plasmid-Präp, Proteinbestimmung und qPCR, eigene Schemata lassen sich anlegen. Die „📈 Auswertung“ sammelt alle Zeilen eines Schemas über Einträge hinweg (Filter nach Projekt und Zeitraum), zeigt Kennzahlen, ein Diagramm über die Zeit oder gegen ein anderes Feld und exportiert CSV.
-- Sequenzen: Sequenzfelder in der Registry (z. B. Plasmid) lassen sich aus GenBank- oder FASTA-Dateien füllen; Features und „ringförmig“ werden übernommen. Darunter: Ring- bzw. lineare Karte mit Features, Basen mit Positionen und Übersetzung (Rahmen +1 bis +3), Motivsuche auf beiden Strängen (IUPAC, über den Ursprung), ORF-Suche (≥ 100 aa, als Feature übernehmen), Revers-Komplement, Export als FASTA oder GenBank. „✎ Bearbeiten“ fügt ein, löscht oder ersetzt Basen (Features wandern mit), „+ Feature“ setzt Features von Hand. „Sanger (.ab1) ausrichten“ liest eine Sequenzierdatei, richtet sie auf beiden Strängen gegen die Sequenz aus und zeigt Abweichungen im gut lesbaren Bereich mit Qualität und Chromatogramm. „🧪 Klonierung“ simuliert Restriktion/Ligation (Insert-Richtung wird anhand der Enden gewählt), Gibson und Golden Gate (BsaI, BsmBI, SapI) und legt das Ergebnis samt übernommener Features als neues Plasmid an. Restriktion: gut 50 gängige Enzyme (auch Typ IIS wie BsaI), Einzelschneider auf einen Klick, Schnitte auf der Karte, virtueller Verdau mit Fragmenten und virtuellem Gel. Primer: Tm nach Nearest-Neighbor (SantaLucia, mit Mg²⁺ – gleiche Werte wie Primer3), GC, Hinweise (3'-Ende, Wiederholungen, Selbstbindung) und Bindestellen auf der Vorlage, auch mit 5'-Überhang; Primer-Objekte in der Registry zeigen dieselbe Tm. Im Eintrag zeigt der Block „🧬 Sequenz“ die Karte eines Objekts. Wird die Sequenz später geändert, gelten die Features als veraltet.
-- Einträge verwalten: Status (laufend, fertig, fehlgeschlagen, pausiert) mit Farbpunkt in der Liste, 📌 Anheften, ⧉ Duplizieren (ohne Signatur und Revisionen; Verbrauch und Passagen gelten in der Kopie als noch nicht verbucht). Über der Liste: Sortieren (geändert, geöffnet, erstellt, Zeitraum, Titel), Filter nach Art, Status und Zeitraum, ☆ Suche merken (erscheint links unter „Gespeicherte Suchen“) und ☑ Mehrfachauswahl (Projekt, Tag, Status, Papierkorb für viele auf einmal). In der Vorschau einer alten Revision zeigt „Änderungen zum aktuellen Stand“ eingefügte und gelöschte Wörter. Vor dem Abschließen weist das BioBook auf Unverbuchtes, leere Ergebnistabellen, leere Tage und offene Aufgaben hin.
-- Editor: Fett, Kursiv, Unterstrichen, Durchgestrichen, Hoch- und Tiefstellen (H₂O, 10⁶), Textfarbe und Textmarker, Links (⌘K), Trennlinie, Zellen verbinden. Formeln in LaTeX (im Text `$x^2$` oder über das Einfügemenü; Klick bearbeitet), im PDF und Export als MathML. Suchen & Ersetzen im Eintrag (⌥⌘F). „＋ Einfügen“ sammelt alle Blöcke (Datei, Excel/CSV als Tabelle, Formel, Rechner, Diagramm, Platte, Sequenz …); dieselben Befehle gibt es mit „/“ im Text. ⌘? zeigt alle Tastenkürzel.
-- Reiter am Eintrag: „Notizen“, „Metadaten“ (eigene Felder wie Organismus oder Stamm, mit Vorschlägen aus anderen Einträgen), „Verknüpft“ (Registry-Objekte, verbrauchte Chargen, Kulturen, Geräte, Verweise hin und zurück, Literatur, Ergebnisse, Dateien) und je Protokoll ein Reiter. „+ Protokoll“ hängt ein Protokoll (Eintrag der Art „Protokoll“, auch neu aus einer Vorlage) an und schreibt „nach [[…]]“ in den Text; ein Klick auf den Reiter zeigt es rechts neben dem Eintrag. Im Text verlinkte Protokolle erscheinen automatisch als Reiter.
-- Laufendes BioBook: „📅 Heute“ (⇧⌘D) legt im Eintrag einen Tagesabschnitt wie „Dienstag, 30.6.2026“ an oder springt hin; Tage lassen sich einklappen (⌥-Klick: alle). Die Liste zeigt den Zeitraum des Eintrags (z. B. „📅 30.06.–15.10.2026“). Ein Klick auf einen Suchtreffer oder eine Aufgabe in „Fällig“ springt an die Stelle und klappt den Tag auf. Im PDF und im Markdown-Export steht jeder Tag als Überschrift.
-- Erweiterungen: eigene Rechner-Blöcke als .js-Datei im Ordner „Erweiterungen“ (Einstellungen › Erweiterungen: Ordner öffnen, Beispiel „Zellzahl (Neubauer)“ installieren, ein- und ausschalten). Eine Erweiterung bekommt nur die Werte ihrer Felder und liefert Ergebniszeilen; sie läuft in einem eigenen Faden in einem abgeschotteten Rahmen ohne Netz, Dateien oder Zugriff auf das BioBook, hängende Rechnungen werden nach 1,5 s abgebrochen. Das Ergebnis steht im Eintrag und bleibt, auch wenn die Erweiterung später fehlt.
-- KI-Assistent (nur mit eigenem Anthropic-API-Schlüssel, Einstellungen › KI-Assistent; der Schlüssel liegt im Schlüsselbund): „✨ Zusammenfassen“ fasst den Eintrag zusammen, „✨ Protokoll“ macht aus Stichpunkten (markiert oder ganzer Eintrag) einen Protokoll-Entwurf mit markierten Ergänzungen, „✨ Fragen“ in der Seitenleiste beantwortet Fragen anhand der gefundenen Einträge mit Verweisen [E12]. Vor jedem Senden zeigt eine Vorschau genau, was an Anthropic geht; übernommen wird nur auf Klick und als „bitte prüfen“ markiert. Modell: Claude Opus 5.5. Ohne Schlüssel ist davon nichts zu sehen.
-- Kurzbefehle und AppleScript: Links `biobook://new?title=…&text=…` (neuer Eintrag), `biobook://append?id=…&text=…` (Text anhängen, mit Rückfrage) und `biobook://search?q=…` lassen sich in der Kurzbefehle-App mit „URL öffnen“ nutzen. AppleScript: `tell application "BioBook" to create entry titled "PCR" with text "…"`, `append text "…" to entry 12`, `find entries "Taq"`, `entry text 12`. Im Dienste-Menü jeder App macht „Neuer BioBook-Eintrag“ aus markiertem Text einen Eintrag. Abgeschlossene Einträge bleiben unverändert.
-- Chemie (Block „⚗️ Struktur“): SMILES eingeben → Strukturbild, Summenformel (Hill) und Molmasse (IUPAC-Atomgewichte); „→ Einwaage“ fügt den Einwaage-Rechner mit der Molmasse ein. Chemikalien in der Registry haben ein SMILES-Feld, zeigen ihre Struktur und übernehmen die Molmasse per Knopf.
-- Gerätedateien: Im Plattenblock übernimmt „📥 Messwerte“ den Export eines Plattenlesers (Raster mit Kopfzeilen wie bei Tecan/BMG oder Liste „A01; Wert“, Komma oder Punkt) und zeigt ihn als Heatmap mit Skala; je Probe stehen Mittelwert ± SD darunter und im PDF. Im Ergebnisblock füllt „📥 NanoDrop-Export“ eine Plasmid-Präp-Tabelle, „📥 qPCR-Export“ (Bio-Rad CFX, QuantStudio) eine qPCR-Tabelle mit gemittelten Replikaten und dem Referenzgen (GAPDH, ACTB … werden erkannt) für ΔCt.
-- Fälligkeiten (Seitenleiste „📅 Fällig“): Checklisten-Punkte mit Datum („bis Freitag“, „morgen“, „30.10.“, „2026-11-02“) werden im Text markiert (überfällig rot) und erscheinen zusammen mit fälligen Geräteaufgaben, Mycoplasma-Tests und ablaufenden Chargen in einer Übersicht (überfällig, heute, diese Woche, später); ein Klick öffnet das Objekt. „Als Kalender (.ics) speichern“ erzeugt ganztägige Termine für Apple Kalender; ein erneuter Import aktualisiert statt zu verdoppeln.
-- Literatur (Seitenleiste „📚 Literatur“): Quellen per DOI (Crossref) oder PMID (PubMed) holen, BibTeX/RIS/CSL-JSON importieren, als BibTeX exportieren, aus einer laufenden Zotero-App übernehmen (lokale Schnittstelle). Doppelte Quellen werden an DOI/PMID erkannt. Im Eintrag fügt „📚 Quelle“ ein Kurzzitat wie (Sanger et al. 1977) ein; darunter und in PDF, Zeugen-PDF und Export steht automatisch die Literaturliste. Zitate tragen ihren Text selbst, damit abgeschlossene Einträge unverändert bleiben. DOI/PMID im Text: „📚 in die Literatur“.
-- Diagramme und Statistik (Block „📈 Diagramm“): Standardkurve mit linearer Regression, Gleichung und R², unbekannte Proben samt Verdünnung (Werte außerhalb der Standards werden markiert); Gruppenvergleich mit Mittelwert ± SD, Einzelwerten und t-Test (Welch, Student oder gepaart; p-Werte wie scipy); x/y-Diagramm mit Ausgleichsgerade. Daten aus Excel einfügen oder „aus Tabelle darüber“ übernehmen; das Ergebnis steht im Text (durchsuchbar) und das Diagramm im PDF/HTML-Export.
-- Datenbank-Verweise: Kennungen im Text (GenBank/RefSeq wie L09137 oder NM_000546, UniProt wie P04637, PMID, DOI, Addgene) werden unterstrichen; ⌘-Klick öffnet die Datenbank im Browser. Unter dem Eintrag stehen sie als Liste; „📥 in die Registry“ holt eine Sequenz von NCBI (samt Features, Typ wählbar) bzw. ein Protein von UniProt (Typ „Protein“ wird angelegt). Das ist die einzige Stelle, an der die App von sich aus ins Netz geht – und nur auf Klick.
-- Bestellungen (Seitenleiste „🛒 Bestellungen“): knappe oder leere Chargen ohne offene Bestellung erscheinen als Vorschlag; „+ Auf die Liste“ oder „🛒 Nachbestellen“ an der Charge übernimmt Lieferant und Katalognummer. Status offen → bestellt → geliefert (oder storniert) mit unveränderlichem Verlauf; der Wareneingang legt eine neue Charge mit Chargennummer, Ablauf und Standort an. Die offene Liste lässt sich als CSV speichern. „Knapp“ zählt alle gleichartigen Chargen zusammen.
-- Zellkultur (Seitenleiste „🧫 Zellkultur“): Kulturen mit Zelllinie, Passage, Gefäß und Medium. Passage, Mediumwechsel, Mycoplasma-Test, Einfrieren, Korrektur und Beenden sind unveränderliche Ereignisse; im Eintrag bucht der Block „↻ Passage“ (z. B. P12 → P13, Split 1:10) mit Verweis auf den Eintrag. Einfrieren legt eine Charge (Röhrchen) im Bestand an; die Einfrierliste zeigt alle Röhrchen mit Passage und Platz, Auftauen startet daraus eine neue Kultur. Gemeldet werden fällige oder positive Mycoplasma-Tests und das Erreichen der Höchstpassage.
-- Gerätebuch (Seitenleiste „🔧 Geräte“): Geräte mit wiederkehrenden Aufgaben (Wartung, Kalibrierung, Prüfung, Reinigung) im festen Intervall; „Erledigt“ trägt ins unveränderliche Protokoll ein und rechnet die nächste Fälligkeit aus. Überfällige und bald fällige Aufgaben sowie defekte Geräte (Störung/Reparatur) werden in der Seitenleiste gemeldet.
-- Etiketten mit QR-Code („🏷 Etikett“ bei Charge, Registry-Objekt, Standort, Kultur, Gerät; eine Box druckt sich samt Inhalt): PDF für A4-Bögen 3 × 8 oder 4 × 11. Der QR-Code enthält einen `biobook://`-Link; Scannen öffnet das Objekt – mit der Kamera (Ablage › „Etikett scannen …“, ⇧⌘K), mit einem Handscanner ins Suchfeld oder per Link aus einer anderen App.
-- Plattenlayout (🧫 in der Werkzeugleiste): 96 oder 384 Wells, Proben mit Farbe, Wells per Klick oder Ziehen belegen; die Belegung steht als Text im Eintrag und als Tabelle im PDF.
-- Löschen mit Papierkorb (🗑 im Eintrag oder Ablage › „In den Papierkorb“): Gelöschte Einträge verschwinden aus Listen, Suche, Spotlight und „Verwendet in“, lassen sich wiederherstellen und erst im Papierkorb endgültig löschen (mit Rückfrage, samt Revisionen). Signierte Einträge lassen sich nicht löschen.
-- Mehrere Fenster (⌥⌘N) und Tabs (⌘T); ⌘-Klick auf einen Eintrag öffnet ihn in einem neuen Tab. Speichert ein Fenster, sehen die anderen den neuen Stand.
-- Spotlight findet Einträge (Titel, Text, Tags); ein Klick öffnet Buch und Eintrag. Quick Look (Leertaste im Finder) zeigt bei einem `.biobook` die letzten Einträge, der Finder ein Vorschaubild.
-- Mehrere BioBooks: neu anlegen (⇧⌘N), öffnen (⌘O), im Finder zeigen. Ein Buch ist ein Paket `Name.biobook` und öffnet sich per Doppelklick; die App merkt sich das zuletzt geöffnete.
-- Projekte: anlegen, umbenennen, archivieren; Einträge zuordnen oder verschieben, Filter „Alle“ / „Ohne Projekt“ / je Projekt
-- Art je Eintrag: Experiment, Notiz, Protokoll
-- Tags je Eintrag (mit Vorschlägen), Tag-Filter in der Seitenleiste, Suche findet auch Tags
-- Verweise zwischen Einträgen: `[[` tippen und Eintrag wählen; ein Klick öffnet ihn, unten stehen die Rückverweise. Verweise zeigen immer den aktuellen Titel.
-- Rechner als Block (🧮 in der Werkzeugleiste): Verdünnung C1·V1 = C2·V2, Einwaage (Masse = c · V · M), Mastermix mit Überschuss und Wasser auf Endvolumen, Einheiten umrechnen. Ein Feld leer lassen, es wird berechnet; Eingaben und Ergebnis stehen im Eintrag und in den Revisionen.
-- Vorlagen: „Als Vorlage“ speichert den Eintrag als Vorlage; gleicher Name = neue Version, alte Versionen bleiben unverändert. Klick auf eine Vorlage links legt einen Eintrag daraus an (auch aus älteren Versionen); der Eintrag vermerkt Vorlage und Version.
-- Ausführungsmodus („▶ Ausführen“): nummerierte Punkte oder Checklisten werden Schritt für Schritt abgearbeitet, mit Zeitstempel, Notiz je Schritt und Timern („5 min“ im Text wird erkannt; Ton und Dock-Hinweis, wenn er abläuft). Der Lauf übersteht Neustarts; am Ende hängt ein Ablaufprotokoll als Tabelle am Eintrag.
-- Abschließen und signieren („🔏 Abschließen“): der aktuelle Stand wird als Revision gesichert und mit deinem persönlichen Ed25519-Schlüssel signiert (Name, Zeitpunkt und Revisions-Hash sind mit signiert). Danach ist der Eintrag schreibgeschützt; Ergänzungen kommen in einen „Nachtrag“, der auf ihn verweist. Der Verlauf prüft Hash-Kette und Signaturen und zeigt den Schlüssel-Fingerabdruck.
-- Zeugen-Gegenzeichnung: „Zeugen-PDF erstellen“ erzeugt ein mehrseitiges PDF mit Revisions-Hash (im Text und in den Metadaten) und Feldern für Name, Datum, Unterschrift. Das unterschriebene PDF wird wieder angehängt; die App prüft, ob der Hash darin steht (bei reinen Scans ohne Text nicht möglich, dann gibt es einen Hinweis).
-- Sperre mit Touch ID oder Anmeldepasswort (Einstellungen, ⌘,): beim Start, wenn der Mac schläft und nach einstellbarer Zeit ohne Eingabe; ⌘L sperrt sofort.
-- Bilder beschriften (Doppelklick aufs Bild oder „✎ Beschriften“): Pfeile, Rahmen, Text und Spurenbelegung für Gele (auf die Spuren klicken, Belegung z. B. „M, 1, 2, NK“). Das Originalbild bleibt unverändert; die Beschriftung steht im Eintrag, in den Revisionen und im Zeugen-PDF.
-- Texterkennung: Text in Bildern und gescannten PDFs wird im Hintergrund lokal erkannt (Vision-Framework, Deutsch und Englisch) und ist durchsuchbar, ebenso Dateinamen.
-- Große Rohdaten verlinken („🔗 Rohdaten“): Dateien bleiben am Ort, das BioBook speichert Pfad und SHA-256. Beim Öffnen des Eintrags wird geprüft, ob sie verändert wurden oder fehlen.
-- Fotos und Scans vom iPhone: Ablage › „Vom iPhone oder iPad importieren“ (Kamera-Übernahme von macOS).
-- Export (Ablage › „BioBook exportieren …“, ⇧⌘E): ein Ordner, der ohne die App lesbar ist – `index.html` als Übersicht, jeder Eintrag als HTML und Markdown (mit Kopfdaten), alle Anhänge mit Originalnamen, `data/book.json` mit allen Revisionen, Hashes und Signaturen, dazu `<Buch>.eln` (RO-Crate) für andere BioBooks wie eLabFTW.
-- Eintrag als PDF (⌘P); als PDF/A nur, wenn Ghostscript installiert ist (`brew install ghostscript`), sonst kommt ein Hinweis.
-- Import (⇧⌘I): `.eln`-Archive (eLabFTW u. a.), Markdown, Word/RTF/ODT, HTML sowie gescannte PDFs und Bilder (Text wird erkannt und in den Eintrag geschrieben). Fremdes HTML wird entschärft: keine Skripte, keine Bilder aus dem Netz.
-- Automatische Sicherung: täglich eine Kopie der Datenbank (die letzten 14 bleiben) und neue Anhänge, standardmäßig nach `~/Library/Application Support/BioBook/Sicherungen/`; Ordner (z. B. externe Platte) und „Jetzt sichern“ in den Einstellungen.
-- Dateianhänge jeder Art bis 50 MB als Karte im Text: Öffnen (schreibgeschützte Kopie mit Originalnamen), Vorschau für PDF, CSV/TSV und Text
-- Einträge anlegen, Titel, Liste mit Volltextsuche (⌘F), Suche im gewählten Projekt
-- Block-Editor (TipTap): Überschriften, Listen, Checklisten, Tabellen, Code, Zitate, Bilder und Dateien per Drag & Drop, Einfügen oder Knopf
-- Automatisches Speichern; unveränderliche Revisionen mit Hash-Kette (⌘S, beim Wechseln, alle 5 Min., beim Beenden), Verlauf mit Kettenprüfung; alte Fassungen ansehen (nur lesen) und als neuen Stand wiederherstellen, ohne dass alte Revisionen verloren gehen
-- Bilder als Anhänge nach SHA-256
+<p align="center">
+  <img src="docs/screenshots/plasmid-map.png" width="49%" alt="Plasmid map with features and translated sequence">
+  <img src="docs/screenshots/calendar.png" width="49%" alt="Calendar with experiments and due items">
+</p>
 
-Der private Signaturschlüssel liegt im macOS-Schlüsselbund („BioBook Signaturschlüssel“), im BioBook nur der öffentliche Teil. Weil die App nur ad hoc signiert ist, fragt macOS nach einem Update einmal nach dem Anmeldepasswort, bevor die neue Version den Schlüssel benutzen darf („Immer erlauben“). Fehler beim Abschließen stehen mit Grund in `~/Library/Logs/BioBook/app.log`. Zum Arbeiten die installierte App aus „Programme“ benutzen, nicht `build/` – die wird beim Entwickeln laufend ersetzt. Signatur und Zeitstempel sind Nachweise, keine Zertifizierung nach GLP oder 21 CFR Part 11.
+> The screenshots show synthetic test data. **The user interface is currently in German.** An English interface is not available yet (see [Status](#status-and-limitations)).
 
-Wiederherstellen aus einer Sicherung: App beenden, im Sicherungsordner die gewünschte `db-….sqlite` als `db.sqlite` zusammen mit `files/` und `meta.json` in einen Ordner `Name.biobook` kopieren und diesen öffnen.
+## Why BioBook
 
-Das Standard-Buch liegt in `~/Library/Application Support/BioBook/Standard.biobook/` (SQLite + `files/`). Ältere Bücher werden beim Öffnen automatisch aktualisiert; vorher legt die App eine Kopie der Datenbank in `backups/` ab. Bücher aus einer neueren App-Version werden nicht angefasst.
+- **Your data stays yours.** A notebook is a single folder package (`Name.biobook`: SQLite plus attached files). Everything is stored locally. There is no account, no server and no sync service.
+- **Nothing is silently overwritten.** Every saved state is an immutable revision linked by a hash chain. Finished entries are signed with your personal Ed25519 key and become read-only; later additions go into an addendum.
+- **Built for the bench.** Calculators, plate layouts, sequence maps, cloning simulation, inventory, cell culture and equipment logs sit next to the free-text notes.
+- **Fast.** Native macOS shell (Swift, WebKit) with a block editor (TipTap). Full-text search over 10,000 entries answers in milliseconds.
 
-**Umbenannt von „Laborbuch“ in „BioBook“:** Beim ersten Start kopiert die App `~/Library/Application Support/Laborbuch` nach `BioBook` (das Standard-Buch heißt dann `Standard.biobook`) und übernimmt die Einstellungen der Kennung `de.felix.laborbuch`. Der Signaturschlüssel und der Anthropic-Schlüssel werden beim ersten Zugriff aus dem alten Schlüsselbund-Eintrag übernommen (macOS fragt einmal nach dem Passwort). Die alten Daten, Einstellungen und Einträge bleiben unverändert liegen. Bücher mit der Endung `.laborbuch` und Links `laborbuch://` funktionieren weiter; neue Bücher heißen `.biobook`. Unverändert bleiben die Formatkennungen `laborbuch-signatur-v1` (Signaturen) und `laborbuch-export-1` (Export), sonst ließen sich bestehende Signaturen nicht mehr prüfen. Im Updater und in den Umgebungsvariablen (`BIOBOOK_BOOK`, …) gilt der neue Name.
+## Features
 
-## Bauen und veröffentlichen
+**Notes and editor**
+- Block editor: headings, lists, checklists, tables, code, quotes, images and files by drag and drop, formulas in LaTeX, sub- and superscript, text colour and highlighting, find and replace, a `/` command menu and `[[` links between entries (with back-links).
+- Running lab book: day sections ("Tuesday, 30.6.2026") that can be collapsed, a "Today" shortcut and a period shown in the list.
+- Entry kinds (experiment, note, protocol), status (running, done, failed, paused), tags, projects, pinning, duplication, saved searches, bulk actions and a trash with restore.
+- Tabs and multiple windows, several notebooks, Spotlight and Quick Look support.
+
+**Records you can trust**
+- Immutable revisions with a verified hash chain; compare any old revision with the current state.
+- Finish and sign an entry with a personal key stored in the macOS Keychain. Optional witness PDF (hash in text and metadata, fields for name, date and signature).
+- Local accounts, lock with Touch ID or password, automatic daily backups (last 14 are kept).
+- Signatures and timestamps are evidence, **not** a certification under GLP or 21 CFR Part 11.
+
+**Lab management**
+- **Registry:** typed objects (plasmid, primer, strain, cell line, antibody, chemical, or your own types and fields) with sequential IDs like `PL-0042` and a full history. Mention them in notes with `@`.
+- **Inventory:** locations as a tree (room, device, shelf, box with grid), lots with amount, unit, expiry and minimum stock, GHS hazards and safety data sheets. Every change is an immutable booking.
+- **Orders:** reorder suggestions, order list with status history, goods receipt that creates new lots.
+- **Cell culture:** cultures, passages, medium changes, mycoplasma tests, freezing and thawing.
+- **Equipment log:** recurring maintenance and calibration tasks with due dates.
+- **Labels:** QR code labels (A4 sheets) for lots, objects, locations, cultures and devices; scan with the camera, a handheld scanner or a link.
+- **Calendar and due items:** plan appointments and experiments, see due checklist items, equipment tasks and expiring lots in one place, export as `.ics`.
+
+**Calculations, analysis and molecular biology**
+- Calculators: dilution (C1·V1 = C2·V2), weighing, master mix, unit conversion. Structured result tables with computed fields, evaluation across entries with charts and CSV export.
+- Standard curves, group comparisons with t-tests (Welch, Student, paired; p-values checked against SciPy) and charts.
+- Sequences from GenBank or FASTA: circular and linear maps, features, translation, ORF finder, motif search, restriction enzymes and virtual digest, primer Tm (nearest-neighbour, matches Primer3), Sanger `.ab1` alignment with chromatogram, and simulated cloning (restriction/ligation, Gibson, Golden Gate).
+- Chemistry: SMILES structure drawing, molecular formula and molar mass.
+- Plate layouts (96 and 384 wells), plate reader, NanoDrop and qPCR file import.
+- References: import from DOI (Crossref) or PMID (PubMed), BibTeX, RIS and CSL-JSON, optional Zotero connection, citations with an automatic reference list.
+
+**Import, export and automation**
+- Export as a folder readable without the app (HTML, Markdown, all attachments, `book.json`) and as `.eln` (RO-Crate). Import `.eln`, Markdown, Word/RTF/ODT, HTML, scanned PDFs and images.
+- Text in images and scanned PDFs is recognised locally (Apple Vision) and searchable.
+- AppleScript, Shortcuts and a Services menu entry (see [below](#automation)).
+- Sandboxed extensions: custom calculators as small `.js` files that run without network or file access.
+- **Optional AI assistant** (summaries, protocol drafts, questions about your notes). It is off by default, needs your own Anthropic API key, shows exactly what will be sent before each request and marks every result as "please check".
+
+## Install
+
+1. Download `BioBook-AppleSilicon.dmg` from the [latest release](https://github.com/Fese1000/BioBook/releases/latest).
+2. Open it and drag **BioBook** to your Applications folder.
+3. The app is only ad-hoc signed (it is not notarised). On first launch macOS asks for confirmation: on macOS 15, open the app once, then go to *System Settings › Privacy & Security › Open Anyway*; on macOS 13/14, right-click the app and choose *Open*.
+
+Requirements: macOS 13 or later, Apple Silicon. Intel builds are prepared (`./make-app.sh x86_64`) but not released.
+
+**Updates:** *Settings (⌘,) › Check for updates*. The app downloads the DMG of the newest release from GitHub, verifies its SHA-256 checksum, bundle ID, version and signature, replaces itself and restarts. On any error the old version stays.
+
+## Your data
+
+- A notebook is a package folder `Name.biobook` (SQLite plus `files/`). The default notebook lives in `~/Library/Application Support/BioBook/Standard.biobook/`.
+- Notes, search and all tools work fully offline. The app contacts the network in three cases: when you click something that needs it (fetching a sequence or reference from NCBI, UniProt, Crossref or PubMed, or a request to the optional AI assistant), and for a quiet **update check** at startup and every six hours. A failed or empty check shows nothing. You can switch the update check off in *Settings (⌘,)*.
+- Your signing key and the optional Anthropic key are stored in the macOS Keychain; a notebook contains only the public key. Because the app is ad-hoc signed, macOS asks for your login password once after an update before the new version may use the key (choose "Always Allow").
+- Errors are logged to `~/Library/Logs/BioBook/app.log` (without entry contents).
+- **Backups:** one copy of the database per day (the last 14 are kept) plus new attachments, by default in `~/Library/Application Support/BioBook/Sicherungen/`. You can choose another folder (for example an external drive) in the settings. To restore, quit the app, copy the wanted `db-….sqlite` as `db.sqlite` together with `files/` and `meta.json` into a folder named `Name.biobook`, and open it.
+- Older notebooks are upgraded automatically when opened (a copy of the database is saved to `backups/` first). Notebooks from a newer app version are never touched.
+
+### Coming from "Laborbuch"
+
+BioBook was called *Laborbuch* until November 2026. On first launch the app **copies** `~/Library/Application Support/Laborbuch` to `BioBook` (the default notebook becomes `Standard.biobook`) and takes over the settings of the old bundle ID `de.felix.laborbuch`. The signing key and the Anthropic key are taken over from the old Keychain items on first use (macOS asks once for your password). Nothing is deleted, the old data stays as a fallback. Notebooks ending in `.laborbuch` and links starting with `laborbuch://` keep working; new notebooks use `.biobook` and `biobook://`. The format identifiers `laborbuch-signatur-v1` (signatures) and `laborbuch-export-1` (export) are intentionally unchanged, otherwise existing signatures could no longer be verified.
+
+## Automation
+
+- **URL scheme** (usable in the Shortcuts app with "Open URL"): `biobook://new?title=…&text=…`, `biobook://append?id=…&text=…` (asks for confirmation) and `biobook://search?q=…`.
+- **AppleScript:**
+  ```applescript
+  tell application "BioBook" to create entry titled "PCR" with text "…"
+  tell application "BioBook" to find entries "Taq"
+  ```
+  Also `append text "…" to entry 12` and `entry text 12`.
+- **Services menu:** *New BioBook entry* turns selected text from any app into an entry. Finished entries stay unchanged.
+
+## Build from source
+
+Requires the Xcode Command Line Tools.
+
 ```bash
-./make-app.sh arm64 --no-dmg   # nur App
-./make-app.sh arm64            # dist/BioBook-AppleSilicon.dmg
+./make-app.sh arm64 --no-dmg   # app only: build/AppleSilicon/BioBook.app
+./make-app.sh arm64            # also creates dist/BioBook-AppleSilicon.dmg
 ```
-Neue Version: `VERSION` hochzählen, DMG bauen, als Release `v<VERSION>` mit der Datei `BioBook-AppleSilicon.dmg` bei GitHub (`Fese1000/BioBook`) hochladen; GitHub liefert die SHA-256-Prüfsumme mit, ohne sie verweigert die App das Update. (Das Repo gibt es noch nicht.) Intel-Builds (`./make-app.sh x86_64`) sind vorbereitet, aber noch nicht vorgesehen.
-Braucht die Xcode Command Line Tools. Der Editor ist fertig gebündelt in `web/vendor/tiptap.js`; neu bündeln nur bei Updates: `cd tools && npm install && npm run bundle`.
 
-## Tests
+The editor is bundled in `web/vendor/tiptap.js`. Rebuild it only when updating dependencies: `cd tools && npm install && npm run bundle`.
+
+### Tests
+
 ```bash
-swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift app/EntryManage.swift app/Account.swift app/Planner.swift app/Prefs.swift app/Migration.swift tests/main.swift -o /tmp/lb-tests && /tmp/lb-tests      # Speicher, Hash-Kette, Suche, Vorlagen, Läufe
-node --test tests/*.test.js                                                           # Rechner gegen Handrechnung, Markdown, Sequenzen und Verdau (pUC19 aus NCBI L09137), Tm gegen Primer3, Kennungen, Statistik gegen scipy, Literaturformate (echte Crossref-/PubMed-Antworten), Termine und iCalendar, Gerätedateien, Summenformeln und Molmassen, Prompts des Assistenten, Tage, Excel/CSV, Versionsvergleich, .ab1 (gegen Biopython) und Klonierung
-BIOBOOK_BOOK=/tmp/perf.biobook build/AppleSilicon/BioBook.app/Contents/MacOS/BioBook --perftest   # Editor-Leistung (gibt die Messwerte aus und beendet sich)
-BIOBOOK_BOOK=/tmp/self.biobook BIOBOOK_KEYFILE=/tmp/self.key BIOBOOK_TESTOUT=/tmp BIOBOOK_BACKUPDIR=/tmp/backup build/AppleSilicon/BioBook.app/Contents/MacOS/BioBook --selftest   # 272 Prüfungen, darunter: keine unbehandelten JS-Fehler im ganzen Lauf
-# Update-Test 1.0 → 1.1: alte App mit --updatetest und BIOBOOK_UPDATE_API/BIOBOOK_UPDATE_PREFIX/BIOBOOK_NO_RELAUNCH gegen eine lokale Release-Beschreibung starten   # Anhänge, Verweise, Rechner, Läufe, Signatur, Zeugen-PDF in der echten WebView (nie mit echtem Schlüsselbund)
-tests/make-mock.sh   # Oberfläche mit nachgebauter Brücke zum Testen im Browser
+# Swift: storage, hash chain, search, templates, runs, migration
+swiftc app/Store.swift app/Registry.swift app/Stock.swift app/Results.swift app/Culture.swift app/Orders.swift \
+  app/Sequences.swift app/References.swift app/Agenda.swift app/AutomationStore.swift app/EntryExtras.swift \
+  app/EntryManage.swift app/Account.swift app/Planner.swift app/Prefs.swift app/Migration.swift tests/main.swift \
+  -o /tmp/biobook-tests && /tmp/biobook-tests
+
+# JavaScript: calculators, sequences, statistics, import/export formats, ...
+node --test tests/*.test.js
+
+# End-to-end in the real WebView (uses temporary data and a key file, never your Keychain)
+BIOBOOK_BOOK=/tmp/self.biobook BIOBOOK_KEYFILE=/tmp/self.key BIOBOOK_TESTOUT=/tmp BIOBOOK_BACKUPDIR=/tmp/backup \
+  build/AppleSilicon/BioBook.app/Contents/MacOS/BioBook --selftest
 ```
 
-## Aufbau
-| Pfad | Zweck |
+Numerical code is checked against reference implementations where possible (Primer3 for melting temperatures, SciPy for statistics, Biopython for `.ab1` files, NCBI record L09137 for pUC19).
+
+## Project layout
+
+| Path | Purpose |
 | --- | --- |
-| `app/main.swift` | Fenster, WebView, Schema `lab://`, Brücke JS ↔ Swift, Menü |
-| `app/Store.swift` | SQLite, Revisionen mit Hash-Kette, Suche, Anhänge, Vorlagen, Läufe |
-| `web/calc.js` | Laborrechner (reine Funktionen, getestet) |
-| `web/calcblock.js` | Rechner als Editor-Block |
-| `web/run.js` | Ausführungsmodus mit Timern und Ablaufprotokoll |
-| `web/sign.js` | Abschließen, Nachtrag, Zeugen-PDF, Einstellungen |
-| `app/Keys.swift` | Signaturschlüssel im Schlüsselbund, persönliche Einstellungen |
-| `app/Witness.swift` | Zeugen-PDF erzeugen und prüfen |
-| `app/Lock.swift` | Sperre mit Touch ID |
-| `app/OCR.swift` | Texterkennung in Bildern und PDFs |
-| `web/annotate.js` | Bilder beschriften, Spurenbelegung |
-| `web/markdown.js` | Markdown-Export und -Import (getestet) |
-| `web/io.js` | Export (HTML, Markdown, .eln), PDF, Import |
-| `app/Export.swift` | Schreiben, Zippen, Dokumente lesen, PDF/A |
-| `app/Backup.swift` | Automatische Sicherung |
-| `app/Spotlight.swift` | Einträge in der Spotlight-Suche |
-| `app/QuickLook.swift` | Vorschau und Vorschaubild für .biobook |
-| `app/Updater.swift` | Selbst-Update über GitHub-Releases |
-| `app/Registry.swift` | Registry: Typen, Objekte, Verlauf |
-| `web/registry.js` | Registry-Oberfläche, Typ-Editor |
-| `app/Stock.swift` | Bestand: Standorte, Chargen, Buchungen, Warnungen |
-| `web/stock.js` | Bestand-Oberfläche, Boxen-Raster, Verbrauch-Block |
-| `app/QR.swift` | QR-Codes erzeugen und erkennen, Kamera-Scanner |
-| `web/labels.js` | Etiketten-PDF, Öffnen per Code |
-| `web/plate.js` | Plattenlayout-Block |
-| `app/Prefs.swift`, `web/prefs.js`, `web/themes.js` | Einstellungen der Oberfläche im Buch: 14 Farbschemata (Solarized, Nord, Dracula, Gruvbox, One Dark, Tokyo Night, Catppuccin, GitHub …), Reiter der Registry aus- und wieder einblenden, „neuer Tab beim Öffnen aus der Seitenleiste“ |
-| `web/sidebar.js` | Seitenleiste: Abschnitte einklappbar (Zustand bleibt) |
-| `web/calendar.js`, `web/sidecal.js`, `app/Planner.swift` | Ansicht „📅 Kalender“ (Monat/Woche, Tagesdetail): Termine und Experimente planen, per Ziehen verschieben, Eintrag zum Plan anlegen; zeigt auch Einträge und Fälliges |
-| `app/Account.swift`, `web/accounts.js` | Lokale Konten (Name + Passwort, PBKDF2 mit eigenem Salz); anlegen, Passwort ändern, löschen unter Einstellungen |
-| `app/Results.swift` | Ergebnis-Schemata und -Zeilen, Abfrage über Einträge |
-| `web/results.js` | Ergebnis-Block, Auswertung mit Diagramm und CSV |
-| `app/Culture.swift` | Zellkultur (Kulturen, Ereignisse, Einfrieren/Auftauen) und Gerätebuch (Aufgaben, Protokoll) |
-| `web/culture.js` | Zellkultur- und Geräte-Ansicht, Passage-Block im Eintrag |
-| `app/Orders.swift` | Bestellvorschläge, Bestellliste mit Statusverlauf, Wareneingang |
-| `web/orders.js` | Bestellungen-Ansicht, Wareneingang, CSV |
-| `app/Automation.swift`, `app/AutomationStore.swift`, `app/BioBook.sdef` | AppleScript-Wörterbuch und -Befehle, biobook://-Aktionen, Dienst |
-| `app/Extensions.swift`, `web/extensions.js`, `app/Erweiterungen/` | Erweiterungen laden (Worker im Sandbox-Rahmen), Erweiterungs-Block, Beispiel |
-| `app/Assistant.swift`, `web/assistant.js` | KI-Assistent: Schlüssel im Schlüsselbund, Anfrage an die Claude API, Prompts, Vorschau, Antworten mit Quellen |
-| `web/chem.js` | SMILES lesen, Summenformel, Molmasse; Struktur-Block |
-| `web/vendor/smiles-drawer.min.js` | Strukturbilder (SmilesDrawer 2.4.1, MIT, offline gebündelt; `cd tools && npm run chem`) |
-| `web/devfiles.js` | Plattenleser-, NanoDrop- und qPCR-Exporte lesen |
-| `app/Agenda.swift`, `web/agenda.js` | Termine erkennen, Übersicht „Fällig“, Kalenderexport |
-| `app/References.swift`, `web/refs.js` | Literatur-Bibliothek; BibTeX/RIS/Crossref/PubMed lesen und schreiben, Zitate, Literaturliste |
-| `app/EntryExtras.swift`, `web/entrytabs.js` | Angehängte Protokolle, Metadaten, „Verknüpft“; Reiter und Ansicht daneben |
-| `app/EntryManage.swift`, `web/manage.js` | Status, Anheften, Duplizieren, Filter, gespeicherte Suchen, Mehrfachauswahl, Versionsvergleich, Prüfung vor dem Abschließen |
-| `web/editorplus.js`, `web/xlsx.js` | Formatierung, Formeln, Suchen & Ersetzen, Einfügemenü und „/“, Excel/CSV als Tabelle, Tastenkürzel |
-| `web/days.js` | Tagesabschnitte, „+ Heute“, Zeitraum, Springen zur Fundstelle |
-| `web/stats.js`, `web/chart.js` | Regression, t-Tests, Tabellen lesen; Diagramm-Block |
-| `web/dblinks.js` | Kennungen erkennen, Links im Editor, Abruf von NCBI/UniProt |
-| `web/bio.js` | Sequenz-Funktionen: GenBank/FASTA, Motivsuche, ORFs, Übersetzung, Tm, Primer, Enzyme, Verdau |
-| `web/molbio.js`, `web/molbio-ui.js` | Sequenz bearbeiten, .ab1 lesen und ausrichten, Klonierung (Restriktion/Ligation, Gibson, Golden Gate) |
-| `app/Sequences.swift`, `web/seqview.js` | Sequenz-Anmerkungen (Ring, Features); Karte, Basenansicht, Sequenz-Block |
-| `web/` | Oberfläche und Logik (JavaScript), Editor-Bündel |
-| `tools/` | Bündeln des Editors, Icon-Erzeugung |
-| `tests/` | Speicher-Tests, Browser-Testumgebung |
+| `app/` | Swift: window and WebView shell (`main.swift`), SQLite store with hash-chained revisions (`Store.swift`), registry, inventory, cell culture, orders, keys and signatures, backup, updater, migration, AppleScript |
+| `web/` | The user interface and logic in JavaScript (editor, calculators, sequence tools, statistics, import/export) |
+| `web/vendor/` | Bundled third-party code (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)) |
+| `tests/` | Swift storage tests, JavaScript unit tests, fixtures |
+| `tools/` | Editor bundling and icon generation |
+| `BAUPLAN.md` | Milestone plan and project history (German) |
+
+## Status and limitations
+
+- **German user interface only.** Translating it is welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
+- macOS on Apple Silicon only; the app is ad-hoc signed and not notarised.
+- Signatures and timestamps are evidence, not a certification under GLP or 21 CFR Part 11.
+- Single user, local only. Team sync and roles are not planned for now.
+- Please try new versions with a copy of your data and keep your own backups.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). For security issues see [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Felix Cuntz. Bundled third-party code keeps its own licenses, see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
